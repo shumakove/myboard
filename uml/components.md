@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2) и каркас интерфейса `apps/web` (T0.3): таблица маршрутов со страницами-заглушками, типизированный HTTP-клиент и адрес WebSocket.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3) и панель администратора (T1.1): модуль `identity` на сервере, страницы `/admin/login` и `/admin/users` в клиенте.
 
 ## Сервер `apps/api`
 
@@ -8,14 +8,22 @@
 flowchart TB
   entry["app.__main__.main()<br/>python -m app"]
   subgraph core [app.core]
-    settings["settings<br/>Settings, load_settings(), SettingsError"]
+    settings["settings<br/>Settings, load_settings(), SettingsError,<br/>secure_cookies"]
     db["db<br/>Base (NAMING_CONVENTION), create_engine(),<br/>create_session_factory(), get_session / SessionDep"]
     migrations["migrations<br/>alembic_config(), upgrade_to_head()"]
     health["health.router<br/>GET /health → Health"]
   end
-  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS"]
+  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS,<br/>app.state.admin_login_limiter"]
+  subgraph identity [app.identity]
+    irouter["router (prefix /admin)<br/>POST /login, POST /logout, GET /session,<br/>GET /users, POST /users, PATCH /users/{user_id};<br/>require_admin / AdminDep"]
+    ischemas["schemas<br/>Credentials, AdminSession, UserOut,<br/>UserCreate, UserUpdate, normalize_email"]
+    iservice["service<br/>ensure_first_admin, authenticate_admin,<br/>list_users, create_user, update_user,<br/>EmailTakenError"]
+    isessions["sessions<br/>ADMIN_COOKIE = myboard_admin,<br/>create_session, find_subject, delete_session,<br/>delete_subject_sessions, set/clear_session_cookie"]
+    ipasswords["passwords<br/>hash_password, verify_password<br/>(argon2-cffi, Argon2id)"]
+    ilimit["rate_limit<br/>LoginRateLimiter: 10 неудач / 60 с"]
+    imodels["models<br/>Admin, User, Session, SubjectType"]
+  end
   subgraph modules [Модули: пустые APIRouter, маршрутов пока нет]
-    identity[identity.router]
     library[library.router]
     sharing[sharing.router]
     realtime[realtime.router]
@@ -23,29 +31,42 @@ flowchart TB
     media[media.router]
     backup[backup.router]
   end
-  alembic["app.migrations<br/>env.py, versions/0001_baseline"]
+  alembic["app.migrations<br/>env.py, versions/0001_baseline, 0002_identity"]
   pg[(PostgreSQL)]
 
   entry -->|"1. load_settings()<br/>ошибка → stderr, exit 1"| settings
   entry -->|"2. create_app(settings)"| main
-  entry -->|"3. uvicorn.run :8000"| main
+  entry -->|"3. uvicorn.run :8000,<br/>proxy_headers"| main
   main -->|"lifespan: upgrade_to_head()<br/>до приёма трафика"| migrations
   migrations --> alembic
   alembic -->|"target_metadata = Base.metadata"| db
   main -->|"lifespan: engine, app.state.session_factory"| db
+  main -->|"lifespan: ensure_first_admin(ADMIN_EMAIL, ADMIN_PASSWORD)"| iservice
   main -->|"include_router(prefix=/api)"| health
+  main -->|"include_router(prefix=/api)"| irouter
   main -->|"include_router(prefix=/api)"| modules
+  irouter --> ischemas
+  irouter --> iservice
+  irouter --> isessions
+  irouter --> ilimit
+  irouter -->|"secure_cookies"| settings
+  iservice --> ipasswords
+  iservice --> isessions
+  iservice --> imodels
+  isessions --> imodels
+  imodels -->|"Base"| db
   health -->|"SessionDep: SELECT 1"| db
   db -->|"SQLAlchemy async, psycopg 3"| pg
   alembic -->|"синхронный движок psycopg"| pg
 ```
 
 - Все маршруты под префиксом `/api`: `GET /api/health` (`{"status":"ok"}`), `GET /api/openapi.json` (OpenAPI 3.1), `GET /api/docs` (Swagger UI). Неизвестный путь `/api/*` — `404` JSON.
-- `Settings` — семь обязательных переменных (`PUBLIC_BASE_URL`, `SECRET_KEY`, `DATABASE_URL`, `MEDIA_ROOT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `MAX_UPLOAD_BYTES`); пустое значение равно отсутствию. `MAX_UPLOAD_BYTES` > 0, `PUBLIC_BASE_URL` — `http://` или `https://`; свойство `secure_cookies` истинно только для `https://`.
-- Миграции только вперёд: ревизия `0001` пустая, `downgrade()` бросает `NotImplementedError`.
+- Маршруты `identity` (тег `admin`): `POST /api/admin/login` → `204` / `401` / `429`, `POST /api/admin/logout` → `204`, `GET /api/admin/session` → `200 AdminSession`, `GET /api/admin/users` → `200 [UserOut]`, `POST /api/admin/users` → `201` / `409`, `PATCH /api/admin/users/{user_id}` → `200` / `404` / `409`. Маршруты `/users*` требуют сессию администратора (`require_admin`, иначе `401`). Сценарии — [sequences/login.md](sequences/login.md), таблицы — [data-model.md](data-model.md).
+- `Settings` — семь обязательных переменных (`PUBLIC_BASE_URL`, `SECRET_KEY`, `DATABASE_URL`, `MEDIA_ROOT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `MAX_UPLOAD_BYTES`); пустое значение равно отсутствию. `MAX_UPLOAD_BYTES` > 0, `PUBLIC_BASE_URL` — `http://` или `https://`; свойство `secure_cookies` истинно только для `https://` и задаёт флаг `Secure` cookie сессии.
+- Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`; `downgrade()` бросает `NotImplementedError`.
 - WebSocket `/api/ws` не реализован (появится в T4.1).
 
-Актуально на: T0.2, 9bce527 (сервер не менялся в T0.3, сверено на 03e00fa). Требования: — (ARCHITECTURE.md, разделы 3, 5, 7, 11: модули сервера, OpenAPI, Alembic, обязательные переменные).
+Актуально на: T1.1, 97556a8. Требования: ADM-01…ADM-07 (модуль `identity`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
 
 ## Клиент `apps/web`
 
@@ -53,19 +74,26 @@ flowchart TB
 flowchart TB
   html["index.html<br/>div#root"]
   main["main.tsx<br/>createRoot(#root), StrictMode"]
-  routes["routes.tsx<br/>AppRoutes: wouter Switch / Route"]
-  subgraph pages [pages: заглушки, кроме NotFoundPage]
+  routes["routes.tsx<br/>AppRoutes: wouter Switch / Route,<br/>/admin → Redirect /admin/users"]
+  subgraph pages [pages]
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
     login["LoginPage<br/>/login"]
     boards["BoardsPage<br/>/"]
     board["BoardPage<br/>/boards/:id"]
     templates["TemplatesPage<br/>/templates"]
     tcopy["TemplateCopyPage<br/>/t/:token"]
-    alogin["AdminLoginPage<br/>/admin/login"]
-    ausers["AdminUsersPage<br/>/admin/users"]
+    alogin["AdminLoginPage<br/>/admin/login: Admin sign in"]
+    ausers["AdminUsersPage<br/>/admin/users: Users, Sign out"]
     shared["SharedBoardPage<br/>/b/:token"]
     embed["EmbeddedBoardPage<br/>/b/:token/embed"]
     nf["NotFoundPage<br/>любой другой путь: Page not found"]
+  end
+  subgraph adminMod [admin]
+    useSession["useAdminSession()<br/>loading | signedOut | signedIn(email)"]
+    accounts["UserAccounts<br/>таблица Accounts (ADM-02)"]
+    create["CreateUserForm<br/>Create user (ADM-03, ADM-07)"]
+    row["UserRow + EditUserForm<br/>Edit, Disable / Enable (ADM-04…ADM-06)"]
+    adminApi["adminApi.ts<br/>signIn, signOut, getSession, listUsers,<br/>createUser, updateUser, AdminApiError, errorMessage"]
   end
   subgraph apiMod [api]
     client["client.ts<br/>createApiClient(origin = window.location.origin),<br/>api = openapi-fetch createClient&lt;paths&gt;"]
@@ -79,15 +107,29 @@ flowchart TB
 
   html --> main --> routes
   routes --> login & boards & board & templates & tcopy & alogin & ausers & shared & embed & nf
-  login & boards & board & templates & tcopy & alogin & ausers & shared & embed --> placeholder
+  login & boards & board & templates & tcopy & shared & embed --> placeholder
+  alogin --> useSession
+  alogin -->|"signIn → navigate /admin/users"| adminApi
+  ausers --> useSession
+  ausers -->|"signOut → navigate /admin/login"| adminApi
+  ausers -->|"signedIn"| accounts
+  accounts --> create & row
+  accounts -->|"listUsers"| adminApi
+  create -->|"createUser"| adminApi
+  row -->|"updateUser"| adminApi
+  useSession -->|"getSession"| adminApi
+  adminApi -->|"types UserOut, UserCreate, UserUpdate, AdminSession"| schema
+  adminApi --> client
   client -->|"import type paths"| schema
   oas -->|"pnpm api:types"| schema
   client -->|"HTTP к происхождению страницы, пути /api/…"| server
 ```
 
-- Страницы пока не используют `api` и `socketUrl`: модули готовы для задач T1.1 и далее. В `schema.d.ts` сейчас один путь — `GET /api/health`.
-- Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`.
+- Страницы панели и `adminApi` — единственные потребители `api`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health` и маршруты `/api/admin/*`.
+- `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
+- Cookie сессии скрипту не видна (`HttpOnly`), поэтому состояние входа страница узнаёт из `GET /api/admin/session`. `/admin/login` при действующей сессии перенаправляет на `/admin/users`; `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
+- Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах панели подменяет `admin/fakeAdminServer.ts`.
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T0.3, 03e00fa. Требования: — (ARCHITECTURE.md, разделы 3, 4, 10: SPA, таблица маршрутов, типы из OpenAPI, адреса из адреса страницы).
+Актуально на: T1.1, 97556a8. Требования: ADM-01…ADM-07 (панель администратора); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
