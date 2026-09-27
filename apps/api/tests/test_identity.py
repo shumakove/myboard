@@ -551,6 +551,75 @@ def test_adm04_new_password_and_email_work_old_do_not(client: TestClient, board_
     assert _user_login(client, "alice.new@example.com", "new-pw").status_code == 204
 
 
+def _user_tokens(client: TestClient, count: int, email: str = USER_EMAIL) -> list[str]:
+    """Несколько независимых сессий пользователя (как в разных браузерах)."""
+    tokens = []
+    for _ in range(count):
+        client.cookies.clear()
+        assert _user_login(client, email).status_code == 204
+        tokens.append(client.cookies[USER_COOKIE])
+    return tokens
+
+
+def _signed_in(client: TestClient, token: str) -> bool:
+    client.cookies.clear()
+    client.cookies.set(USER_COOKIE, token)
+    authenticated: bool = _account_session(client)["authenticated"]
+    return authenticated
+
+
+def test_adm04_password_change_revokes_all_sessions_of_account(
+    client: TestClient, board_user: str
+) -> None:
+    tokens = _user_tokens(client, 2)
+    _create_user(_as_admin(client), email="bob@example.com")  # пароль тот же, что у Alice
+    other_token = _user_tokens(client, 1, "bob@example.com")[0]
+
+    response = _as_admin(client).patch(
+        f"/api/admin/users/{board_user}", json={"password": "new-pw"}
+    )
+
+    assert response.status_code == 200
+    assert client.get("/api/admin/users").status_code == 200  # сессия администратора жива
+    assert not any(_signed_in(client, token) for token in tokens)
+    assert _signed_in(client, other_token)  # чужие сессии не затронуты
+    client.cookies.clear()
+    assert _user_login(client, USER_EMAIL, "new-pw").status_code == 204
+    assert _account_session(client)["authenticated"] is True
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"name": "Alice Smith"}, {"email": "alice.new@example.com"}, {"name": "A", "email": "a@x.io"}],
+)
+def test_adm04_name_or_email_change_keeps_sessions(
+    client: TestClient, board_user: str, change: dict[str, str]
+) -> None:
+    token = _user_tokens(client, 1)[0]
+
+    response = _as_admin(client).patch(f"/api/admin/users/{board_user}", json=change)
+
+    assert response.status_code == 200
+    assert _signed_in(client, token)
+
+
+def test_adm04_rejected_update_keeps_password_and_sessions(
+    client: TestClient, board_user: str
+) -> None:
+    token = _user_tokens(client, 1)[0]
+    _create_user(_as_admin(client), email="bob@example.com")
+
+    response = client.patch(
+        f"/api/admin/users/{board_user}",
+        json={"email": "bob@example.com", "password": "new-pw"},
+    )
+
+    assert response.status_code == 409
+    assert _signed_in(client, token)
+    client.cookies.clear()
+    assert _user_login(client, USER_EMAIL, USER_PASSWORD).status_code == 204
+
+
 def test_acc02_login_attempts_limited_per_address(client: TestClient, board_user: str) -> None:
     client.cookies.clear()
     for _ in range(MAX_FAILURES):
