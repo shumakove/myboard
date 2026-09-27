@@ -1,0 +1,70 @@
+# Стек онлайн-доски: caddy, web, api, postgres (ARCHITECTURE.md, раздел 11).
+# Запуск из этого каталога: docker compose -p <проект> up --build
+# Переменные берутся из .env рядом с файлом (шаблон — .env.example).
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    # Порт публикуется на всех интерфейсах, чтобы доску открывали из LAN.
+    # HTTP_PORT разводит стеки DEV (8080) и QA (80) на одной машине.
+    ports:
+      - "0.0.0.0:${HTTP_PORT:-80}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_healthy
+
+  web:
+    # Заглушка до T0.3: там контекст сменится на apps/web (сборка Vite).
+    build: ./stubs/web
+    restart: unless-stopped
+
+  api:
+    # Заглушка до T0.2: там контекст сменится на apps/api (FastAPI + Alembic).
+    build: ./stubs/api
+    restart: unless-stopped
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      MEDIA_ROOT: ${MEDIA_ROOT:?MEDIA_ROOT is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:?MAX_UPLOAD_BYTES is required}
+    volumes:
+      - media:${MEDIA_ROOT:?MEDIA_ROOT is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  media:
+  caddy_data:
+  caddy_config:
