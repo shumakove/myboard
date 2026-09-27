@@ -3,3 +3,5 @@ node_modules
 pnpm-lock.yaml
 # Генерируется openapi-typescript из openapi.json.
 src/api/schema.d.ts
+# Снимок схемы API: обновляется загрузкой /api/openapi.json.
+openapi.json

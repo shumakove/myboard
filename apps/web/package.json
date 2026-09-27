@@ -11,6 +11,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "api:fetch": "curl -fsS \"$PUBLIC_BASE_URL/api/openapi.json\" -o openapi.json",
     "api:types": "openapi-typescript openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
