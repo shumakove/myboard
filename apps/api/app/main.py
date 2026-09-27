@@ -63,7 +63,9 @@ def create_app(settings: Settings) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    # Вход в панель и вход пользователя досок ограничиваются раздельно (раздел 12).
     app.state.admin_login_limiter = LoginRateLimiter()
+    app.state.user_login_limiter = LoginRateLimiter()
     app.include_router(health.router, prefix=API_PREFIX)
     for router in MODULE_ROUTERS:
         app.include_router(router, prefix=API_PREFIX)

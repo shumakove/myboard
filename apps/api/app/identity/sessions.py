@@ -16,6 +16,11 @@ from app.core.settings import Settings
 from app.identity.models import Session, SubjectType
 
 ADMIN_COOKIE = "myboard_admin"
+USER_COOKIE = "myboard_session"
+
+# ACC-03: сессия пользователя досок бессрочна до выхода. Браузеры ограничивают срок cookie
+# 400 днями, поэтому cookie продлевается при каждой проверке сессии (GET /api/session).
+USER_COOKIE_MAX_AGE = 400 * 24 * 60 * 60
 
 
 def _digest(token: str) -> str:
@@ -60,11 +65,15 @@ async def delete_subject_sessions(
     )
 
 
-def set_session_cookie(response: Response, name: str, token: str, settings: Settings) -> None:
+def set_session_cookie(
+    response: Response, name: str, token: str, settings: Settings, max_age: int | None = None
+) -> None:
+    """Без `max_age` cookie живёт до закрытия браузера, с ним — переживает перезапуск."""
     # Скрипт страницы cookie не читает; Secure — только при https:// в PUBLIC_BASE_URL.
     response.set_cookie(
         name,
         token,
+        max_age=max_age,
         httponly=True,
         samesite="lax",
         secure=settings.secure_cookies,

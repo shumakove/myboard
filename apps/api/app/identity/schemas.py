@@ -51,6 +51,14 @@ class AdminSession(BaseModel):
     email: str | None
 
 
+class AccountSession(BaseModel):
+    """Состояние входа пользователя досок: имя и почта или `null` (ACC-01, ACC-03)."""
+
+    authenticated: bool
+    name: str | None
+    email: str | None
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

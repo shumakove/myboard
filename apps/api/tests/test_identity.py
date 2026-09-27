@@ -1,4 +1,4 @@
-"""Модуль identity: администратор и учётные записи пользователей досок (ADM-01…ADM-07)."""
+"""Модуль identity: администратор и учётные записи (ADM-*), вход пользователя досок (ACC-*)."""
 
 import hashlib
 import uuid
@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 
 from app.core.settings import Settings
 from app.identity.rate_limit import MAX_FAILURES, LoginRateLimiter
-from app.identity.sessions import ADMIN_COOKIE
+from app.identity.sessions import ADMIN_COOKIE, USER_COOKIE, USER_COOKIE_MAX_AGE
 from app.main import create_app
 
 ADMIN_EMAIL = "admin@example.com"
@@ -410,3 +410,217 @@ def test_adm07_uniqueness_enforced_by_database(admin: TestClient, settings: Sett
             " VALUES (:i, 'alice@example.com', 'x', 'x')",
             i=str(uuid.uuid4()),
         )
+
+
+# --- ACC-01…ACC-03: вход пользователя досок ----------------------------------------------
+
+USER_EMAIL = "alice@example.com"
+USER_PASSWORD = "alice-pw"
+SIGNED_OUT = {"authenticated": False, "name": None, "email": None}
+
+
+def _user_login(client: TestClient, email: str = USER_EMAIL, password: str = USER_PASSWORD) -> Any:
+    return client.post("/api/login", json={"email": email, "password": password})
+
+
+def _account_session(client: TestClient) -> Any:
+    response = client.get("/api/session")
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.fixture
+def board_user(admin: TestClient) -> str:
+    """Пользователь досок alice@example.com, созданный администратором; клиент без cookie."""
+    user_id: str = _create_user(admin, email=USER_EMAIL, password=USER_PASSWORD).json()["id"]
+    return user_id
+
+
+def _as_admin(client: TestClient) -> TestClient:
+    client.cookies.clear()
+    assert _login(client).status_code == 204
+    return client
+
+
+def test_acc01_user_signs_in_with_credentials_from_admin(
+    client: TestClient, board_user: str
+) -> None:
+    client.cookies.clear()
+
+    response = _user_login(client, "  Alice@Example.COM ", USER_PASSWORD)
+
+    assert response.status_code == 204
+    assert _account_session(client) == {
+        "authenticated": True,
+        "name": "Alice",
+        "email": USER_EMAIL,
+    }
+
+
+def test_acc01_user_cookie_flags_and_random_value(
+    client: TestClient, board_user: str, settings: Settings
+) -> None:
+    client.cookies.clear()
+    first = _user_login(client)
+    second = _user_login(client)
+    cookie = first.headers["set-cookie"]
+
+    assert cookie.startswith(f"{USER_COOKIE}=")
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Secure" not in cookie
+    tokens = [first.cookies[USER_COOKIE], second.cookies[USER_COOKIE]]
+    assert tokens[0] != tokens[1]
+    assert len(tokens[0]) >= 43
+    stored = _db_scalar(
+        settings, "SELECT count(*) FROM sessions WHERE id IN (:a, :b)", a=tokens[0], b=tokens[1]
+    )
+    assert stored == 0
+
+
+def test_acc01_user_cookie_is_secure_on_https(settings: Settings) -> None:
+    https = settings.model_copy(update={"public_base_url": "https://board.example.com"})
+    with TestClient(create_app(https), base_url="https://testserver") as client:
+        _login(client)
+        _create_user(client, email=USER_EMAIL, password=USER_PASSWORD)
+        client.cookies.clear()
+        assert "Secure" in _user_login(client).headers["set-cookie"]
+
+
+@pytest.mark.parametrize(
+    ("email", "password"),
+    [
+        (USER_EMAIL, "wrong-password"),
+        ("nobody@example.com", USER_PASSWORD),
+        (ADMIN_EMAIL, ADMIN_PASSWORD),  # администратор — не пользователь досок
+        ("", ""),
+    ],
+)
+def test_acc02_wrong_credentials_get_same_refusal(
+    client: TestClient, board_user: str, email: str, password: str
+) -> None:
+    client.cookies.clear()
+
+    response = _user_login(client, email, password)
+
+    assert response.status_code == 401
+    assert response.json() == LOGIN_FAILED
+    assert "set-cookie" not in response.headers
+    assert _account_session(client) == SIGNED_OUT
+
+
+def test_acc02_disabled_user_gets_same_refusal(client: TestClient, board_user: str) -> None:
+    client.patch(f"/api/admin/users/{board_user}", json={"disabled": True})
+    client.cookies.clear()
+
+    response = _user_login(client)
+
+    assert response.status_code == 401
+    assert response.json() == LOGIN_FAILED
+    assert "set-cookie" not in response.headers
+
+
+def test_adm05_adm06_disable_blocks_and_enable_restores_sign_in(
+    client: TestClient, board_user: str
+) -> None:
+    client.cookies.clear()
+    assert _user_login(client).status_code == 204
+    user_token = client.cookies[USER_COOKIE]
+
+    _as_admin(client).patch(f"/api/admin/users/{board_user}", json={"disabled": True})
+    client.cookies.clear()
+    client.cookies.set(USER_COOKIE, user_token)
+    assert _account_session(client) == SIGNED_OUT  # выданная сессия больше не действует
+    assert _user_login(client).status_code == 401
+
+    _as_admin(client).patch(f"/api/admin/users/{board_user}", json={"disabled": False})
+    client.cookies.clear()
+    assert _user_login(client).status_code == 204  # прежний пароль снова работает
+
+
+def test_adm04_new_password_and_email_work_old_do_not(client: TestClient, board_user: str) -> None:
+    client.patch(
+        f"/api/admin/users/{board_user}",
+        json={"email": "alice.new@example.com", "password": "new-pw"},
+    )
+    client.cookies.clear()
+
+    assert _user_login(client, USER_EMAIL, USER_PASSWORD).status_code == 401
+    assert _user_login(client, USER_EMAIL, "new-pw").status_code == 401
+    assert _user_login(client, "alice.new@example.com", USER_PASSWORD).status_code == 401
+    assert _user_login(client, "alice.new@example.com", "new-pw").status_code == 204
+
+
+def test_acc02_login_attempts_limited_per_address(client: TestClient, board_user: str) -> None:
+    client.cookies.clear()
+    for _ in range(MAX_FAILURES):
+        assert _user_login(client, password="wrong").status_code == 401
+
+    response = _user_login(client)  # даже верный пароль, пока окно не прошло
+
+    assert response.status_code == 429
+    assert int(response.headers["retry-after"]) > 0
+    assert "set-cookie" not in response.headers
+
+
+def test_acc02_user_and_admin_limits_are_separate(client: TestClient, board_user: str) -> None:
+    client.cookies.clear()
+    for _ in range(MAX_FAILURES):
+        _user_login(client, password="wrong")
+
+    assert _login(client).status_code == 204
+
+
+def test_acc03_session_persists_between_visits(client: TestClient, board_user: str) -> None:
+    client.cookies.clear()
+    cookie = _user_login(client).headers["set-cookie"]
+    token = client.cookies[USER_COOKIE]
+
+    # Cookie с Max-Age переживает закрытие браузера; сессия в базе бессрочна.
+    assert f"Max-Age={USER_COOKIE_MAX_AGE}" in cookie
+    client.cookies.clear()
+    client.cookies.set(USER_COOKIE, token)  # «новый визит» с сохранённой cookie
+    session = client.get("/api/session")
+    assert session.json()["authenticated"] is True
+    assert f"Max-Age={USER_COOKIE_MAX_AGE}" in session.headers["set-cookie"]  # продление
+
+
+def test_acc03_logout_ends_session(client: TestClient, board_user: str) -> None:
+    client.cookies.clear()
+    _user_login(client)
+    token = client.cookies[USER_COOKIE]
+
+    response = client.post("/api/logout")
+
+    assert response.status_code == 204
+    assert f'{USER_COOKIE}=""' in response.headers["set-cookie"]
+    client.cookies.set(USER_COOKIE, token)  # скопированная cookie тоже не действует
+    assert _account_session(client) == SIGNED_OUT
+
+
+def test_acc03_session_without_cookie_or_forged(client: TestClient) -> None:
+    assert _account_session(client) == SIGNED_OUT
+    client.cookies.set(USER_COOKIE, "forged-session-id")
+    response = client.get("/api/session")
+    assert response.json() == SIGNED_OUT
+    assert "set-cookie" not in response.headers
+
+
+def test_acc01_user_session_does_not_open_panel(client: TestClient, board_user: str) -> None:
+    client.cookies.clear()
+    _user_login(client)
+
+    assert client.get("/api/admin/users").status_code == 401
+    assert client.get("/api/admin/session").json() == {"authenticated": False, "email": None}
+
+
+def test_acc01_admin_session_is_not_user_session(admin: TestClient) -> None:
+    admin.cookies.set(USER_COOKIE, admin.cookies[ADMIN_COOKIE])
+
+    assert _account_session(admin) == SIGNED_OUT
+
+
+def test_acc01_login_contract_in_openapi(client: TestClient) -> None:
+    paths = client.get("/api/openapi.json").json()["paths"]
+
+    assert {"/api/login", "/api/logout", "/api/session"} <= paths.keys()
