@@ -68,10 +68,18 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
 
 
 async def update_user(db: AsyncSession, user_id: uuid.UUID, data: UserUpdate) -> User | None:
-    """ADM-04 (имя, почта, пароль), ADM-05/ADM-06 (отключение и включение)."""
+    """ADM-04 (имя, почта, пароль), ADM-05/ADM-06 (отключение и включение).
+
+    Сессии отзываются в той же транзакции, что и правка: при отказе (409) они остаются.
+    """
     user = await db.get(User, user_id)
     if user is None:
         return None
+    # ADM-04: после смены пароля действующие сессии отзываются (смена имени или почты — нет);
+    # ADM-05: отключённый пользователь теряет открытые сессии, доски остаются.
+    # DELETE идёт до правки полей: иначе autoflush запишет почту раньше commit.
+    if data.password is not None or data.disabled:
+        await delete_subject_sessions(db, SubjectType.USER, user.id)
     if data.name is not None:
         user.name = data.name
     if data.email is not None:
@@ -80,9 +88,6 @@ async def update_user(db: AsyncSession, user_id: uuid.UUID, data: UserUpdate) ->
         user.password_hash = await hash_password(data.password)
     if data.disabled is not None:
         user.disabled = data.disabled
-        if data.disabled:
-            # Отключённый пользователь теряет и открытые сессии; доски остаются (ADM-05).
-            await delete_subject_sessions(db, SubjectType.USER, user.id)
     await _commit_unique_email(db, user)
     return user
 
