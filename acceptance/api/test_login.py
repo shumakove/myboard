@@ -216,13 +216,14 @@ def test_adm04_new_email_works_old_does_not(admin: Client, clean_stack: str) -> 
         assert session(new)["email"] == new_email
 
 
-def test_adm04_session_issued_before_password_change_recorded(admin: Client, clean_stack: str) -> None:
-    """Фиксация поведения: требование не говорит, отзывается ли сессия при смене пароля."""
+def test_adm04_session_issued_before_password_change_revoked(admin: Client, clean_stack: str) -> None:
+    """ADM-04 (редакция f65eab9): после смены пароля действующие сессии учётки отзываются (T1.3)."""
     account = create_user(admin)
     one = _signed_in_client(clean_stack, account["email"], account["_password"])
     try:
+        assert is_signed_in(one)
         assert patch_user(admin, account["id"], password="changed-" + uuid.uuid4().hex).status_code == 200
-        print(f"сессия после смены пароля действует: {is_signed_in(one)}")
+        assert not is_signed_in(one)
     finally:
         one.close()
 
