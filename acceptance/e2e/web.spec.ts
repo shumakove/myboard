@@ -5,6 +5,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+import { apiUserLogin, createBoardUser } from "./user";
 
 // Форма токена — 32 байта в URL-безопасной кодировке (43 символа) с `-` и `_`.
 // Значения постоянные: имена тестов должны совпадать во всех воркерах Playwright.
@@ -74,12 +75,23 @@ for (const path of ROUTES) {
   });
 }
 
-test("ARCH-WEB-03 разные маршруты показывают разные страницы", async ({ page }) => {
+test("ARCH-WEB-03 разные маршруты показывают разные страницы", async ({ page, browser, baseURL }) => {
   const texts = new Map<string, string>();
   for (const path of ROUTES) {
     await open(page, path);
     texts.set(path, await rootText(page));
   }
+  // С T1.2 `/` без сессии ведёт на `/login` (ACC-03), поэтому страницу `/`
+  // смотрит вошедший пользователь досок — её назначение по разделу 4.
+  await open(page, "/");
+  expect(new URL(page.url()).pathname).toBe("/login");
+  const userCtx = await browser.newContext({ baseURL });
+  await apiUserLogin(userCtx.request, await createBoardUser(browser, baseURL));
+  const userPage = await userCtx.newPage();
+  await open(userPage, "/");
+  expect(new URL(userPage.url()).pathname).toBe("/");
+  texts.set("/", await rootText(userPage));
+  await userCtx.close();
   const objectRoute = ROUTES[ROUTES.length - 1]!;
   const distinct = ROUTES.filter((p) => p !== objectRoute);
   const unique = new Set(distinct.map((p) => texts.get(p)));

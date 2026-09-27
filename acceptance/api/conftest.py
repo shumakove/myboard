@@ -12,8 +12,9 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
-from admin_helpers import admin_credentials, login
+from admin_helpers import admin_credentials, create_user, login
 from stand import Client, StandConfigError, clients, pending, public_base_url
+from user_helpers import user_login
 
 
 @pytest.fixture(scope="session")
@@ -72,10 +73,17 @@ def admin(clean_stack: str, admin_creds: tuple[str, str]) -> Iterator[Client]:
 
 
 @pytest.fixture
-def board_user(admin: Client) -> Client:
-    """Пользователь досок: создан администратором и вошёл через /login (ADM-03, ACC-01)."""
-    pending("пользователь досок", "T1.2")
-    raise AssertionError("недостижимо")
+def board_user(admin: Client, clean_stack: str) -> Iterator[Client]:
+    """Пользователь досок: создан администратором и вошёл через `POST /api/login` (ADM-03, ACC-01).
+
+    Данные учётки — в `client.account` (id, name, email, `_password`).
+    """
+    account = create_user(admin)
+    with clients(clean_stack, "board_user") as (one,):
+        resp = user_login(one, account["email"], account["_password"])
+        assert resp.status_code == 204, (resp.status_code, resp.text)
+        one.account = account  # type: ignore[attr-defined]
+        yield one
 
 
 @pytest.fixture
