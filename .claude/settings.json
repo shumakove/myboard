@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "additionalDirectories": ["../myboard-dev", "../myboard-qa"],
+    "additionalDirectories": [
+      "../myboard-dev",
+      "../myboard-qa"
+    ],
     "allow": [
       "Bash(git:*)",
       "Bash(docker compose:*)",
@@ -12,7 +15,15 @@
       "Bash(pytest:*)",
       "Bash(ruff:*)",
       "Bash(mypy:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(npx vitest:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker inspect:*)",
+      "Bash(sleep:*)",
+      "mcp__claude-in-chrome__*"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -21,4 +32,3 @@
     ]
   }
 }
-
