@@ -1,0 +1,5 @@
+"""HTTP-маршруты модуля identity. Пока пусто: маршруты появляются с задачами модуля."""
+
+from fastapi import APIRouter
+
+router = APIRouter(tags=["identity"])
