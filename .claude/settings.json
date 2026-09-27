@@ -23,7 +23,15 @@
       "Bash(docker exec:*)",
       "Bash(docker inspect:*)",
       "Bash(sleep:*)",
-      "mcp__claude-in-chrome__*"
+      "mcp__claude-in-chrome__*",
+      "Bash(grep:*)",
+      "Bash(sed -n:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
