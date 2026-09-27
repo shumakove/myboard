@@ -17,12 +17,21 @@ function openPath(path: string) {
 
 describe("маршруты интерфейса (ARCHITECTURE.md, раздел 4)", () => {
   beforeEach(() => {
-    // Страницы панели спрашивают состояние входа; браузер без сессии.
+    // Страницы спрашивают состояние входа: пользователь досок вошёл, в панель — нет.
     vi.stubGlobal(
       "fetch",
-      vi.fn(() =>
+      vi.fn((request: Request) =>
         Promise.resolve(
-          Response.json({ authenticated: false, email: null }, { status: 200 }),
+          Response.json(
+            new URL(request.url).pathname === "/api/session"
+              ? {
+                  authenticated: true,
+                  name: "Alice",
+                  email: "alice@example.com",
+                }
+              : { authenticated: false, email: null },
+            { status: 200 },
+          ),
         ),
       ),
     );

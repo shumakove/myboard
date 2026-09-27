@@ -35,6 +35,25 @@ async def authenticate_admin(db: AsyncSession, email: str, password: str) -> Adm
     return admin
 
 
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> User | None:
+    """ACC-01/ACC-02: включённый пользователь досок с этой почтой и паролем, иначе `None`.
+
+    Пароль проверяется и у отключённой учётки: время отказа одинаково для всех причин.
+    """
+    user = await db.scalar(select(User).where(User.email == normalize_email(email)))
+    if not await verify_password(user.password_hash if user else None, password):
+        return None
+    if user is None or user.disabled:
+        return None
+    return user
+
+
+async def active_user(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+    """Пользователь сессии, если учётка есть и не отключена (ADM-05)."""
+    user = await db.get(User, user_id)
+    return user if user is not None and not user.disabled else None
+
+
 async def list_users(db: AsyncSession) -> list[User]:
     """Все пользователи досок в порядке создания (ADM-02)."""
     return list(await db.scalars(select(User).order_by(User.created_at, User.id)))
