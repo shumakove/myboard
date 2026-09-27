@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `REQUIREMENTS.md` — функциональные требования с идентификаторами (ADM-*, ACC-*, BRD-*, SHR-*, CVS-*, MOB-*, COL-*, BAK-* и др.). Поведение продукта берётся отсюда.
 - `ARCHITECTURE.md` — целевая архитектура первой версии. Устройство системы берётся отсюда.
 - `PLAN.md` — задачи реализации (DEV + QA) и их статусы; `WORKFLOW.md` — как агент-разработчик передаёт задачи агенту-тестировщику.
+- `.claude/agents/developer.md` — агент-разработчик (DEV); решения о библиотеках DEV ведёт в `docs/decisions.md`.
 - `uml/` — UML-схемы (Mermaid) принятой и протестированной реализации; правила и соответствие задач схемам — в `uml/README.md`.
 - `.cursor/rules/*.mdc` — всегда действующие правила разработки и тестирования (кратко изложены ниже).
 
