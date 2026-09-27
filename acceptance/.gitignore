@@ -1,0 +1,6 @@
+# Окружения и артефакты прогонов приёмочных тестов
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+.venv/
