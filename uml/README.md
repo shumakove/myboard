@@ -27,7 +27,7 @@
 
 | Задачи PLAN.md | Схемы |
 | --- | --- |
-| T0.1, T0.2, T11.2 | `deployment.md` |
+| T0.1, T0.2, T0.3, T11.2 | `deployment.md` |
 | T0.2, T0.3 | `components.md` |
 | T1.1, T1.2 | `data-model.md`, `components.md`, `sequences/login.md`, `states/session.md`, `states/user-account.md` |
 | T2.1, T2.2 | `data-model.md`, `components.md` |
@@ -47,5 +47,5 @@
 
 | Схема | Актуально на |
 | --- | --- |
-| [deployment.md](deployment.md) | T0.2, 9bce527 |
-| [components.md](components.md) | T0.2, 9bce527 |
+| [deployment.md](deployment.md) | T0.3, 03e00fa |
+| [components.md](components.md) | T0.3, 03e00fa |
