@@ -1,4 +1,4 @@
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { BoardPage } from "./pages/BoardPage";
@@ -19,6 +19,10 @@ export function AppRoutes() {
       <Route path="/boards/:id" component={BoardPage} />
       <Route path="/templates" component={TemplatesPage} />
       <Route path="/t/:token" component={TemplateCopyPage} />
+      {/* Раздел 2 архитектуры: администратор «открывает /admin» — это вход в панель. */}
+      <Route path="/admin">
+        <Redirect to="/admin/users" replace />
+      </Route>
       <Route path="/admin/login" component={AdminLoginPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       {/* `?object={id}` читает страница доски, отдельного маршрута нет. */}
