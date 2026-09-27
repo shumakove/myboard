@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3) и панель администратора (T1.1): модуль `identity` на сервере, страницы `/admin/login` и `/admin/users` в клиенте.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа на `/` в клиенте.
 
 ## Сервер `apps/api`
 
@@ -13,12 +13,15 @@ flowchart TB
     migrations["migrations<br/>alembic_config(), upgrade_to_head()"]
     health["health.router<br/>GET /health → Health"]
   end
-  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS,<br/>app.state.admin_login_limiter"]
+  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS,<br/>app.state.admin_login_limiter,<br/>app.state.user_login_limiter"]
   subgraph identity [app.identity]
-    irouter["router (prefix /admin)<br/>POST /login, POST /logout, GET /session,<br/>GET /users, POST /users, PATCH /users/{user_id};<br/>require_admin / AdminDep"]
-    ischemas["schemas<br/>Credentials, AdminSession, UserOut,<br/>UserCreate, UserUpdate, normalize_email"]
-    iservice["service<br/>ensure_first_admin, authenticate_admin,<br/>list_users, create_user, update_user,<br/>EmailTakenError"]
-    isessions["sessions<br/>ADMIN_COOKIE = myboard_admin,<br/>create_session, find_subject, delete_session,<br/>delete_subject_sessions, set/clear_session_cookie"]
+    irouter["router<br/>include_router(admin_router, account_router)"]
+    iadmin["admin_router (prefix /admin, тег admin)<br/>POST /login, POST /logout, GET /session,<br/>GET /users, POST /users, PATCH /users/{user_id};<br/>require_admin / AdminDep"]
+    iaccount["account_router (тег account)<br/>POST /login, POST /logout, GET /session;<br/>require_user / UserDep"]
+    ihttp["http<br/>LOGIN_FAILED, TOO_MANY_ATTEMPTS, settings_of,<br/>client_address, ensure_attempt_allowed, login_failed"]
+    ischemas["schemas<br/>Credentials, AdminSession, AccountSession,<br/>UserOut, UserCreate, UserUpdate, normalize_email"]
+    iservice["service<br/>ensure_first_admin, authenticate_admin,<br/>authenticate_user, active_user, list_users,<br/>create_user, update_user, EmailTakenError"]
+    isessions["sessions<br/>ADMIN_COOKIE = myboard_admin,<br/>USER_COOKIE = myboard_session, USER_COOKIE_MAX_AGE,<br/>create_session, find_subject, delete_session,<br/>delete_subject_sessions, set/clear_session_cookie"]
     ipasswords["passwords<br/>hash_password, verify_password<br/>(argon2-cffi, Argon2id)"]
     ilimit["rate_limit<br/>LoginRateLimiter: 10 неудач / 60 с"]
     imodels["models<br/>Admin, User, Session, SubjectType"]
@@ -45,11 +48,12 @@ flowchart TB
   main -->|"include_router(prefix=/api)"| health
   main -->|"include_router(prefix=/api)"| irouter
   main -->|"include_router(prefix=/api)"| modules
-  irouter --> ischemas
-  irouter --> iservice
-  irouter --> isessions
-  irouter --> ilimit
-  irouter -->|"secure_cookies"| settings
+  irouter --> iadmin & iaccount
+  iadmin & iaccount --> ihttp & ischemas & iservice & isessions
+  iadmin -->|"admin_login_limiter"| ilimit
+  iaccount -->|"user_login_limiter"| ilimit
+  ihttp --> ilimit
+  ihttp -->|"secure_cookies"| settings
   iservice --> ipasswords
   iservice --> isessions
   iservice --> imodels
@@ -61,12 +65,14 @@ flowchart TB
 ```
 
 - Все маршруты под префиксом `/api`: `GET /api/health` (`{"status":"ok"}`), `GET /api/openapi.json` (OpenAPI 3.1), `GET /api/docs` (Swagger UI). Неизвестный путь `/api/*` — `404` JSON.
-- Маршруты `identity` (тег `admin`): `POST /api/admin/login` → `204` / `401` / `429`, `POST /api/admin/logout` → `204`, `GET /api/admin/session` → `200 AdminSession`, `GET /api/admin/users` → `200 [UserOut]`, `POST /api/admin/users` → `201` / `409`, `PATCH /api/admin/users/{user_id}` → `200` / `404` / `409`. Маршруты `/users*` требуют сессию администратора (`require_admin`, иначе `401`). Сценарии — [sequences/login.md](sequences/login.md), таблицы — [data-model.md](data-model.md).
+- Маршруты панели (тег `admin`): `POST /api/admin/login` → `204` / `401` / `429`, `POST /api/admin/logout` → `204`, `GET /api/admin/session` → `200 AdminSession`, `GET /api/admin/users` → `200 [UserOut]`, `POST /api/admin/users` → `201` / `409`, `PATCH /api/admin/users/{user_id}` → `200` / `404` / `409`. Маршруты `/users*` требуют сессию администратора (`require_admin`, иначе `401`).
+- Маршруты пользователя досок (тег `account`): `POST /api/login` → `204` + cookie `myboard_session` / `401 Invalid email or password` / `429`, `POST /api/logout` → `204`, `GET /api/session` → `200 AccountSession` (без сессии — `authenticated: false`; живую сессию продлевает). `require_user` (`401 Sign in`) готов для маршрутов досок, пока не используется. Сценарии — [sequences/login.md](sequences/login.md), таблицы — [data-model.md](data-model.md).
+- Лимиты попыток входа в панель и входа пользователя — два отдельных экземпляра `LoginRateLimiter` в `app.state`.
 - `Settings` — семь обязательных переменных (`PUBLIC_BASE_URL`, `SECRET_KEY`, `DATABASE_URL`, `MEDIA_ROOT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `MAX_UPLOAD_BYTES`); пустое значение равно отсутствию. `MAX_UPLOAD_BYTES` > 0, `PUBLIC_BASE_URL` — `http://` или `https://`; свойство `secure_cookies` истинно только для `https://` и задаёт флаг `Secure` cookie сессии.
 - Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`; `downgrade()` бросает `NotImplementedError`.
 - WebSocket `/api/ws` не реализован (появится в T4.1).
 
-Актуально на: T1.1, 97556a8. Требования: ADM-01…ADM-07 (модуль `identity`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
+Актуально на: T1.2, f65eab9. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
 
 ## Клиент `apps/web`
 
@@ -77,8 +83,8 @@ flowchart TB
   routes["routes.tsx<br/>AppRoutes: wouter Switch / Route,<br/>/admin → Redirect /admin/users"]
   subgraph pages [pages]
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
-    login["LoginPage<br/>/login"]
-    boards["BoardsPage<br/>/"]
+    login["LoginPage<br/>/login: Sign in (ACC-01, ACC-02)"]
+    boards["BoardsPage<br/>/: Boards, имя, Sign out (ACC-03)"]
     board["BoardPage<br/>/boards/:id"]
     templates["TemplatesPage<br/>/templates"]
     tcopy["TemplateCopyPage<br/>/t/:token"]
@@ -87,6 +93,10 @@ flowchart TB
     shared["SharedBoardPage<br/>/b/:token"]
     embed["EmbeddedBoardPage<br/>/b/:token/embed"]
     nf["NotFoundPage<br/>любой другой путь: Page not found"]
+  end
+  subgraph accountMod [account]
+    useAccount["useAccountSession()<br/>loading | signedOut | signedIn(name, email)"]
+    accountApi["accountApi.ts<br/>signIn, signOut, getSession,<br/>AccountApiError, errorMessage"]
   end
   subgraph adminMod [admin]
     useSession["useAdminSession()<br/>loading | signedOut | signedIn(email)"]
@@ -107,7 +117,14 @@ flowchart TB
 
   html --> main --> routes
   routes --> login & boards & board & templates & tcopy & alogin & ausers & shared & embed & nf
-  login & boards & board & templates & tcopy & shared & embed --> placeholder
+  board & templates & tcopy & shared & embed --> placeholder
+  login -->|"signedIn → Redirect /"| useAccount
+  login -->|"signIn → navigate /"| accountApi
+  boards -->|"signedOut → Redirect /login"| useAccount
+  boards -->|"signOut → navigate /login"| accountApi
+  useAccount -->|"getSession"| accountApi
+  accountApi -->|"type AccountSession"| schema
+  accountApi --> client
   alogin --> useSession
   alogin -->|"signIn → navigate /admin/users"| adminApi
   ausers --> useSession
@@ -125,11 +142,13 @@ flowchart TB
   client -->|"HTTP к происхождению страницы, пути /api/…"| server
 ```
 
-- Страницы панели и `adminApi` — единственные потребители `api`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health` и маршруты `/api/admin/*`.
-- `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
-- Cookie сессии скрипту не видна (`HttpOnly`), поэтому состояние входа страница узнаёт из `GET /api/admin/session`. `/admin/login` при действующей сессии перенаправляет на `/admin/users`; `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
-- Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах панели подменяет `admin/fakeAdminServer.ts`.
+- Потребители `api` — модули `account` и `admin`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*` и `/api/login`, `/api/logout`, `/api/session`.
+- `accountApi` показывает одно скупое сообщение для `401` и `422` — Invalid email or password. (ACC-02); `429` — Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
+- `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
+- Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`, `/` без сессии — на `/login`; `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
+- `/boards/:id`, `/templates`, `/t/:token`, `/b/:token`, `/b/:token/embed` — пока заглушки без проверки входа.
+- Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts` и `account/fakeAccountServer.ts`.
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T1.1, 97556a8. Требования: ADM-01…ADM-07 (панель администратора); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
+Актуально на: T1.2, f65eab9. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03 (вход пользователя досок); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
