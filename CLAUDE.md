@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ARCHITECTURE.md` — целевая архитектура первой версии. Устройство системы берётся отсюда.
 - `PLAN.md` — задачи реализации (DEV + QA) и их статусы; `WORKFLOW.md` — как агент-разработчик передаёт задачи агенту-тестировщику.
 - `.claude/agents/developer.md` — агент-разработчик (DEV); решения о библиотеках DEV ведёт в `docs/decisions.md`.
+- `.claude/agents/tester.md` — агент-тестировщик (QA); отчёты приёмки — `docs/qa/reports/`, баги — `docs/bugs/`.
 - `uml/` — UML-схемы (Mermaid) принятой и протестированной реализации; правила и соответствие задач схемам — в `uml/README.md`.
 - `.cursor/rules/*.mdc` — всегда действующие правила разработки и тестирования (кратко изложены ниже).
 
