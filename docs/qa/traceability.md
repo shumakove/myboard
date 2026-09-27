@@ -170,3 +170,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BAK-04 | T10.2 | — | не проверено |
 | BAK-05 | T10.2 | — | не проверено |
 | BAK-06 | T10.1, T11.2 (итог) | — | не проверено |
+
+## Наблюдаемые решения архитектуры (без ID требования)
+
+| Проверка | Задача | Приёмочный тест | Вердикт |
+| --- | --- | --- | --- |
+| ARCH-STACK-01…04 (сервисы, тома, `.env.example`) | T0.1 | ручная, docs/qa/reports/T0.1.md | PASS |
+| ARCH-NET-01, 04, 05 (статика по LAN-IP, SPA-fallback, нет `localhost`) | T0.1 | acceptance/api/test_stack.py::test_arch_net* | PASS |
+| ARCH-NET-02, 03 (`0.0.0.0`, `HTTP_PORT`) | T0.1 | ручная, docs/qa/reports/T0.1.md | PASS |
+| ARCH-NET-06 (интерфейс грузится без ошибок) | T0.1 | acceptance/e2e/stack.spec.ts | PASS |
+| ARCH-PROXY-01…04 (`/api`, `/api/ws` через Caddy) | T0.1 | acceptance/api/test_stack.py::test_arch_proxy* | PASS |
+| ARCH-FRAME-01…08 (фрейм только для `/b/{token}/embed`; часть EMB-04) | T0.1 | acceptance/api/test_stack.py::test_arch_frame*, acceptance/e2e/stack.spec.ts | PASS |
