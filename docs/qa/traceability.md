@@ -181,3 +181,9 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-NET-06 (интерфейс грузится без ошибок) | T0.1 | acceptance/e2e/stack.spec.ts | PASS |
 | ARCH-PROXY-01…04 (`/api`, `/api/ws` через Caddy) | T0.1 | acceptance/api/test_stack.py::test_arch_proxy* | PASS |
 | ARCH-FRAME-01…08 (фрейм только для `/b/{token}/embed`; часть EMB-04) | T0.1 | acceptance/api/test_stack.py::test_arch_frame*, acceptance/e2e/stack.spec.ts | PASS |
+| ARCH-CFG-01…06 (обязательные переменные, пустые и неверные значения, секреты не в выводе) | T0.2 | acceptance/api/test_api_skeleton.py::test_arch_cfg* | PASS |
+| ARCH-MIG-01…04 (Alembic на пустой базе до приёма трафика, повторный старт, база недоступна) | T0.2 | acceptance/api/test_api_skeleton.py::test_arch_mig* | PASS |
+| ARCH-MIG-05, 06 (одна голова, только вперёд; таблицы по мере надобности) | T0.2 | ручная, docs/qa/reports/T0.2.md | PASS |
+| ARCH-OAS-01…05 (`/api/openapi.json`, пути под `/api`, без `localhost`) | T0.2 | acceptance/api/test_api_skeleton.py::test_arch_oas* | PASS |
+| ARCH-PROC-01…03 (Python 3.12, один процесс, регрессия прокси) | T0.2 | ручная + acceptance/api/test_stack.py | PASS |
+| ARCH-DEVTOOL-01…04 (uv, ruff, mypy --strict, pytest, модули) | T0.2 | ручная, docs/qa/reports/T0.2.md | PASS |
