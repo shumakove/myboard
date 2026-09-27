@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Рабочие копии агентов Claude Code
+.claude/worktrees/
