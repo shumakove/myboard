@@ -26,8 +26,8 @@ services:
     restart: unless-stopped
 
   api:
-    # Заглушка до T0.2: там контекст сменится на apps/api (FastAPI + Alembic).
-    build: ./stubs/api
+    # FastAPI + Alembic; миграции применяются при старте процесса.
+    build: ../../apps/api
     restart: unless-stopped
     environment:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?PUBLIC_BASE_URL is required}
