@@ -9,13 +9,13 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ADM-01 | T1.1 | acceptance/api/test_admin.py::test_adm01_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-02 | T1.1 | acceptance/api/test_admin.py::test_adm02_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-03 | T1.1 | acceptance/api/test_admin.py::test_adm03_*, acceptance/e2e/admin.spec.ts | PASS |
-| ADM-04 | T1.1 | acceptance/api/test_admin.py::test_adm04_*, acceptance/e2e/admin.spec.ts | PASS (вход с новым/старым паролем — регрессия T1.2) |
-| ADM-05 | T1.1 | acceptance/api/test_admin.py::test_adm05_*, acceptance/e2e/admin.spec.ts | PASS (отказ во входе — регрессия T1.2, сохранность досок — T2.1) |
-| ADM-06 | T1.1 | acceptance/api/test_admin.py::test_adm06_*, acceptance/e2e/admin.spec.ts | PASS (вход после включения — регрессия T1.2) |
+| ADM-04 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm04_*, acceptance/api/test_login.py::test_adm04_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS |
+| ADM-05 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm05_*, acceptance/api/test_login.py::test_adm05_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS (сохранность досок — регрессия T2.1) |
+| ADM-06 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm06_*, acceptance/api/test_login.py::test_adm06_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS |
 | ADM-07 | T1.1 | acceptance/api/test_admin.py::test_adm07_*, acceptance/e2e/admin.spec.ts | PASS |
-| ACC-01 | T1.2 | — | не проверено |
-| ACC-02 | T1.2 | — | не проверено |
-| ACC-03 | T1.2 | — | не проверено |
+| ACC-01 | T1.2 | acceptance/api/test_login.py::test_acc01_*, acceptance/e2e/login.spec.ts | PASS |
+| ACC-02 | T1.2 | acceptance/api/test_login.py::test_acc02_*, acceptance/e2e/login.spec.ts | PASS |
+| ACC-03 | T1.2 | acceptance/api/test_login.py::test_acc03_*, acceptance/e2e/login.spec.ts | PASS |
 | ACC-04 | T2.1 | — | не проверено |
 | BRD-01 | T2.1 | — | не проверено |
 | BRD-02 | T2.1 | — | не проверено |
@@ -191,3 +191,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-WEBNET-01…04 (нет `localhost` в статике, запросы на адрес страницы, сокет из `location`, адрес не вписан при сборке) | T0.3 | acceptance/api/test_web_static.py::test_arch_webnet*, acceptance/e2e/web.spec.ts | PASS |
 | ARCH-WEBDEV-01…06 (pnpm, tsc strict, ESLint, Prettier, Vitest, типы из OpenAPI, сборка) | T0.3 | ручная, docs/qa/reports/T0.3.md; test_web_static.py::test_arch_webdev06 | PASS |
 | ARCH-ADM-01…08 (cookie `HttpOnly`/`SameSite=Lax`/без `Secure` на http, случайная сессия, лимит входа, запрет фрейма для `/admin/*`, API по адресу страницы, английский интерфейс, OpenAPI, нет горизонтальной прокрутки) | T1.1 | acceptance/api/test_admin.py::test_arch_adm*, acceptance/e2e/admin.spec.ts | PASS |
+| ARCH-ACC-01…07 (cookie `myboard_session` `HttpOnly`/`SameSite=Lax`/без `Secure` на http, случайная сессия, запрет фрейма для `/login`, запросы на адрес страницы, английский интерфейс, OpenAPI входа, mobile без горизонтальной прокрутки) | T1.2 | acceptance/api/test_login.py::test_arch_acc*, acceptance/e2e/login.spec.ts | PASS |
