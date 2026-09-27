@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Пока реализован только каркас сервера `apps/api` (T0.2); модули клиента `apps/web` появятся со схемой после приёмки T0.3.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2) и каркас интерфейса `apps/web` (T0.3): таблица маршрутов со страницами-заглушками, типизированный HTTP-клиент и адрес WebSocket.
 
 ## Сервер `apps/api`
 
@@ -45,4 +45,49 @@ flowchart TB
 - Миграции только вперёд: ревизия `0001` пустая, `downgrade()` бросает `NotImplementedError`.
 - WebSocket `/api/ws` не реализован (появится в T4.1).
 
-Актуально на: T0.2, 9bce527. Требования: — (ARCHITECTURE.md, разделы 3, 5, 7, 11: модули сервера, OpenAPI, Alembic, обязательные переменные).
+Актуально на: T0.2, 9bce527 (сервер не менялся в T0.3, сверено на 03e00fa). Требования: — (ARCHITECTURE.md, разделы 3, 5, 7, 11: модули сервера, OpenAPI, Alembic, обязательные переменные).
+
+## Клиент `apps/web`
+
+```mermaid
+flowchart TB
+  html["index.html<br/>div#root"]
+  main["main.tsx<br/>createRoot(#root), StrictMode"]
+  routes["routes.tsx<br/>AppRoutes: wouter Switch / Route"]
+  subgraph pages [pages: заглушки, кроме NotFoundPage]
+    placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
+    login["LoginPage<br/>/login"]
+    boards["BoardsPage<br/>/"]
+    board["BoardPage<br/>/boards/:id"]
+    templates["TemplatesPage<br/>/templates"]
+    tcopy["TemplateCopyPage<br/>/t/:token"]
+    alogin["AdminLoginPage<br/>/admin/login"]
+    ausers["AdminUsersPage<br/>/admin/users"]
+    shared["SharedBoardPage<br/>/b/:token"]
+    embed["EmbeddedBoardPage<br/>/b/:token/embed"]
+    nf["NotFoundPage<br/>любой другой путь: Page not found"]
+  end
+  subgraph apiMod [api]
+    client["client.ts<br/>createApiClient(origin = window.location.origin),<br/>api = openapi-fetch createClient&lt;paths&gt;"]
+    schema["schema.d.ts<br/>paths, components, operations<br/>(openapi-typescript)"]
+  end
+  subgraph realtimeMod [realtime]
+    sock["socketUrl.ts<br/>socketUrl(page = window.location):<br/>https: → wss:, иначе ws:; host страницы + /api/ws"]
+  end
+  oas["openapi.json<br/>pnpm api:fetch ← $PUBLIC_BASE_URL/api/openapi.json"]
+  server["apps/api: /api/*"]
+
+  html --> main --> routes
+  routes --> login & boards & board & templates & tcopy & alogin & ausers & shared & embed & nf
+  login & boards & board & templates & tcopy & alogin & ausers & shared & embed --> placeholder
+  client -->|"import type paths"| schema
+  oas -->|"pnpm api:types"| schema
+  client -->|"HTTP к происхождению страницы, пути /api/…"| server
+```
+
+- Страницы пока не используют `api` и `socketUrl`: модули готовы для задач T1.1 и далее. В `schema.d.ts` сейчас один путь — `GET /api/health`.
+- Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`.
+- Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
+- Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
+
+Актуально на: T0.3, 03e00fa. Требования: — (ARCHITECTURE.md, разделы 3, 4, 10: SPA, таблица маршрутов, типы из OpenAPI, адреса из адреса страницы).
