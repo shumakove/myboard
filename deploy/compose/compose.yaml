@@ -21,8 +21,8 @@ services:
         condition: service_healthy
 
   web:
-    # Заглушка до T0.3: там контекст сменится на apps/web (сборка Vite).
-    build: ./stubs/web
+    # Сборка Vite из apps/web, статику отдаёт Caddy этого сервиса.
+    build: ../../apps/web
     restart: unless-stopped
 
   api:
