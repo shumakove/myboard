@@ -187,3 +187,6 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-OAS-01…05 (`/api/openapi.json`, пути под `/api`, без `localhost`) | T0.2 | acceptance/api/test_api_skeleton.py::test_arch_oas* | PASS |
 | ARCH-PROC-01…03 (Python 3.12, один процесс, регрессия прокси) | T0.2 | ручная + acceptance/api/test_stack.py | PASS |
 | ARCH-DEVTOOL-01…04 (uv, ruff, mypy --strict, pytest, модули) | T0.2 | ручная, docs/qa/reports/T0.2.md | PASS |
+| ARCH-WEB-01…09 (маршруты раздела 4 без ошибок, различимы, навигация, граничные и неизвестные пути, английский, фрейм для embed) | T0.3 | acceptance/e2e/web.spec.ts, acceptance/api/test_web_static.py::test_arch_web* | PASS |
+| ARCH-WEBNET-01…04 (нет `localhost` в статике, запросы на адрес страницы, сокет из `location`, адрес не вписан при сборке) | T0.3 | acceptance/api/test_web_static.py::test_arch_webnet*, acceptance/e2e/web.spec.ts | PASS |
+| ARCH-WEBDEV-01…06 (pnpm, tsc strict, ESLint, Prettier, Vitest, типы из OpenAPI, сборка) | T0.3 | ручная, docs/qa/reports/T0.3.md; test_web_static.py::test_arch_webdev06 | PASS |
