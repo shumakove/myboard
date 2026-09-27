@@ -12,6 +12,7 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
+from admin_helpers import admin_credentials, login
 from stand import Client, StandConfigError, clients, pending, public_base_url
 
 
@@ -52,17 +53,28 @@ def two_clients(clean_stack: str) -> Iterator[tuple[Client, Client]]:
         yield a, b
 
 
+@pytest.fixture(scope="session")
+def admin_creds() -> tuple[str, str]:
+    """ADMIN_EMAIL/ADMIN_PASSWORD, с которыми поднят стек QA."""
+    try:
+        return admin_credentials()
+    except RuntimeError as exc:
+        pytest.fail(str(exc), pytrace=False)
+
+
 @pytest.fixture
-def admin(clean_stack: str) -> Client:
-    """Клиент, вошедший как администратор из ADMIN_EMAIL/ADMIN_PASSWORD (ADM-01)."""
-    pending("админ", "T1.1")
-    raise AssertionError("недостижимо")
+def admin(clean_stack: str, admin_creds: tuple[str, str]) -> Iterator[Client]:
+    """Клиент, вошедший как администратор из ADMIN_EMAIL/ADMIN_PASSWORD (ADM-01, T1.1)."""
+    with clients(clean_stack, "admin") as (one,):
+        resp = login(one, *admin_creds)
+        assert resp.status_code == 204, (resp.status_code, resp.text)
+        yield one
 
 
 @pytest.fixture
 def board_user(admin: Client) -> Client:
     """Пользователь досок: создан администратором и вошёл через /login (ADM-03, ACC-01)."""
-    pending("пользователь досок", "T1.1 и T1.2")
+    pending("пользователь досок", "T1.2")
     raise AssertionError("недостижимо")
 
 
