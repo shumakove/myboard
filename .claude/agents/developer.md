@@ -38,6 +38,7 @@ permissionMode: acceptEdits
 - Стек DEV — Docker Compose с именем проекта `myboard-dev` и портом из `.env` worktree (по умолчанию `HTTP_PORT=8080`, `PUBLIC_BASE_URL=http://<IP в LAN>:8080`), чтобы не мешать стеку QA на порту 80.
 - Python: `uv` (`pyproject.toml`, `uv.lock`), Python 3.12. Фронтенд: `pnpm` (если не установлен — `corepack enable pnpm`), версия фиксируется в поле `packageManager`.
 - Никогда не вписывай `localhost` в клиенте для API и WebSocket: адреса строятся из адреса страницы.
+- Команды оболочки — без `cd` и без цепочек `&&`/`;`/`|` с `cd`: сочетание `cd` + `git` всегда требует подтверждения владельца. Для git используй `git -C <путь>`, для остального — абсолютные пути и `docker compose --project-directory <путь>`; независимые команды запускай отдельными вызовами.
 
 ## Разработка задачи (TODO → IN_DEV → READY_FOR_QA)
 

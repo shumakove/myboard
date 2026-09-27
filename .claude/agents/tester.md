@@ -39,6 +39,7 @@ permissionMode: acceptEdits
 - Стек QA — Docker Compose с именем проекта `myboard-qa` на порту 80 (`HTTP_PORT=80`, `PUBLIC_BASE_URL=http://<IP в LAN>`), всегда с нуля: `docker compose -p myboard-qa down -v && docker compose -p myboard-qa up --build`. Состояние стека DEV не используй.
 - Инструменты: `acceptance/api` — pytest + httpx + клиент WebSocket (через `uv`); `acceptance/e2e` — Playwright (через `pnpm`), профили `desktop` и `mobile` (ширина телефона, `hasTouch`). Базовый адрес — из `PUBLIC_BASE_URL`, `localhost` не вписывай.
 - Ручные проверки — через Claude in Chrome. Не нажимай кнопки, открывающие браузерные `alert/confirm`.
+- Команды оболочки — без `cd` и без цепочек `&&`/`;`/`|` с `cd`: сочетание `cd` + `git` всегда требует подтверждения владельца. Для git используй `git -C <путь>`, для остального — абсолютные пути и `docker compose --project-directory <путь>`; независимые команды запускай отдельными вызовами.
 
 ## Приёмка (READY_FOR_QA → IN_QA → ACCEPTED | REJECTED | BLOCKED)
 
