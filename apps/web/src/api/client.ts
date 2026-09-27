@@ -7,7 +7,11 @@ import type { paths } from "./schema";
  * поэтому запросы идут туда же, откуда загружен интерфейс (раздел 10).
  */
 export function createApiClient(origin: string = window.location.origin) {
-  return createClient<paths>({ baseUrl: origin });
+  // fetch берётся в момент запроса, а не при создании клиента: так его подменяют тесты.
+  return createClient<paths>({
+    baseUrl: origin,
+    fetch: (request) => globalThis.fetch(request),
+  });
 }
 
 export const api = createApiClient();

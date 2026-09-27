@@ -12,7 +12,9 @@ from app.core.db import create_engine, create_session_factory
 from app.core.migrations import upgrade_to_head
 from app.core.settings import Settings
 from app.history.router import router as history_router
+from app.identity.rate_limit import LoginRateLimiter
 from app.identity.router import router as identity_router
+from app.identity.service import ensure_first_admin
 from app.library.router import router as library_router
 from app.media.router import router as media_router
 from app.realtime.router import router as realtime_router
@@ -33,7 +35,10 @@ MODULE_ROUTERS: tuple[APIRouter, ...] = (
 
 
 def create_app(settings: Settings) -> FastAPI:
-    """Приложение с заданными настройками; миграции применяются до приёма трафика."""
+    """Приложение с заданными настройками.
+
+    До приёма трафика применяются миграции и создаётся первый администратор.
+    """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -41,6 +46,9 @@ def create_app(settings: Settings) -> FastAPI:
         await anyio.to_thread.run_sync(upgrade_to_head, settings.database_url)
         engine = create_engine(settings.database_url)
         app.state.session_factory = create_session_factory(engine)
+        await ensure_first_admin(
+            app.state.session_factory, settings.admin_email, settings.admin_password
+        )
         try:
             yield
         finally:
@@ -55,6 +63,7 @@ def create_app(settings: Settings) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.admin_login_limiter = LoginRateLimiter()
     app.include_router(health.router, prefix=API_PREFIX)
     for router in MODULE_ROUTERS:
         app.include_router(router, prefix=API_PREFIX)

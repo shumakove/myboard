@@ -1,45 +1,54 @@
 import { useState, type SubmitEvent } from "react";
-import { Redirect, useLocation } from "wouter";
-import { errorMessage, signIn } from "../admin/adminApi";
-import { useAdminSession } from "../admin/useAdminSession";
-import "../admin/admin.css";
+import { createUser, errorMessage, type User } from "./adminApi";
 
-/** `/admin/login` — вход администратора (ADM-01). */
-export function AdminLoginPage() {
-  const session = useAdminSession();
-  const [, navigate] = useLocation();
+/** ADM-03: новая учётка с именем, почтой и паролем; повтор почты — ошибка (ADM-07). */
+export function CreateUserForm({
+  onCreated,
+}: {
+  onCreated: (user: User) => void;
+}) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-
-  if (session.status === "signedIn") {
-    return <Redirect to="/admin/users" replace />;
-  }
 
   async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
     try {
-      await signIn(email, password);
-      navigate("/admin/users");
+      onCreated(await createUser({ name, email, password }));
+      setName("");
+      setEmail("");
+      setPassword("");
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
       setPending(false);
     }
   }
 
   return (
-    <main className="admin">
-      <h1>Admin sign in</h1>
+    <section aria-labelledby="create-user-title">
+      <h2 id="create-user-title">Create user</h2>
       <form className="admin-form" onSubmit={(e) => void submit(e)}>
+        <label>
+          Name
+          <input
+            name="name"
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+            }}
+          />
+        </label>
         <label>
           Email
           <input
             type="email"
             name="email"
-            autoComplete="username"
             required
             value={email}
             onChange={(e) => {
@@ -52,7 +61,7 @@ export function AdminLoginPage() {
           <input
             type="password"
             name="password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
             value={password}
             onChange={(e) => {
@@ -66,9 +75,9 @@ export function AdminLoginPage() {
           </p>
         )}
         <button type="submit" disabled={pending}>
-          Sign in
+          Create user
         </button>
       </form>
-    </main>
+    </section>
   );
 }

@@ -1,0 +1,76 @@
+/* Административная панель: простая адаптивная вёрстка без внешних библиотек. */
+.admin {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+  font-family: system-ui, sans-serif;
+}
+
+.admin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-account,
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-form input {
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.admin-form button {
+  justify-self: start;
+}
+
+.admin-form-inline {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end;
+}
+
+.admin-error {
+  margin: 0;
+  color: #b00020;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+  text-align: left;
+  vertical-align: top;
+}
+
+/* Длинная почта переносится, чтобы таблица помещалась на телефоне. */
+.admin-email {
+  overflow-wrap: anywhere;
+}

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { AppRoutes } from "./routes";
@@ -16,8 +16,21 @@ function openPath(path: string) {
 }
 
 describe("маршруты интерфейса (ARCHITECTURE.md, раздел 4)", () => {
+  beforeEach(() => {
+    // Страницы панели спрашивают состояние входа; браузер без сессии.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          Response.json({ authenticated: false, email: null }, { status: 200 }),
+        ),
+      ),
+    );
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it.each([
