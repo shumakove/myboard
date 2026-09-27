@@ -12,7 +12,7 @@ flowchart TB
     subgraph compose [Проект Compose: myboard-dev / myboard-qa]
       caddy["caddy<br/>caddy:2.10-alpine<br/>:80, auto_https off"]
       web["web<br/>build: ./stubs/web<br/>caddy file_server :80<br/>try_files {path} /index.html"]
-      api["api<br/>build: ./stubs/api<br/>uvicorn main:app :8000<br/>GET /api/health, WS /api/ws"]
+      api["api<br/>build: ../../apps/api<br/>python -m app, uvicorn :8000<br/>GET /api/health (SELECT 1)"]
       postgres["postgres<br/>postgres:16-alpine :5432"]
     end
     vpg[(pgdata)]
@@ -23,9 +23,10 @@ flowchart TB
 
   phone -->|"HTTP, PUBLIC_BASE_URL"| port
   port --> caddy
-  caddy -->|"path /api, /api/* (вкл. WebSocket /api/ws)"| api
+  caddy -->|"path /api, /api/*"| api
   caddy -->|"всё остальное"| web
   api -. "depends_on: service_healthy" .-> postgres
+  api -->|"DATABASE_URL: миграции, запросы"| postgres
   caddy -. "depends_on: web started, api healthy" .-> api
   postgres --- vpg
   api ---|"смонтирован в ${MEDIA_ROOT}"| vmedia
@@ -33,7 +34,8 @@ flowchart TB
   caddy --- vcconf
 ```
 
-- `web` и `api` — временные заглушки из `deploy/compose/stubs/` (заменяются `apps/web` в T0.3 и `apps/api` в T0.2). Заглушка `api` пока не обращается к `postgres`: связь с ним — только порядок запуска.
+- `web` — временная заглушка из `deploy/compose/stubs/web` (заменяется `apps/web` в T0.3).
+- `api` — образ из `apps/api` (Python 3.12, зависимости из `uv.lock`). При старте проверяет обязательные переменные (без любой — выход с кодом 1) и применяет миграции Alembic в `postgres` до приёма трафика; `GET /api/health` выполняет `SELECT 1`. WebSocket `/api/ws` пока не реализован — маршрут Caddy для него уже есть.
 - Порт на машине задаёт `HTTP_PORT`: 80 — стек QA (`-p myboard-qa`), 8080 — стек DEV (`-p myboard-dev`).
 - Проверки готовности: `api` — `GET http://127.0.0.1:8000/api/health`, `postgres` — `pg_isready`.
 
@@ -65,4 +67,4 @@ flowchart TB
 
 Заголовки ставятся на все ответы (статика и API), кроме `/b/{token}/embed` и `/b/{token}/embed/`.
 
-Актуально на: T0.1, f42fcfa. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).
+Актуально на: T0.2, 9bce527. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).
