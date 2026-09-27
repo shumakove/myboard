@@ -1,0 +1,6 @@
+# Статика интерфейса: любой путь без файла отдаёт index.html (маршруты SPA).
+:80 {
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}

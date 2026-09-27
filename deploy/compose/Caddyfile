@@ -1,0 +1,27 @@
+# Профиль локальной сети: только HTTP на :80 внутри контейнера, без сертификата
+# (ARCHITECTURE.md, раздел 11). Наружу порт публикует compose (HTTP_PORT).
+{
+	auto_https off
+}
+
+:80 {
+	# Во фрейме можно открыть только /b/{token}/embed, остальное — запрет
+	# (ARCHITECTURE.md, раздел 12; EMB-04).
+	@not_embed not path_regexp ^/b/[^/]+/embed/?$
+	header @not_embed {
+		defer
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+	}
+
+	# HTTP API и WebSocket /api/ws — в процесс api.
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	# Всё остальное — статика интерфейса.
+	handle {
+		reverse_proxy web:80
+	}
+}
