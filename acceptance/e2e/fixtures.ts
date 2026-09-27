@@ -1,5 +1,6 @@
 // Фикстуры e2e-стенда QA (Q0.1). Тесты импортируют `test` и `expect` отсюда.
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
+import { apiAdminLogin } from './admin';
 import { pending } from './stand';
 
 /** Независимый браузерный клиент: свой контекст (cookie, хранилище) и вкладка. */
@@ -36,8 +37,12 @@ export const test = base.extend<StandFixtures>({
     await use(clients);
     await Promise.all(clients.map((c) => c.context.close()));
   },
-  adminPage: async ({}, _use) => pending('админ', 'T1.1'),
-  boardUserPage: async ({}, _use) => pending('пользователь досок', 'T1.1 и T1.2'),
+  adminPage: async ({ page }, use) => {
+    // Вход через публичный API: cookie сессии попадает в контекст вкладки (T1.1).
+    await apiAdminLogin(page.request);
+    await use(page);
+  },
+  boardUserPage: async ({}, _use) => pending('пользователь досок', 'T1.2'),
   board: async ({}, _use) => pending('доска', 'T2.1'),
   linkParticipantPage: async ({}, _use) => pending('участник по ссылке', 'T3.1'),
 });
