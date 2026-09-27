@@ -1,0 +1,43 @@
+{
+  "name": "myboard-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "api:fetch": "curl -fsS \"$PUBLIC_BASE_URL/api/openapi.json\" -o openapi.json",
+    "api:types": "openapi-typescript openapi.json -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "wouter": "^3.11.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.1",
+    "openapi-typescript": "^7.13.0",
+    "prettier": "^3.9.9",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

@@ -1,0 +1,30 @@
+import { Route, Switch } from "wouter";
+import { AdminLoginPage } from "./pages/AdminLoginPage";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
+import { BoardPage } from "./pages/BoardPage";
+import { BoardsPage } from "./pages/BoardsPage";
+import { EmbeddedBoardPage } from "./pages/EmbeddedBoardPage";
+import { LoginPage } from "./pages/LoginPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { SharedBoardPage } from "./pages/SharedBoardPage";
+import { TemplateCopyPage } from "./pages/TemplateCopyPage";
+import { TemplatesPage } from "./pages/TemplatesPage";
+
+/** Маршруты интерфейса (ARCHITECTURE.md, раздел 4). */
+export function AppRoutes() {
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/" component={BoardsPage} />
+      <Route path="/boards/:id" component={BoardPage} />
+      <Route path="/templates" component={TemplatesPage} />
+      <Route path="/t/:token" component={TemplateCopyPage} />
+      <Route path="/admin/login" component={AdminLoginPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
+      {/* `?object={id}` читает страница доски, отдельного маршрута нет. */}
+      <Route path="/b/:token" component={SharedBoardPage} />
+      <Route path="/b/:token/embed" component={EmbeddedBoardPage} />
+      <Route component={NotFoundPage} />
+    </Switch>
+  );
+}
