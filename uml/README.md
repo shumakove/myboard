@@ -48,8 +48,8 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa |
-| [components.md](components.md) | T1.1, 97556a8 |
-| [data-model.md](data-model.md) | T1.1, 97556a8 |
-| [sequences/login.md](sequences/login.md) | T1.1, 97556a8 |
-| [states/session.md](states/session.md) | T1.1, 97556a8 |
-| [states/user-account.md](states/user-account.md) | T1.1, 97556a8 |
+| [components.md](components.md) | T1.2, f65eab9 |
+| [data-model.md](data-model.md) | T1.2, f65eab9 |
+| [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
+| [states/session.md](states/session.md) | T1.2, f65eab9 |
+| [states/user-account.md](states/user-account.md) | T1.2, f65eab9 |
