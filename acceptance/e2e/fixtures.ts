@@ -2,6 +2,7 @@
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
 import { apiAdminLogin } from './admin';
 import { pending } from './stand';
+import { apiUserLogin, createBoardUser } from './user';
 
 /** Независимый браузерный клиент: свой контекст (cookie, хранилище) и вкладка. */
 export interface BrowserClient {
@@ -42,7 +43,12 @@ export const test = base.extend<StandFixtures>({
     await apiAdminLogin(page.request);
     await use(page);
   },
-  boardUserPage: async ({}, _use) => pending('пользователь досок', 'T1.2'),
+  boardUserPage: async ({ page, browser, baseURL }, use) => {
+    // Учётку создаёт администратор, вход — через публичный API (T1.2).
+    const user = await createBoardUser(browser, baseURL);
+    await apiUserLogin(page.request, user);
+    await use(page);
+  },
   board: async ({}, _use) => pending('доска', 'T2.1'),
   linkParticipantPage: async ({}, _use) => pending('участник по ссылке', 'T3.1'),
 });
