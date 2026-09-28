@@ -43,8 +43,16 @@ export interface CreatedUser {
 
 /** Вход администратора через API в контексте запросов (cookie попадают в контекст). */
 export async function apiAdminLogin(request: APIRequestContext): Promise<void> {
-  const res = await request.post('/api/admin/login', { data: adminCredentials() });
-  if (res.status() !== 204) throw new Error(`вход администратора: ${res.status()} ${await res.text()}`);
+  for (let attempt = 0; ; attempt++) {
+    const res = await request.post('/api/admin/login', { data: adminCredentials() });
+    // `429` общего лимита стенда пережидается.
+    if (res.status() === 429 && attempt < 2) {
+      await new Promise((r) => setTimeout(r, (Number(res.headers()['retry-after'] ?? '60') + 1) * 1000));
+      continue;
+    }
+    if (res.status() !== 204) throw new Error(`вход администратора: ${res.status()} ${await res.text()}`);
+    return;
+  }
 }
 
 export async function apiCreateUser(
