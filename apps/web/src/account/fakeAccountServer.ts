@@ -18,6 +18,12 @@ export interface FakeAccountServer {
   signedIn: boolean;
   /** Ответ на POST /api/login вместо проверки пароля. */
   loginStatus: number | null;
+  /** Имя, которое отдаёт GET /api/session (администратор может его сменить). */
+  name: string;
+  /** Пути, на которые сервер отвечает 401. */
+  unauthorizedPaths: string[];
+  /** Сеть недоступна: fetch отклоняется. */
+  offline: boolean;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -32,6 +38,9 @@ export function installFakeAccountServer(
     calls: [],
     signedIn: false,
     loginStatus: null,
+    name: USER.name,
+    unauthorizedPaths: [],
+    offline: false,
     ...initial,
   };
 
@@ -40,12 +49,16 @@ export function installFakeAccountServer(
     const text = await request.text();
     const body: unknown = text ? JSON.parse(text) : undefined;
     server.calls.push({ method: request.method, path: pathname, body });
+    if (server.offline) throw new TypeError("Failed to fetch");
+    if (server.unauthorizedPaths.includes(pathname)) {
+      return json({ detail: "Not signed in" }, 401);
+    }
     const route = `${request.method} ${pathname}`;
 
     if (route === "GET /api/session") {
       return json(
         server.signedIn
-          ? { authenticated: true, name: USER.name, email: USER.email }
+          ? { authenticated: true, name: server.name, email: USER.email }
           : { authenticated: false, name: null, email: null },
       );
     }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApiClient } from "./client";
+import { createApiClient, onUnauthorized } from "./client";
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -37,6 +37,40 @@ describe("HTTP-клиент API (ARCHITECTURE.md, разделы 3 и 10)", () =
 
     expect(fetchMock.mock.calls[0]?.[0].url).toBe(
       "https://board.example.com/api/health",
+    );
+  });
+});
+
+describe("уведомление об ответе 401 (ACC-05)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("сообщает подписчику о 401 с запросом и молчит об остальных ответах", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((request: Request) =>
+        Promise.resolve(
+          new URL(request.url).pathname === "/api/session"
+            ? new Response(null, { status: 401 })
+            : jsonResponse({ status: "ok" }),
+        ),
+      ),
+    );
+    const listener = vi.fn<(request: Request) => void>();
+    const unsubscribe = onUnauthorized(listener);
+    const client = createApiClient();
+
+    await client.GET("/api/health");
+    await client.GET("/api/session");
+    unsubscribe();
+    await client.GET("/api/session");
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `${window.location.origin}/api/session`,
+      }),
     );
   });
 });

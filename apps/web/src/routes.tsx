@@ -1,4 +1,5 @@
 import { Redirect, Route, Switch } from "wouter";
+import { RequireAccount } from "./account/RequireAccount";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { BoardPage } from "./pages/BoardPage";
@@ -15,9 +16,22 @@ export function AppRoutes() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
-      <Route path="/" component={BoardsPage} />
-      <Route path="/boards/:id" component={BoardPage} />
-      <Route path="/templates" component={TemplatesPage} />
+      {/* Страницы пользователя досок уходят на /login без сессии и при её отзыве (ACC-05). */}
+      <Route path="/">
+        <RequireAccount>
+          <BoardsPage />
+        </RequireAccount>
+      </Route>
+      <Route path="/boards/:id">
+        <RequireAccount>
+          <BoardPage />
+        </RequireAccount>
+      </Route>
+      <Route path="/templates">
+        <RequireAccount>
+          <TemplatesPage />
+        </RequireAccount>
+      </Route>
       <Route path="/t/:token" component={TemplateCopyPage} />
       {/* Раздел 2 архитектуры: администратор «открывает /admin» — это вход в панель. */}
       <Route path="/admin">

@@ -1,19 +1,15 @@
-import { Redirect, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { signOut } from "../account/accountApi";
-import { useAccountSession } from "../account/useAccountSession";
+import { useCurrentAccount } from "../account/accountContext";
 import "../account/account.css";
 
 /**
  * `/` — список досок, папки, избранное, поиск (ACC-04, BRD-*, T2.1).
- * В T1.2 — только проверка входа и выход (ACC-03); без сессии — на `/login`.
+ * Пока — только имя пользователя и выход (ACC-03); вход проверяет RequireAccount.
  */
 export function BoardsPage() {
-  const session = useAccountSession();
+  const session = useCurrentAccount();
   const [, navigate] = useLocation();
-
-  if (session.status === "signedOut") {
-    return <Redirect to="/login" replace />;
-  }
 
   async function leave() {
     try {
