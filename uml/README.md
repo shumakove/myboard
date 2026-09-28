@@ -30,6 +30,7 @@
 | T0.1, T0.2, T0.3, T11.2 | `deployment.md` |
 | T0.2, T0.3 | `components.md` |
 | T1.1, T1.2 | `data-model.md`, `components.md`, `sequences/login.md`, `states/session.md`, `states/user-account.md` |
+| T1.3 | `states/session.md`, `states/user-account.md` |
 | T2.1, T2.2 | `data-model.md`, `components.md` |
 | T3.1 | `data-model.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
 | T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` |
@@ -51,5 +52,5 @@
 | [components.md](components.md) | T1.2, f65eab9 |
 | [data-model.md](data-model.md) | T1.2, f65eab9 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
-| [states/session.md](states/session.md) | T1.2, f65eab9 |
-| [states/user-account.md](states/user-account.md) | T1.2, f65eab9 |
+| [states/session.md](states/session.md) | T1.3, b53b509 |
+| [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
