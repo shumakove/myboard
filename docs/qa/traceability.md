@@ -17,7 +17,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ACC-02 | T1.2 | acceptance/api/test_login.py::test_acc02_*, acceptance/e2e/login.spec.ts | PASS |
 | ACC-03 | T1.2 | acceptance/api/test_login.py::test_acc03_*, acceptance/e2e/login.spec.ts | PASS |
 | ACC-04 | T2.1 | — | не проверено |
-| ACC-05 | T1.4 | — | не проверено |
+| ACC-05 | T1.4 | acceptance/e2e/session-watch.spec.ts (ACC-05 *) | PASS |
 | BRD-01 | T2.1 | — | не проверено |
 | BRD-02 | T2.1 | — | не проверено |
 | BRD-03 | T2.1 | — | не проверено |
