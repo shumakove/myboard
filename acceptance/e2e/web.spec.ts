@@ -81,16 +81,20 @@ test("ARCH-WEB-03 разные маршруты показывают разны�
     await open(page, path);
     texts.set(path, await rootText(page));
   }
-  // С T1.2 `/` без сессии ведёт на `/login` (ACC-03), поэтому страницу `/`
-  // смотрит вошедший пользователь досок — её назначение по разделу 4.
-  await open(page, "/");
-  expect(new URL(page.url()).pathname).toBe("/login");
+  // С T1.2 `/`, а с T1.4 и остальные страницы пользователя досок без сессии ведут
+  // на `/login` (ACC-03, ACC-05), поэтому их смотрит вошедший пользователь досок —
+  // назначение страниц по разделу 4.
+  const userRoutes = ["/", `/boards/${boardId}`, "/templates"];
   const userCtx = await browser.newContext({ baseURL });
   await apiUserLogin(userCtx.request, await createBoardUser(browser, baseURL));
   const userPage = await userCtx.newPage();
-  await open(userPage, "/");
-  expect(new URL(userPage.url()).pathname).toBe("/");
-  texts.set("/", await rootText(userPage));
+  for (const path of userRoutes) {
+    await open(page, path);
+    expect(new URL(page.url()).pathname).toBe("/login");
+    await open(userPage, path);
+    expect(new URL(userPage.url()).pathname).toBe(path);
+    texts.set(path, await rootText(userPage));
+  }
   await userCtx.close();
   const objectRoute = ROUTES[ROUTES.length - 1]!;
   const distinct = ROUTES.filter((p) => p !== objectRoute);

@@ -38,7 +38,15 @@ export async function adminPatchUser(
 }
 
 /** Вход пользователя через API в контексте запросов (cookie попадает в контекст). */
+/** `429` общего лимита стенда (неудачные входы других тестов) пережидается, как в acceptance/api. */
 export async function apiUserLogin(request: APIRequestContext, user: CreatedUser): Promise<void> {
-  const res = await request.post('/api/login', { data: { email: user.email, password: user.password } });
-  if (res.status() !== 204) throw new Error(`вход пользователя: ${res.status()} ${await res.text()}`);
+  for (let attempt = 0; ; attempt++) {
+    const res = await request.post('/api/login', { data: { email: user.email, password: user.password } });
+    if (res.status() === 429 && attempt < 2) {
+      await new Promise((r) => setTimeout(r, (Number(res.headers()['retry-after'] ?? '60') + 1) * 1000));
+      continue;
+    }
+    if (res.status() !== 204) throw new Error(`вход пользователя: ${res.status()} ${await res.text()}`);
+    return;
+  }
 }
