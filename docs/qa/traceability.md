@@ -10,20 +10,20 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ADM-02 | T1.1 | acceptance/api/test_admin.py::test_adm02_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-03 | T1.1 | acceptance/api/test_admin.py::test_adm03_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-04 | T1.1, T1.2, T1.3 | acceptance/api/test_admin.py::test_adm04_*, acceptance/api/test_login.py::test_adm04_*, acceptance/api/test_session_revoke.py::test_adm04_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/e2e/session-revoke.spec.ts | PASS (в т.ч. отзыв сессий при смене пароля, T1.3) |
-| ADM-05 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm05_*, acceptance/api/test_login.py::test_adm05_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS (сохранность досок — регрессия T2.1) |
+| ADM-05 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm05_*, acceptance/api/test_login.py::test_adm05_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/api/test_boards.py::test_adm05_*, acceptance/e2e/boards.spec.ts (ADM-05) | PASS (сохранность досок проверена в T2.1) |
 | ADM-06 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm06_*, acceptance/api/test_login.py::test_adm06_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS |
 | ADM-07 | T1.1 | acceptance/api/test_admin.py::test_adm07_*, acceptance/e2e/admin.spec.ts | PASS |
 | ACC-01 | T1.2 | acceptance/api/test_login.py::test_acc01_*, acceptance/e2e/login.spec.ts | PASS |
 | ACC-02 | T1.2 | acceptance/api/test_login.py::test_acc02_*, acceptance/e2e/login.spec.ts | PASS |
 | ACC-03 | T1.2 | acceptance/api/test_login.py::test_acc03_*, acceptance/e2e/login.spec.ts | PASS |
-| ACC-04 | T2.1 | — | не проверено |
+| ACC-04 | T2.1 | acceptance/api/test_boards.py::test_acc04_*, acceptance/e2e/boards.spec.ts (ACC-04) | PASS |
 | ACC-05 | T1.4 | acceptance/e2e/session-watch.spec.ts (ACC-05 *) | PASS |
-| BRD-01 | T2.1 | — | не проверено |
-| BRD-02 | T2.1 | — | не проверено |
-| BRD-03 | T2.1 | — | не проверено |
-| BRD-04 | T2.1 | — | не проверено |
-| BRD-05 | T2.1 | — | не проверено |
-| BRD-06 | T2.1 | — | не проверено |
+| BRD-01 | T2.1 | acceptance/api/test_boards.py::test_brd01_*, test_isolation_*, acceptance/e2e/boards.spec.ts (BRD-01) | PASS |
+| BRD-02 | T2.1 | acceptance/api/test_boards.py::test_brd02_*, acceptance/e2e/boards.spec.ts (BRD-02) | PASS |
+| BRD-03 | T2.1 | acceptance/api/test_boards.py::test_brd03_*, acceptance/e2e/boards.spec.ts (BRD-03) | PASS |
+| BRD-04 | T2.1 | acceptance/api/test_boards.py::test_brd04_*, acceptance/e2e/boards.spec.ts (BRD-04) | PASS |
+| BRD-05 | T2.1 | acceptance/api/test_boards.py::test_brd05_*, acceptance/e2e/boards.spec.ts (BRD-05) | PASS |
+| BRD-06 | T2.1, T2.2 | acceptance/api/test_boards.py::test_brd06_*, acceptance/e2e/boards.spec.ts (BRD-06) | PASS (доски; поиск папок — T2.2) |
 | BRD-07 | T2.2 | — | не проверено |
 | BRD-08 | T7.4 | — | не проверено |
 | BRD-09 | T2.2 | — | не проверено |
@@ -194,3 +194,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-ADM-01…08 (cookie `HttpOnly`/`SameSite=Lax`/без `Secure` на http, случайная сессия, лимит входа, запрет фрейма для `/admin/*`, API по адресу страницы, английский интерфейс, OpenAPI, нет горизонтальной прокрутки) | T1.1 | acceptance/api/test_admin.py::test_arch_adm*, acceptance/e2e/admin.spec.ts | PASS |
 | ARCH-ACC-01…07 (cookie `myboard_session` `HttpOnly`/`SameSite=Lax`/без `Secure` на http, случайная сессия, запрет фрейма для `/login`, запросы на адрес страницы, английский интерфейс, OpenAPI входа, mobile без горизонтальной прокрутки) | T1.2 | acceptance/api/test_login.py::test_arch_acc*, acceptance/e2e/login.spec.ts | PASS |
 | ARCH-T13-01…02 (флаги cookie и новый id сессии после смены пароля, контракт `PATCH` без 5xx в OpenAPI) | T1.3 | acceptance/api/test_session_revoke.py::test_arch_t13_* | PASS |
+| ARCH-T21-01…03 (`/` и `/boards/{id}`, запросы только на адрес страницы, без горизонтальной прокрутки; запрет фрейма — регрессия; эндпоинты досок в OpenAPI) | T2.1 | acceptance/e2e/boards.spec.ts (ARCH-T21-01), acceptance/e2e/web.spec.ts, acceptance/api/test_boards.py::test_arch_t21_* | PASS |
