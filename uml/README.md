@@ -50,8 +50,8 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa |
-| [components.md](components.md) | сервер: T1.2, f65eab9; клиент: T1.4, 6f59eaf |
-| [data-model.md](data-model.md) | T1.2, f65eab9 |
+| [components.md](components.md) | T2.1, facb370 |
+| [data-model.md](data-model.md) | T2.1, facb370 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
 | [states/session.md](states/session.md) | сервер: T1.3, b53b509; вкладка: T1.4, 6f59eaf |
 | [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
