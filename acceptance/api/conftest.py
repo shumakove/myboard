@@ -13,6 +13,7 @@ import httpx
 import pytest
 
 from admin_helpers import admin_credentials, create_user, login
+from board_helpers import create_board, unique_title
 from stand import Client, StandConfigError, clients, pending, public_base_url
 from user_helpers import user_login
 
@@ -88,9 +89,8 @@ def board_user(admin: Client, clean_stack: str) -> Iterator[Client]:
 
 @pytest.fixture
 def board(board_user: Client) -> dict[str, str]:
-    """Доска пользователя досок (BRD-01)."""
-    pending("доска", "T2.1")
-    raise AssertionError("недостижимо")
+    """Доска пользователя досок (BRD-01): `POST /api/boards` из handoff T2.1."""
+    return create_board(board_user, unique_title())
 
 
 @pytest.fixture

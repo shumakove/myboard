@@ -48,6 +48,19 @@ function watch(page: Page): Watch {
   return w;
 }
 
+// Страницы пользователя досок без сессии: запрос к API получает `401`, и вкладка уходит
+// на `/login` (ACC-03, ACC-05, с T2.1 — `/boards/{id}` запрашивает доску). Ответ `401`
+// от `/api/*` и строка браузера «Failed to load resource … 401» — не ошибка приложения.
+const USER_ROUTES = ["/", `/boards/${boardId}`, "/templates"];
+
+function isAuthRejection(problem: string): boolean {
+  return /^401 https?:\/\/[^/]+\/api\//.test(problem) || /status of 401 \(Unauthorized\)/.test(problem);
+}
+
+function appProblems(w: Watch): string[] {
+  return w.problems.filter((p) => !isAuthRejection(p));
+}
+
 async function rootText(page: Page): Promise<string> {
   return (await page.locator("#root").innerText()).trim();
 }
@@ -71,9 +84,28 @@ for (const path of ROUTES) {
     await expect(page.locator("#root")).toBeVisible();
     expect(text).not.toMatch(/[Ѐ-ӿ]/);
     expect(await page.locator("html").getAttribute("lang")).toBe("en");
-    expect(w.problems).toEqual([]);
+    if (USER_ROUTES.includes(path)) {
+      expect(new URL(page.url()).pathname).toBe("/login");
+      expect(appProblems(w)).toEqual([]);
+    } else {
+      expect(w.problems).toEqual([]);
+    }
   });
 }
+
+test("ARCH-WEB-01 T2.1 signed-in user opens / and own /boards/{id} with no console errors", async ({
+  boardUserPage: page,
+}) => {
+  const res = await page.request.post("/api/boards", { data: { title: "Own board" } });
+  const own = (await res.json()) as { id: string };
+  const w = watch(page);
+  for (const path of ["/", `/boards/${own.id}`, "/templates"]) {
+    await open(page, path);
+    expect(new URL(page.url()).pathname).toBe(path);
+    expect(await rootText(page)).not.toBe("");
+  }
+  expect(w.problems).toEqual([]);
+});
 
 test("ARCH-WEB-03 разные маршруты показывают разные страницы", async ({ page, browser, baseURL }) => {
   const texts = new Map<string, string>();
@@ -128,7 +160,7 @@ test("ARCH-WEB-04 переход между маршрутами без пере
   await expect.poll(() => rootText(page)).toBe(direct.get(ROUTES[ROUTES.length - 2]!));
   await page.goBack();
   await expect.poll(() => rootText(page)).toBe(direct.get(ROUTES[ROUTES.length - 3]!));
-  expect(w.problems).toEqual([]);
+  expect(appProblems(w)).toEqual([]);
   expect(await page.evaluate(() => (window as unknown as { qaMark?: number }).qaMark)).toBe(1);
 });
 
@@ -144,7 +176,12 @@ for (const path of [
     const response = await open(page, path);
     expect(response?.status()).toBe(200);
     expect(await rootText(page)).not.toBe("");
-    expect(w.problems).toEqual([]);
+    if (path.startsWith("/boards/")) {
+      expect(new URL(page.url()).pathname).toBe("/login");
+      expect(appProblems(w)).toEqual([]);
+    } else {
+      expect(w.problems).toEqual([]);
+    }
   });
 }
 
