@@ -7,8 +7,10 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.library.folders import FolderNotFoundError, get_folder
 from app.library.models import Board
 from app.library.schemas import BoardSort
+from app.library.text_search import contains
 
 # BRD-04: сколько досок показывает блок «недавние».
 RECENT_LIMIT = 8
@@ -25,12 +27,6 @@ def _owned(owner_id: uuid.UUID) -> Select[Board]:
     return select(Board).where(Board.owner_id == owner_id, Board.deleted_at.is_(None))
 
 
-def _contains(text: str) -> str:
-    """Шаблон ILIKE «содержит»: `%`, `_` и `\\` в запросе ищутся буквально."""
-    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 async def list_boards(
     db: AsyncSession,
     owner_id: uuid.UUID,
@@ -42,7 +38,7 @@ async def list_boards(
     """ACC-04, BRD-04: полный список; BRD-05: сортировка и фильтр; BRD-06: поиск по названию."""
     query = _owned(owner_id)
     if search and search.strip():
-        query = query.where(Board.title.ilike(_contains(search.strip()), escape="\\"))
+        query = query.where(Board.title.ilike(contains(search.strip()), escape="\\"))
     if modified_since is not None:
         query = query.where(Board.updated_at >= modified_since)
     return list(await db.scalars(query.order_by(*_ORDER[sort])))
@@ -76,6 +72,21 @@ async def rename_board(
         return None
     board.title = title
     board.updated_at = func.now()
+    await db.commit()
+    await db.refresh(board)
+    return board
+
+
+async def move_board(
+    db: AsyncSession, owner_id: uuid.UUID, board_id: uuid.UUID, folder_id: uuid.UUID | None
+) -> Board | None:
+    """BRD-10: перенос между папками — раскладка списка, а не правка доски: `updated_at` прежний."""
+    board = await get_board(db, owner_id, board_id)
+    if board is None:
+        return None
+    if folder_id is not None and await get_folder(db, owner_id, folder_id) is None:
+        raise FolderNotFoundError
+    board.folder_id = folder_id
     await db.commit()
     await db.refresh(board)
     return board

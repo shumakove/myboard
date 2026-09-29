@@ -94,3 +94,174 @@
 .library-row .account-error {
   flex-basis: 100%;
 }
+
+/* T2.2: боковой список папок и избранного; на узком экране — над списком досок. */
+.library-page {
+  max-width: 1200px;
+}
+
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .library-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.library-content {
+  min-width: 0;
+}
+
+.library-sidebar {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.library-sidebar h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.library-folders {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+}
+
+.library-folders.is-drop-root {
+  border-color: #555;
+  background: #f4f4f4;
+}
+
+.library-folders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.library-tree {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-tree .library-tree {
+  padding-left: 20px;
+}
+
+.library-folder-row,
+.library-tree-board {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 0;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  overflow-wrap: anywhere;
+}
+
+.library-folder-row.is-drop-before {
+  border-top-color: #1a73e8;
+}
+
+.library-folder-row.is-drop-after {
+  border-bottom-color: #1a73e8;
+}
+
+.library-folder-row.is-drop-inside {
+  background: #e8f0fe;
+}
+
+.library-folder.is-highlighted > .library-folder-row {
+  outline: 2px solid #1a73e8;
+}
+
+.library-folder-name,
+.library-link-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.library-link-button {
+  color: #0645ad;
+  text-decoration: underline;
+}
+
+.library-star {
+  border: 0;
+  background: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.library-star[aria-pressed="true"] {
+  color: #d99a00;
+}
+
+.library-drag {
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: #888;
+  cursor: grab;
+  touch-action: none; /* BRD-10: палец тянет ручку, а не прокручивает страницу */
+}
+
+.library-drag.is-dragging {
+  opacity: 0.4;
+}
+
+.library-drag-overlay {
+  padding: 6px 10px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
+  font-family: system-ui, sans-serif;
+  cursor: grabbing;
+}
+
+.library-folder-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.library-folder-form input {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+.library-tree-empty {
+  margin: 0;
+  padding-left: 28px;
+}
+
+.library-row-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}

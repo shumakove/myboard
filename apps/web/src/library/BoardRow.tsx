@@ -1,5 +1,7 @@
 import { useState, type SubmitEvent } from "react";
 import { Link } from "wouter";
+import { DragHandle } from "./DragHandle";
+import { FavoriteButton } from "./FavoriteButton";
 import { formatDate } from "./formatDate";
 import {
   deleteBoard,
@@ -10,7 +12,10 @@ import {
 
 type Mode = "view" | "rename" | "confirmDelete";
 
-/** Строка полного списка: открыть, переименовать (BRD-02), удалить (BRD-03). */
+/**
+ * Строка полного списка: открыть, переименовать (BRD-02), удалить (BRD-03),
+ * избранное (BRD-07), перетащить в папку бокового списка (BRD-10).
+ */
 export function BoardRow({
   board,
   onChange,
@@ -70,15 +75,29 @@ export function BoardRow({
           </button>
         </form>
       ) : (
-        <div className="library-row-main">
-          <Link href={`/boards/${board.id}`}>{board.title}</Link>
-          <span className="library-meta">
-            Modified {formatDate(board.updated_at)}
-          </span>
+        <div className="library-row-head">
+          <DragHandle
+            dragId={`list-board:${board.id}`}
+            item={{ kind: "board", id: board.id, folderId: board.folder_id }}
+            title={board.title}
+          />
+          <div className="library-row-main">
+            <Link href={`/boards/${board.id}`}>{board.title}</Link>
+            <span className="library-meta">
+              Modified {formatDate(board.updated_at)}
+            </span>
+          </div>
         </div>
       )}
       {mode === "view" && (
         <div className="library-actions">
+          <FavoriteButton
+            kind="board"
+            id={board.id}
+            favorite={board.favorite}
+            onChange={onChange}
+            onError={setError}
+          />
           <button
             type="button"
             onClick={() => {

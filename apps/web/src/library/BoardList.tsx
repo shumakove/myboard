@@ -1,10 +1,12 @@
 import { useEffect, useId, useState } from "react";
 import { BoardRow } from "./BoardRow";
+import { FolderSearchResults } from "./FolderSearchResults";
 import {
   errorMessage,
   listBoards,
   type Board,
   type BoardSort,
+  type Folder,
 } from "./libraryApi";
 
 /** Пауза после ввода в поиск перед запросом к серверу. */
@@ -31,15 +33,20 @@ function modifiedSince(days: number): string | null {
 }
 
 /**
- * Полный список досок пользователя (ACC-04, BRD-04) с поиском по названию (BRD-06),
- * сортировкой и фильтром (BRD-05). Всё выполняет сервер.
+ * Полный список досок пользователя (ACC-04, BRD-04) с поиском по названию досок и
+ * папок (BRD-06), сортировкой и фильтром (BRD-05). Всё выполняет сервер.
  */
 export function BoardList({
   version,
+  folders,
   onChange,
+  onRevealFolder,
 }: {
   version: number;
+  /** Все папки пользователя — для пути найденной папки. */
+  folders: Folder[];
   onChange: () => void;
+  onRevealFolder: (folderId: string) => void;
 }) {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -75,7 +82,8 @@ export function BoardList({
     };
   }, [search, sort, periodDays, version]);
 
-  const narrowed = search.trim() !== "" || periodDays !== 0;
+  const searching = search.trim() !== "";
+  const narrowed = searching || periodDays !== 0;
 
   return (
     <section aria-labelledby="all-boards-title">
@@ -84,7 +92,7 @@ export function BoardList({
         <input
           type="search"
           aria-label="Search boards"
-          placeholder="Search boards"
+          placeholder="Search boards and folders"
           value={searchInput}
           onChange={(event) => {
             setSearchInput(event.target.value);
@@ -123,6 +131,14 @@ export function BoardList({
           </select>
         </div>
       </div>
+      {searching && (
+        <FolderSearchResults
+          search={search}
+          allFolders={folders}
+          version={version}
+          onReveal={onRevealFolder}
+        />
+      )}
       {error && (
         <p className="account-error" role="alert">
           {error}
