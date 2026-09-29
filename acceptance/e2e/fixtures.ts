@@ -49,7 +49,12 @@ export const test = base.extend<StandFixtures>({
     await apiUserLogin(page.request, user);
     await use(page);
   },
-  board: async ({}, _use) => pending('доска', 'T2.1'),
+  board: async ({ boardUserPage }, use) => {
+    // Доска вошедшего пользователя: POST /api/boards из handoff T2.1.
+    const res = await boardUserPage.request.post('/api/boards', { data: { title: `QA board ${Date.now()}` } });
+    if (res.status() !== 201) throw new Error(`создание доски: ${res.status()} ${await res.text()}`);
+    await use((await res.json()) as { id: string });
+  },
   linkParticipantPage: async ({}, _use) => pending('участник по ссылке', 'T3.1'),
 });
 
