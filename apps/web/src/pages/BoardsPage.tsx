@@ -1,15 +1,23 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { signOut } from "../account/accountApi";
 import { useCurrentAccount } from "../account/accountContext";
+import { BoardList } from "../library/BoardList";
+import { NewBoardButton } from "../library/NewBoardButton";
+import { RecentBoards } from "../library/RecentBoards";
 import "../account/account.css";
+import "../library/library.css";
 
 /**
- * `/` — список досок, папки, избранное, поиск (ACC-04, BRD-*, T2.1).
- * Пока — только имя пользователя и выход (ACC-03); вход проверяет RequireAccount.
+ * `/` — доски вошедшего пользователя (ACC-04): создание (BRD-01), недавние и полный
+ * список (BRD-04) с поиском, сортировкой и фильтром (BRD-05, BRD-06). Вход проверяет
+ * RequireAccount; папки и избранное добавит T2.2.
  */
 export function BoardsPage() {
   const session = useCurrentAccount();
   const [, navigate] = useLocation();
+  // Растёт после переименования и удаления: оба списка загружаются заново.
+  const [version, setVersion] = useState(0);
 
   async function leave() {
     try {
@@ -33,7 +41,18 @@ export function BoardsPage() {
         )}
       </header>
       {session.status === "loading" && <p>Loading…</p>}
-      {session.status === "signedIn" && <p>Boards will appear here.</p>}
+      {session.status === "signedIn" && (
+        <>
+          <NewBoardButton />
+          <RecentBoards version={version} />
+          <BoardList
+            version={version}
+            onChange={() => {
+              setVersion((v) => v + 1);
+            }}
+          />
+        </>
+      )}
     </main>
   );
 }

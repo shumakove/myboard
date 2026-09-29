@@ -1,6 +1,51 @@
-import { PagePlaceholder } from "./PagePlaceholder";
+import { useEffect, useState } from "react";
+import { Link, useParams } from "wouter";
+import { errorMessage, getBoard, type Board } from "../library/libraryApi";
+import "../account/account.css";
 
-/** `/boards/{id}` — холст своей доски (T2.1, T5.*). */
+type BoardState =
+  | { status: "loading" }
+  | { status: "ready"; board: Board }
+  | { status: "failed"; message: string };
+
+/**
+ * `/boards/{id}` — своя доска (BRD-01 открывает её сразу после создания).
+ * Чужая, удалённая и несуществующая доска одинаково «не найдена». Холст — T4.1, T5.*.
+ */
 export function BoardPage() {
-  return <PagePlaceholder title="Board" />;
+  const { id } = useParams<{ id: string }>();
+  const [state, setState] = useState<BoardState>({ status: "loading" });
+
+  useEffect(() => {
+    let active = true;
+    getBoard(id)
+      .then((board) => {
+        if (active) setState({ status: "ready", board });
+      })
+      .catch((err: unknown) => {
+        if (active) setState({ status: "failed", message: errorMessage(err) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  const heading =
+    state.status === "ready"
+      ? state.board.title
+      : state.status === "failed"
+        ? "Board unavailable"
+        : "Board";
+
+  return (
+    <main className="account">
+      <p>
+        <Link href="/">← All boards</Link>
+      </p>
+      <h1>{heading}</h1>
+      {state.status === "loading" && <p>Loading…</p>}
+      {state.status === "failed" && <p role="alert">{state.message}</p>}
+      {state.status === "ready" && <p>The canvas is not available yet.</p>}
+    </main>
+  );
 }

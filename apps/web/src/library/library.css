@@ -1,0 +1,96 @@
+/* Список досок (/): недавние карточками, полный список строками; узкий экран — в столбик. */
+.library-new {
+  margin: 16px 0;
+}
+
+.library-recent {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.library-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.library-card:hover,
+.library-card:focus-visible {
+  border-color: #555;
+}
+
+.library-card-title {
+  font-weight: 600;
+}
+
+.library-meta {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.library-controls input,
+.library-controls select,
+.library-rename input {
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.library-controls input {
+  flex: 1 1 200px;
+}
+
+.library-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.library-list {
+  padding: 0;
+  list-style: none;
+}
+
+.library-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.library-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-actions,
+.library-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.library-row .account-error {
+  flex-basis: 100%;
+}
