@@ -1,6 +1,6 @@
 """Таблицы модуля library: доски, папки и избранное пользователя (раздел 7 архитектуры).
 
-Столбцы обложки и ссылок добавляют задачи T3.1, T7.4, T9.1 своими миграциями.
+Столбцы обложки и ссылки-шаблона добавляют задачи T7.4, T9.1 своими миграциями.
 """
 
 import uuid
@@ -45,6 +45,10 @@ class Board(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # BRD-03: удаление только помечает доску; из списка и по id она больше не видна.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SHR-01, SHR-06: единственная действующая ссылка (модуль sharing); NULL — ещё не выдана.
+    share_token: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # SHR-06: момент последнего сброса ссылки; прежний токен в базе больше не хранится.
+    share_token_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FavoriteType(StrEnum):

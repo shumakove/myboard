@@ -27,10 +27,28 @@ def _digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def create_session(db: AsyncSession, subject_type: SubjectType, subject_id: uuid.UUID) -> str:
-    """Создаёт сессию и возвращает значение для cookie."""
+async def create_session(
+    db: AsyncSession,
+    subject_type: SubjectType,
+    subject_id: uuid.UUID,
+    *,
+    board_id: uuid.UUID | None = None,
+    display_name: str | None = None,
+) -> str:
+    """Создаёт сессию и возвращает значение для cookie.
+
+    `board_id` и `display_name` — у сессии участника по ссылке (SHR-03).
+    """
     token = secrets.token_urlsafe(32)
-    db.add(Session(id=_digest(token), subject_type=subject_type, subject_id=subject_id))
+    db.add(
+        Session(
+            id=_digest(token),
+            subject_type=subject_type,
+            subject_id=subject_id,
+            board_id=board_id,
+            display_name=display_name,
+        )
+    )
     await db.commit()
     return token
 
@@ -44,6 +62,30 @@ async def find_subject(
     return await db.scalar(
         select(Session.subject_id).where(
             Session.id == _digest(token), Session.subject_type == subject_type
+        )
+    )
+
+
+async def find_board_session(
+    db: AsyncSession, token: str | None, board_id: uuid.UUID
+) -> Session | None:
+    """Живая сессия участника по ссылке на этой доске или `None` (SHR-02, SHR-06)."""
+    if not token:
+        return None
+    return await db.scalar(
+        select(Session).where(
+            Session.id == _digest(token),
+            Session.subject_type == SubjectType.GUEST,
+            Session.board_id == board_id,
+        )
+    )
+
+
+async def delete_board_sessions(db: AsyncSession, board_id: uuid.UUID) -> None:
+    """Отзывает все сессии участников по ссылке на доске (без commit — SHR-06)."""
+    await db.execute(
+        delete(Session).where(
+            Session.subject_type == SubjectType.GUEST, Session.board_id == board_id
         )
     )
 

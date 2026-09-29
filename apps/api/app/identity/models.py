@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -41,6 +41,8 @@ class User(Base):
 class SubjectType(StrEnum):
     ADMIN = "admin"
     USER = "user"
+    # SHR-02: участник по ссылке — без учётной записи, `subject_id` — его случайный id.
+    GUEST = "guest"
 
 
 class Session(Base):
@@ -52,4 +54,7 @@ class Session(Base):
     subject_type: Mapped[str] = mapped_column(String(16))
     subject_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # SHR-03: сессия участника по ссылке действует только на этой доске и хранит его имя.
+    board_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("boards.id"), index=True)
+    display_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
