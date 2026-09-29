@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`.
 
 ## Сервер `apps/api`
 
@@ -27,10 +27,16 @@ flowchart TB
     imodels["models<br/>Admin, User, Session, SubjectType"]
   end
   subgraph library [app.library]
-    lrouter["router (prefix /boards, тег library)<br/>GET '', GET /recent, POST '',<br/>GET, PATCH, DELETE /{board_id};<br/>UserDep, BOARD_NOT_FOUND → 404"]
-    lschemas["schemas<br/>BoardOut, BoardCreate, BoardRename,<br/>BoardSort (updated | created | title),<br/>Title, DEFAULT_TITLE = Untitled board"]
-    lservice["service<br/>list_boards, recent_boards (RECENT_LIMIT = 8),<br/>get_board, create_board, rename_board,<br/>delete_board; _owned, _contains"]
-    lmodels["models<br/>Board, TITLE_MAX_LENGTH = 200"]
+    lrouter["router<br/>include_router(board_router, folder_router)"]
+    lboards["board_router (prefix /boards, тег library)<br/>GET '', GET /recent, POST '',<br/>GET, PATCH, DELETE /{board_id},<br/>PUT /{board_id}/folder,<br/>PUT, DELETE /{board_id}/favorite; UserDep"]
+    lfolders["folder_router (prefix /folders, тег library)<br/>GET '' (?q=), POST '',<br/>PUT /{folder_id}/position,<br/>PUT, DELETE /{folder_id}/favorite; UserDep"]
+    lerrors["errors<br/>BOARD_NOT_FOUND, FOLDER_NOT_FOUND → 404,<br/>FOLDER_CYCLE → 409, not_found()"]
+    lschemas["schemas<br/>BoardOut, BoardCreate, BoardRename, BoardMove,<br/>FolderOut, FolderCreate, FolderMove,<br/>BoardSort (updated | created | title),<br/>Title, DEFAULT_TITLE = Untitled board"]
+    lservice["service<br/>list_boards, recent_boards (RECENT_LIMIT = 8),<br/>get_board, create_board, rename_board,<br/>move_board, delete_board; _owned"]
+    lfolderSvc["folders<br/>list_folders, get_folder, create_folder,<br/>move_folder; _lock_owned (FOR UPDATE), _is_within;<br/>FolderNotFoundError, FolderCycleError"]
+    lfav["favorites<br/>favorite_ids, set_favorite<br/>(INSERT … ON CONFLICT DO NOTHING / DELETE)"]
+    lsearch["text_search<br/>contains(): ILIKE, экранирование % _ \\"]
+    lmodels["models<br/>Board, Folder, Favorite, FavoriteType,<br/>TITLE_MAX_LENGTH = 200"]
   end
   subgraph modules [Модули: пустые APIRouter, маршрутов пока нет]
     sharing[sharing.router]
@@ -39,7 +45,7 @@ flowchart TB
     media[media.router]
     backup[backup.router]
   end
-  alembic["app.migrations<br/>env.py, versions/0001_baseline, 0002_identity,<br/>0003_library_boards"]
+  alembic["app.migrations<br/>env.py, versions/0001_baseline, 0002_identity,<br/>0003_library_boards, 0004_library_folders"]
   pg[(PostgreSQL)]
 
   entry -->|"1. load_settings()<br/>ошибка → stderr, exit 1"| settings
@@ -66,12 +72,17 @@ flowchart TB
   isessions --> imodels
   imodels -->|"Base"| db
   health -->|"SessionDep: SELECT 1"| db
-  lrouter -->|"UserDep = require_user"| iaccount
-  lrouter --> lschemas & lservice
-  lrouter -->|"SessionDep"| db
-  lservice --> lmodels
+  lrouter --> lboards & lfolders
+  lboards & lfolders -->|"UserDep = require_user"| iaccount
+  lboards & lfolders --> lschemas & lerrors & lfav
+  lboards & lfolders -->|"SessionDep"| db
+  lboards --> lservice
+  lfolders --> lfolderSvc
+  lservice -->|"move_board: get_folder,<br/>FolderNotFoundError"| lfolderSvc
+  lservice & lfolderSvc --> lsearch
+  lservice & lfolderSvc & lfav --> lmodels
   lschemas -->|"TITLE_MAX_LENGTH"| lmodels
-  lmodels -->|"Base; owner_id → users.id"| db
+  lmodels -->|"Base; owner_id, user_id → users.id"| db
   db -->|"SQLAlchemy async, psycopg 3"| pg
   alembic -->|"синхронный движок psycopg"| pg
 ```
@@ -79,13 +90,15 @@ flowchart TB
 - Все маршруты под префиксом `/api`: `GET /api/health` (`{"status":"ok"}`), `GET /api/openapi.json` (OpenAPI 3.1), `GET /api/docs` (Swagger UI). Неизвестный путь `/api/*` — `404` JSON.
 - Маршруты панели (тег `admin`): `POST /api/admin/login` → `204` / `401` / `429`, `POST /api/admin/logout` → `204`, `GET /api/admin/session` → `200 AdminSession`, `GET /api/admin/users` → `200 [UserOut]`, `POST /api/admin/users` → `201` / `409`, `PATCH /api/admin/users/{user_id}` → `200` / `404` / `409`. Маршруты `/users*` требуют сессию администратора (`require_admin`, иначе `401`).
 - Маршруты пользователя досок (тег `account`): `POST /api/login` → `204` + cookie `myboard_session` / `401 Invalid email or password` / `429`, `POST /api/logout` → `204`, `GET /api/session` → `200 AccountSession` (без сессии — `authenticated: false`; живую сессию продлевает). `require_user` (`401 Sign in`) защищает маршруты досок. Сценарии — [sequences/login.md](sequences/login.md), таблицы — [data-model.md](data-model.md).
-- Маршруты досок (тег `library`, только для пользователя досок, иначе `401`): `GET /api/boards?q=&sort=updated|created|title&modified_since=` → `200 [BoardOut]` (ACC-04, BRD-04…BRD-06), `GET /api/boards/recent` → `200 [BoardOut]` (8 последних изменённых, BRD-04), `POST /api/boards` → `201 BoardOut` (без названия — Untitled board, BRD-01), `GET /api/boards/{board_id}` → `200` / `404`, `PATCH /api/boards/{board_id}` → `200` / `404` / `422` (BRD-02), `DELETE /api/boards/{board_id}` → `204` / `404` (BRD-03). Чужая, удалённая и несуществующая доска — одинаковый `404 Board not found`; название — 1…200 символов после обрезки пробелов, лишние поля тела — `422`. Таблица — [data-model.md](data-model.md).
+- Маршруты досок (тег `library`, только для пользователя досок, иначе `401`): `GET /api/boards?q=&sort=updated|created|title&modified_since=` → `200 [BoardOut]` (ACC-04, BRD-04…BRD-06), `GET /api/boards/recent` → `200 [BoardOut]` (8 последних изменённых, BRD-04), `POST /api/boards` → `201 BoardOut` (без названия — Untitled board, BRD-01), `GET /api/boards/{board_id}` → `200` / `404`, `PATCH /api/boards/{board_id}` → `200` / `404` / `422` (BRD-02), `DELETE /api/boards/{board_id}` → `204` / `404` (BRD-03). Чужая, удалённая и несуществующая доска — одинаковый `404 Board not found`; название — 1…200 символов после обрезки пробелов, лишние поля тела — `422`. Таблицы — [data-model.md](data-model.md).
+- Папки и избранное (тег `library`, T2.2): `GET /api/folders?q=` → `200 [FolderOut]` — все папки пользователя по `position` (дерево строит клиент; `q` — поиск по части названия, BRD-06), `POST /api/folders {title, parent_id?}` → `201 FolderOut` (последней среди соседей, BRD-09) / `404 Folder not found`, `PUT /api/folders/{folder_id}/position {parent_id, position}` → `200` / `404` / `409 A folder cannot be moved into itself or its subfolder` (BRD-10), `PUT /api/boards/{board_id}/folder {folder_id}` → `200 BoardOut` / `404` (BRD-10, `updated_at` не меняется), `PUT|DELETE /api/boards/{board_id}/favorite` и `PUT|DELETE /api/folders/{folder_id}/favorite` → `204` / `404` (BRD-07, повтор ничего не меняет). В `BoardOut` — `folder_id`, `favorite`; `FolderOut` — `id, parent_id, title, position, favorite, created_at`. Чужая и несуществующая папка неразличимы (`404`).
+- `create_folder` и `move_folder` блокируют все папки владельца (`SELECT … FOR UPDATE`): создания и переносы одного владельца идут по очереди. `move_folder` отвергает вложение в себя или потомка (`_is_within`) до изменений, вставляет папку на индекс `position` (больше числа соседей — в конец) и перенумеровывает соседей нового родителя с 0.
 - Лимиты попыток входа в панель и входа пользователя — два отдельных экземпляра `LoginRateLimiter` в `app.state`.
 - `Settings` — семь обязательных переменных (`PUBLIC_BASE_URL`, `SECRET_KEY`, `DATABASE_URL`, `MEDIA_ROOT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `MAX_UPLOAD_BYTES`); пустое значение равно отсутствию. `MAX_UPLOAD_BYTES` > 0, `PUBLIC_BASE_URL` — `http://` или `https://`; свойство `secure_cookies` истинно только для `https://` и задаёт флаг `Secure` cookie сессии.
-- Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`, `0003` — `boards`; `downgrade()` бросает `NotImplementedError`.
+- Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`, `0003` — `boards`, `0004` — `folders`, `favorites` и `boards.folder_id`; `downgrade()` бросает `NotImplementedError`.
 - WebSocket `/api/ws` не реализован (появится в T4.1).
 
-Актуально на: T2.1, facb370. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-06 (модуль `library`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
+Актуально на: T2.2, 6819f64. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (модуль `library`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
 
 ## Клиент `apps/web`
 
@@ -97,7 +110,7 @@ flowchart TB
   subgraph pages [pages]
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
     login["LoginPage<br/>/login: Sign in (ACC-01, ACC-02)"]
-    boards["BoardsPage<br/>/: Boards, имя, Sign out (ACC-03);<br/>version: перезагрузка списков после правок"]
+    boards["BoardsPage<br/>/: Boards, имя, Sign out (ACC-03);<br/>version: перезагрузка списков и дерева после правок;<br/>reveal(folderId), moved(move): раскрыть путь"]
     board["BoardPage<br/>/boards/:id: название доски или Board unavailable;<br/>The canvas is not available yet."]
     templates["TemplatesPage<br/>/templates"]
     tcopy["TemplateCopyPage<br/>/t/:token"]
@@ -116,10 +129,21 @@ flowchart TB
   subgraph libraryMod [library]
     newBoard["NewBoardButton<br/>New board → navigate /boards/{id} (BRD-01)"]
     recent["RecentBoards({version})<br/>Recent, карточки со ссылками (BRD-04)"]
-    list["BoardList({version, onChange})<br/>All boards: Search boards (SEARCH_DELAY_MS = 300),<br/>Sort by, Modified (ACC-04, BRD-04…BRD-06)"]
-    brow["BoardRow<br/>ссылка /boards/{id}, Rename (BRD-02),<br/>Delete → Yes, delete (BRD-03)"]
+    list["BoardList({version, folders, onChange, onRevealFolder})<br/>All boards: Search boards and folders (SEARCH_DELAY_MS = 300),<br/>Sort by, Modified (ACC-04, BRD-04…BRD-06)"]
+    brow["BoardRow<br/>ссылка /boards/{id}, Rename (BRD-02),<br/>Delete → Yes, delete (BRD-03),<br/>Favorite (BRD-07), Drag (BRD-10)"]
+    fsearch["FolderSearchResults<br/>Matching folders: путь Work / Projects / Alpha,<br/>нажатие → onReveal (BRD-06)"]
+    tree["useLibraryTree(version)<br/>{folders, boards}: listFolders + listBoards(sort=title)"]
+    expanded["useExpandedFolders()<br/>expanded, toggle, expand;<br/>localStorage myboard.expandedFolders (BRD-11)"]
+    sidebar["FolderSidebar<br/>aside Folders and favorites: Favorites (BRD-07),<br/>Folders, New folder, useRootDrop (BRD-09, BRD-10)"]
+    fitem["FolderItem (рекурсивно)<br/>aria-expanded (BRD-11), + → New folder in …,<br/>Contents of …: подпапки и доски, useFolderDrop"]
+    nfolder["NewFolderForm({parentId})<br/>Folder name, Create (BRD-09)"]
+    favBtn["FavoriteButton({kind, id, favorite})<br/>Favorite, aria-pressed (BRD-07)"]
+    dnd["LibraryDnd({folders, onMoved, onError})<br/>@dnd-kit/core DndContext, PointerSensor (4 px),<br/>DragOverlay; cycle → FOLDER_CYCLE (BRD-10)"]
+    handle["DragHandle({dragId, item, title})<br/>Drag {title}, useDraggable"]
+    drops["dropTargets.ts<br/>useFolderDrop, useRootDrop, IndicatorContext,<br/>collision, targetOf, executeMove"]
+    ftree["folderTree.ts<br/>buildTree, siblingsOf, pathTo, isWithin,<br/>zoneAt (¼ before, ¾ after, середина inside),<br/>planMove → Move | cycle | null"]
     fmt["formatDate(iso)<br/>toLocaleString, medium + short"]
-    libApi["libraryApi.ts<br/>listBoards(BoardQuery), recentBoards, createBoard,<br/>getBoard, renameBoard, deleteBoard,<br/>LibraryApiError, errorMessage"]
+    libApi["libraryApi.ts<br/>listBoards(BoardQuery), recentBoards, createBoard,<br/>getBoard, renameBoard, deleteBoard, moveBoard,<br/>listFolders(search), createFolder, moveFolder,<br/>setFavorite(kind, id, favorite), FOLDER_CYCLE,<br/>LibraryApiError, errorMessage"]
   end
   subgraph adminMod [admin]
     useSession["useAdminSession()<br/>loading | signedOut | signedIn(email)"]
@@ -150,14 +174,35 @@ flowchart TB
   boards -->|"useCurrentAccount: имя"| ctx
   boards -->|"signOut → navigate /login"| accountApi
   boards --> newBoard & recent & list
+  boards -->|"folders, onMoved, onError"| dnd
+  boards -->|"tree, actions, onReveal"| sidebar
+  boards --> tree & expanded
+  boards -->|"pathTo"| ftree
   list -->|"onChange → version + 1"| brow
+  list -->|"search, allFolders"| fsearch
   recent & brow --> fmt
+  brow --> favBtn & handle
+  sidebar --> fitem & nfolder & favBtn
+  sidebar -->|"buildTree"| ftree
+  sidebar -->|"useRootDrop"| drops
+  fitem --> fitem
+  fitem --> nfolder & favBtn & handle
+  fitem -->|"useFolderDrop"| drops
+  dnd -->|"targetOf, executeMove, IndicatorContext"| drops
+  dnd -->|"planMove"| ftree
+  drops -->|"zoneAt"| ftree
+  fsearch -->|"pathTo"| ftree
   newBoard -->|"createBoard"| libApi
   recent -->|"recentBoards"| libApi
   list -->|"listBoards"| libApi
   brow -->|"renameBoard, deleteBoard"| libApi
   board -->|"getBoard"| libApi
-  libApi -->|"types BoardOut, BoardSort"| schema
+  tree -->|"listFolders, listBoards"| libApi
+  fsearch -->|"listFolders(q)"| libApi
+  nfolder -->|"createFolder"| libApi
+  favBtn -->|"setFavorite"| libApi
+  drops -->|"moveBoard, moveFolder"| libApi
+  libApi -->|"types BoardOut, FolderOut, BoardSort"| schema
   libApi --> client
   useAccount -->|"getSession"| accountApi
   useAccount -->|"onUnauthorized, кроме /api/login и /api/admin/*"| client
@@ -180,8 +225,11 @@ flowchart TB
   client -->|"HTTP к происхождению страницы, пути /api/…"| server
 ```
 
-- Потребители `api` — модули `account`, `admin` и `library`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*`, `/api/login`, `/api/logout`, `/api/session` и `/api/boards*`.
-- `libraryApi` переводит ответы в текст: `404` Board not found., `422` Enter a board name up to 200 characters., прочие — Something went wrong. Try again., сетевой сбой — Network error. Try again. `getBoard` отвечает на `422` (неверный формат `id`) тем же Board not found. Поиск, сортировку и фильтр выполняет сервер: `BoardList` передаёт `q` (после паузы 300 мс), `sort` и `modified_since` (Any time, Last 24 hours, Last 7 days, Last 30 days). После переименования и удаления `BoardsPage` увеличивает `version`, и `RecentBoards` с `BoardList` загружаются заново; пустой блок Recent скрыт.
+- Потребители `api` — модули `account`, `admin` и `library`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*`, `/api/login`, `/api/logout`, `/api/session`, `/api/boards*` и `/api/folders*`. Внешняя библиотека модуля `library` — `@dnd-kit/core` (перетаскивание указателем: мышь, палец, перо).
+- `libraryApi` переводит ответы в текст: `404` Board not found., `422` Enter a board name up to 200 characters., прочие — Something went wrong. Try again., сетевой сбой — Network error. Try again. `getBoard` отвечает на `422` (неверный формат `id`) тем же Board not found. Поиск, сортировку и фильтр выполняет сервер: `BoardList` передаёт `q` (после паузы 300 мс), `sort` и `modified_since` (Any time, Last 24 hours, Last 7 days, Last 30 days). После переименования, удаления, создания папки, переноса и смены избранного `BoardsPage` увеличивает `version`, и `RecentBoards`, `BoardList` и `useLibraryTree` загружаются заново; пустой блок Recent скрыт.
+- Боковой список (T2.2): дерево строится на клиенте из плоских `GET /api/folders` и `GET /api/boards` (`buildTree`: папки по `position`, в папке — подпапки и её доски; доски верхнего уровня в дереве не показываются). Раздел Favorites — папки и доски с `favorite = true`; папка по нажатию раскрывается в дереве (`reveal`: раскрыть путь, подсветить и сфокусировать). Новая папка свёрнута; развёрнутые папки хранятся в `localStorage` (BRD-11). При запросе в поиске под ним появляется Matching folders (BRD-06).
+- Перетаскивание (BRD-10): ручка `Drag …` у строк All boards, досок и папок дерева. Над строкой папки для папки — верхняя четверть «перед», нижняя «после», середина «внутрь»; для доски — вся строка «внутрь»; свободное место раздела Folders — верхний уровень. `planMove` превращает сброс в `PUT /api/folders/{id}/position` или `PUT /api/boards/{id}/folder`; попытка вложить папку в себя или потомка до запроса даёт `FOLDER_CYCLE` в строке ошибки бокового списка (`role=alert`), ответ `409` сервера — тот же текст. После переноса раскрывается папка назначения.
+- `libraryApi` для папок: `404` Folder not found., `409` A folder cannot be moved into itself or its subfolder., `422` Enter a folder name up to 200 characters.
 - `accountApi` показывает одно скупое сообщение для `401` и `422` — Invalid email or password. (ACC-02); `429` — Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
 - `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
 - Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`; `/`, `/boards/:id`, `/templates` обёрнуты в `RequireAccount`: без сессии и после её отзыва — `Redirect /login` (replace). Отзыв замечается опросом `GET /api/session` раз в 2 с у видимой вкладки, сразу при возврате на вкладку и по любому ответу `401`, кроме `POST /api/login` и `/api/admin/*` (ACC-05, состояния — [states/session.md](states/session.md)); `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
@@ -190,4 +238,4 @@ flowchart TB
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T2.1, facb370. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-06 (список досок); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
+Актуально на: T2.2, 6819f64. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
