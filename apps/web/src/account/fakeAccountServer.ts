@@ -7,6 +7,13 @@ export const USER = {
   password: "alice-pw",
 };
 
+/** Дополнительные маршруты двойника; `undefined` — маршрут не его. */
+export type ExtraRoute = (
+  method: string,
+  url: URL,
+  body: unknown,
+) => Response | undefined;
+
 interface Call {
   method: string;
   path: string;
@@ -22,8 +29,11 @@ export interface FakeAccountServer {
   name: string;
   /** Пути, на которые сервер отвечает 401. */
   unauthorizedPaths: string[];
+  /** Пути, на которые сервер отвечает 503. */
+  failingPaths: string[];
   /** Сеть недоступна: fetch отклоняется. */
   offline: boolean;
+  extraRoute: ExtraRoute | null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -40,18 +50,24 @@ export function installFakeAccountServer(
     loginStatus: null,
     name: USER.name,
     unauthorizedPaths: [],
+    failingPaths: [],
     offline: false,
+    extraRoute: null,
     ...initial,
   };
 
   async function handle(request: Request): Promise<Response> {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
     const text = await request.text();
     const body: unknown = text ? JSON.parse(text) : undefined;
     server.calls.push({ method: request.method, path: pathname, body });
     if (server.offline) throw new TypeError("Failed to fetch");
     if (server.unauthorizedPaths.includes(pathname)) {
       return json({ detail: "Not signed in" }, 401);
+    }
+    if (server.failingPaths.includes(pathname)) {
+      return json({ detail: "Service Unavailable" }, 503);
     }
     const route = `${request.method} ${pathname}`;
 
@@ -75,7 +91,10 @@ export function installFakeAccountServer(
       server.signedIn = false;
       return new Response(null, { status: 204 });
     }
-    return json({ detail: "Not Found" }, 404);
+    return (
+      server.extraRoute?.(request.method, url, body) ??
+      json({ detail: "Not Found" }, 404)
+    );
   }
 
   vi.stubGlobal(

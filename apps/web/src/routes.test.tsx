@@ -17,23 +17,33 @@ function openPath(path: string) {
 
 describe("маршруты интерфейса (ARCHITECTURE.md, раздел 4)", () => {
   beforeEach(() => {
-    // Страницы спрашивают состояние входа: пользователь досок вошёл, в панель — нет.
+    // Страницы спрашивают состояние входа: пользователь досок вошёл, в панель — нет;
+    // досок у пользователя нет.
     vi.stubGlobal(
       "fetch",
-      vi.fn((request: Request) =>
-        Promise.resolve(
-          Response.json(
-            new URL(request.url).pathname === "/api/session"
-              ? {
-                  authenticated: true,
-                  name: "Alice",
-                  email: "alice@example.com",
-                }
-              : { authenticated: false, email: null },
-            { status: 200 },
-          ),
-        ),
-      ),
+      vi.fn((request: Request) => {
+        const { pathname } = new URL(request.url);
+        if (pathname === "/api/session") {
+          return Promise.resolve(
+            Response.json({
+              authenticated: true,
+              name: "Alice",
+              email: "alice@example.com",
+            }),
+          );
+        }
+        if (pathname === "/api/boards" || pathname === "/api/boards/recent") {
+          return Promise.resolve(Response.json([]));
+        }
+        if (pathname.startsWith("/api/boards/")) {
+          return Promise.resolve(
+            Response.json({ detail: "Board not found" }, { status: 404 }),
+          );
+        }
+        return Promise.resolve(
+          Response.json({ authenticated: false, email: null }),
+        );
+      }),
     );
   });
 

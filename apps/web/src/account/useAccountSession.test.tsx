@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
@@ -163,6 +163,34 @@ describe("вкладка пользователя при отзыве сесси
 
     expect(screen.getByText(USER.name)).toBeInTheDocument();
     expect(location.history.at(-1)).toBe("/");
+  });
+
+  it("ответ 5xx при проверке сессии не выбивает вкладку", async () => {
+    const { server, location } = await signInAt("/");
+
+    server.failingPaths = ["/api/session"];
+    await elapse(SESSION_CHECK_INTERVAL_MS * 2);
+    server.failingPaths = [];
+    await elapse(SESSION_CHECK_INTERVAL_MS);
+
+    expect(screen.getByText(USER.name)).toBeInTheDocument();
+    expect(location.history.at(-1)).toBe("/");
+  });
+
+  it("все открытые вкладки учётки уходят на /login", async () => {
+    const { server } = await signInAt("/");
+    const second = openAt("/boards/42");
+    await screen.findByRole("heading", { name: "Board unavailable" });
+
+    server.signedIn = false; // отключение учётки администратором
+    await elapse(SESSION_CHECK_INTERVAL_MS);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Sign in" })).toHaveLength(
+        2,
+      );
+    });
+    expect(second.history.at(-1)).toBe("/login");
   });
 
   it("после ухода на /login опрос прекращается", async () => {
