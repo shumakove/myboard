@@ -61,7 +61,11 @@ test("ARCH-NET-06 интерфейс открывается по PUBLIC_BASE_URL
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
   await page.waitForLoadState("networkidle");
-  expect(failed).toEqual([]);
+  // С T2.2 главная без сессии успевает запросить данные списка: `401` от `/api/*` — не ошибка
+  // загрузки, если вкладка ушла на /login (правило T1.4, как в web.spec.ts с T2.1). См. BUG-002.
+  const api401 = (s: string) => /^401 https?:\/\/[^/]+\/api\//.test(s);
+  if (failed.some(api401)) await expect(page).toHaveURL(/\/login$/);
+  expect(failed.filter((s) => !api401(s))).toEqual([]);
 });
 
 test("ARCH-FRAME-07 главная не показывается в чужом фрейме", async ({
