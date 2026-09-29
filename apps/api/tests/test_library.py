@@ -1,4 +1,5 @@
-"""Модуль library: список досок пользователя (ACC-04, BRD-01…BRD-06, ADM-05)."""
+"""Модуль library: доски, папки и избранное пользователя (ACC-04, BRD-01…BRD-07, BRD-09, BRD-10,
+ADM-05)."""
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -15,6 +16,7 @@ ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin-password"
 ALICE = {"name": "Alice", "email": "alice@example.com", "password": "alice-pw"}
 BOB = {"name": "Bob", "email": "bob@example.com", "password": "bob-pw"}
+MISSING = "00000000-0000-4000-8000-000000000000"
 
 
 def _db_execute(settings: Settings, sql: str, **params: Any) -> None:
@@ -90,11 +92,23 @@ def _user_id(admin: TestClient, email: str) -> str:
         ("GET", "/api/boards/00000000-0000-4000-8000-000000000000"),
         ("PATCH", "/api/boards/00000000-0000-4000-8000-000000000000"),
         ("DELETE", "/api/boards/00000000-0000-4000-8000-000000000000"),
+        ("PUT", f"/api/boards/{MISSING}/folder"),
+        ("PUT", f"/api/boards/{MISSING}/favorite"),
+        ("DELETE", f"/api/boards/{MISSING}/favorite"),
+        ("GET", "/api/folders"),
+        ("POST", "/api/folders"),
+        ("PUT", f"/api/folders/{MISSING}/position"),
+        ("PUT", f"/api/folders/{MISSING}/favorite"),
+        ("DELETE", f"/api/folders/{MISSING}/favorite"),
     ],
 )
 def test_boards_require_user_session(admin: TestClient, method: str, path: str) -> None:
     # У клиента есть только сессия администратора: список досок она не открывает.
-    body = {"title": "x"} if method in {"POST", "PATCH"} else None
+    body: dict[str, Any] | None = {"title": "x"} if method in {"POST", "PATCH"} else None
+    if path.endswith("/folder"):
+        body = {"folder_id": None}
+    if path.endswith("/position"):
+        body = {"parent_id": None, "position": 0}
     response = admin.request(method, path, json=body)
 
     assert response.status_code == 401
@@ -124,7 +138,9 @@ def test_brd01_created_board_opens_by_id_and_is_listed(alice: TestClient) -> Non
     board = _create(alice, "  Project Alpha  ")
 
     assert board["title"] == "Project Alpha"
-    assert set(board) == {"id", "title", "created_at", "updated_at"}
+    assert set(board) == {"id", "title", "folder_id", "favorite", "created_at", "updated_at"}
+    assert board["folder_id"] is None
+    assert board["favorite"] is False
     assert alice.get(f"/api/boards/{board['id']}").json() == board
     assert alice.get("/api/boards").json() == [board]
 
@@ -320,3 +336,234 @@ def test_password_change_revokes_access_to_boards(admin: TestClient, alice: Test
     admin.patch(f"/api/admin/users/{_user_id(admin, ALICE['email'])}", json={"password": "new"})
 
     assert alice.get("/api/boards").status_code == 401
+
+
+# --- Папки (BRD-09, BRD-10) ---------------------------------------------------------------
+
+
+def _folder(client: TestClient, title: str, parent_id: str | None = None) -> dict[str, Any]:
+    body: dict[str, Any] = {"title": title}
+    if parent_id is not None:
+        body["parent_id"] = parent_id
+    response = client.post("/api/folders", json=body)
+    assert response.status_code == 201, response.text
+    folder: dict[str, Any] = response.json()
+    return folder
+
+
+def _children(client: TestClient, parent_id: str | None, **params: str) -> list[str]:
+    """Названия папок родителя в порядке `position`."""
+    response = client.get("/api/folders", params=params)
+    assert response.status_code == 200, response.text
+    folders = [f for f in response.json() if f["parent_id"] == parent_id]
+    return [f["title"] for f in sorted(folders, key=lambda f: f["position"])]
+
+
+def _move_folder(
+    client: TestClient, folder: dict[str, Any], parent_id: str | None, position: int
+) -> Any:
+    return client.put(
+        f"/api/folders/{folder['id']}/position",
+        json={"parent_id": parent_id, "position": position},
+    )
+
+
+def _move_board(client: TestClient, board: dict[str, Any], folder_id: str | None) -> Any:
+    return client.put(f"/api/boards/{board['id']}/folder", json={"folder_id": folder_id})
+
+
+def test_brd09_folders_nest_three_levels(alice: TestClient) -> None:
+    work = _folder(alice, "  Work  ")
+    projects = _folder(alice, "Projects", work["id"])
+    alpha = _folder(alice, "Alpha", projects["id"])
+
+    assert work["title"] == "Work"
+    assert set(work) == {"id", "parent_id", "title", "position", "favorite", "created_at"}
+    assert work["parent_id"] is None
+    assert alpha["parent_id"] == projects["id"]
+    assert _children(alice, None) == ["Work"]
+    assert _children(alice, work["id"]) == ["Projects"]
+    assert _children(alice, projects["id"]) == ["Alpha"]
+
+
+def test_brd09_new_folder_goes_last_among_siblings(alice: TestClient) -> None:
+    for title in ("One", "Two", "Three"):
+        _folder(alice, title)
+
+    assert _children(alice, None) == ["One", "Two", "Three"]
+
+
+@pytest.mark.parametrize("body", [{"title": ""}, {"title": "  "}, {"title": "x" * 201}, {}])
+def test_brd09_invalid_folder_title_is_rejected(alice: TestClient, body: dict[str, str]) -> None:
+    assert alice.post("/api/folders", json=body).status_code == 422
+    assert alice.get("/api/folders").json() == []
+
+
+def test_brd09_parent_must_be_own_folder(alice: TestClient, bob: TestClient) -> None:
+    bobs = _folder(bob, "Bob folder")
+
+    for parent_id in (bobs["id"], MISSING):
+        response = alice.post("/api/folders", json={"title": "Child", "parent_id": parent_id})
+        assert response.status_code == 404
+        assert response.json() == {"detail": "Folder not found"}
+    assert alice.get("/api/folders").json() == []
+    assert _children(bob, bobs["id"]) == []
+
+
+def test_brd10_reorder_folders_persists(alice: TestClient) -> None:
+    a, _b, c = (_folder(alice, title) for title in ("A", "B", "C"))
+
+    assert _move_folder(alice, c, None, 0).status_code == 200
+    assert _children(alice, None) == ["C", "A", "B"]
+
+    # Позиция больше числа соседей — в конец.
+    assert _move_folder(alice, a, None, 99).json()["position"] == 2
+    assert _children(alice, None) == ["C", "B", "A"]
+
+
+def test_brd10_nest_folder_into_another_and_back(alice: TestClient) -> None:
+    work = _folder(alice, "Work")
+    home = _folder(alice, "Home")
+    _folder(alice, "Inbox", work["id"])
+
+    moved = _move_folder(alice, home, work["id"], 0)
+
+    assert moved.status_code == 200
+    assert moved.json()["parent_id"] == work["id"]
+    assert _children(alice, None) == ["Work"]
+    assert _children(alice, work["id"]) == ["Home", "Inbox"]
+
+    assert _move_folder(alice, home, None, 1).status_code == 200
+    assert _children(alice, None) == ["Work", "Home"]
+    assert _children(alice, work["id"]) == ["Inbox"]
+
+
+def test_brd10_folder_cannot_go_into_itself_or_descendant(alice: TestClient) -> None:
+    top = _folder(alice, "Top")
+    middle = _folder(alice, "Middle", top["id"])
+    bottom = _folder(alice, "Bottom", middle["id"])
+    before = alice.get("/api/folders").json()
+
+    for parent in (top, middle, bottom):
+        response = _move_folder(alice, top, parent["id"], 0)
+        assert response.status_code == 409
+        assert "cannot be moved into itself" in response.json()["detail"]
+    assert _move_folder(alice, middle, bottom["id"], 0).status_code == 409
+
+    assert alice.get("/api/folders").json() == before
+
+
+def test_brd10_move_board_between_folders_keeps_last_change(alice: TestClient) -> None:
+    work = _folder(alice, "Work")
+    home = _folder(alice, "Home")
+    board = _create(alice, "Plan")
+    _create(alice, "Newer")
+
+    moved = _move_board(alice, board, work["id"])
+
+    assert moved.status_code == 200
+    assert moved.json()["folder_id"] == work["id"]
+    assert moved.json()["updated_at"] == board["updated_at"]
+    assert alice.get(f"/api/boards/{board['id']}").json()["folder_id"] == work["id"]
+    # Перенос не правит доску: порядок «недавних» прежний.
+    assert _titles(alice, "/api/boards/recent") == ["Newer", "Plan"]
+
+    assert _move_board(alice, board, home["id"]).json()["folder_id"] == home["id"]
+    assert _move_board(alice, board, None).json()["folder_id"] is None
+
+
+def test_brd10_foreign_or_missing_targets_are_not_found(alice: TestClient, bob: TestClient) -> None:
+    board = _create(alice, "Plan")
+    folder = _folder(alice, "Work")
+    bobs_folder = _folder(bob, "Bob folder")
+    bobs_board = _create(bob, "Bob board")
+
+    # Чужая или несуществующая папка-цель.
+    for folder_id in (bobs_folder["id"], MISSING):
+        response = _move_board(alice, board, folder_id)
+        assert response.json() == {"detail": "Folder not found"}
+        assert _move_folder(alice, folder, folder_id, 0).status_code == 404
+    # Чужие доска и папка неотличимы от несуществующих.
+    assert _move_board(alice, bobs_board, folder["id"]).json() == {"detail": "Board not found"}
+    assert _move_folder(alice, bobs_folder, None, 0).json() == {"detail": "Folder not found"}
+
+    assert alice.get(f"/api/boards/{board['id']}").json()["folder_id"] is None
+    assert bob.get(f"/api/boards/{bobs_board['id']}").json()["folder_id"] is None
+    assert _children(alice, None) == ["Work"]
+
+
+def test_brd10_invalid_position_is_rejected(alice: TestClient) -> None:
+    folder = _folder(alice, "Work")
+
+    assert _move_folder(alice, folder, None, -1).status_code == 422
+    response = alice.put(f"/api/folders/{folder['id']}/position", json={"position": 0})
+    assert response.status_code == 422
+
+
+# --- BRD-07: избранное --------------------------------------------------------------------
+
+
+def test_brd07_board_favorite_add_and_remove(alice: TestClient) -> None:
+    board = _create(alice, "Plan")
+    path = f"/api/boards/{board['id']}/favorite"
+
+    assert alice.put(path).status_code == 204
+    assert alice.put(path).status_code == 204  # повтор ничего не меняет
+    assert alice.get(f"/api/boards/{board['id']}").json()["favorite"] is True
+    assert alice.get("/api/boards").json()[0]["favorite"] is True
+    assert alice.get("/api/boards/recent").json()[0]["favorite"] is True
+
+    assert alice.delete(path).status_code == 204
+    assert alice.delete(path).status_code == 204
+    assert alice.get(f"/api/boards/{board['id']}").json()["favorite"] is False
+
+
+def test_brd07_folder_favorite_add_and_remove(alice: TestClient) -> None:
+    folder = _folder(alice, "Work")
+    path = f"/api/folders/{folder['id']}/favorite"
+
+    assert alice.put(path).status_code == 204
+    assert alice.get("/api/folders").json()[0]["favorite"] is True
+
+    assert alice.delete(path).status_code == 204
+    assert alice.get("/api/folders").json()[0]["favorite"] is False
+
+
+def test_brd07_foreign_or_deleted_targets_are_not_found(alice: TestClient, bob: TestClient) -> None:
+    board = _create(alice, "Plan")
+    folder = _folder(alice, "Work")
+    gone = _create(alice, "Gone")
+    alice.delete(f"/api/boards/{gone['id']}")
+
+    for method in ("PUT", "DELETE"):
+        assert bob.request(method, f"/api/boards/{board['id']}/favorite").status_code == 404
+        assert bob.request(method, f"/api/folders/{folder['id']}/favorite").status_code == 404
+        assert alice.request(method, f"/api/boards/{gone['id']}/favorite").status_code == 404
+        assert alice.request(method, f"/api/folders/{MISSING}/favorite").status_code == 404
+
+    assert alice.get(f"/api/boards/{board['id']}").json()["favorite"] is False
+
+
+# --- BRD-06: поиск папок ------------------------------------------------------------------
+
+
+def test_brd06_search_finds_folders_by_part_of_title(alice: TestClient, bob: TestClient) -> None:
+    work = _folder(alice, "Work projects")
+    _folder(alice, "Old PROJECTS", work["id"])
+    _folder(alice, "100% home")
+    _folder(bob, "Bob projects")
+
+    found = alice.get("/api/folders", params={"q": "project"}).json()
+
+    assert sorted(f["title"] for f in found) == ["Old PROJECTS", "Work projects"]
+    assert [f["title"] for f in alice.get("/api/folders", params={"q": "%"}).json()] == [
+        "100% home"
+    ]
+    assert alice.get("/api/folders", params={"q": "missing"}).json() == []
+    assert len(alice.get("/api/folders", params={"q": ""}).json()) == 3
+
+
+def test_folders_of_other_user_are_not_listed(alice: TestClient, bob: TestClient) -> None:
+    _folder(alice, "Alice folder")
+
+    assert bob.get("/api/folders").json() == []
