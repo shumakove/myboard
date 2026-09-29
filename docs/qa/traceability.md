@@ -23,12 +23,12 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BRD-03 | T2.1 | acceptance/api/test_boards.py::test_brd03_*, acceptance/e2e/boards.spec.ts (BRD-03) | PASS |
 | BRD-04 | T2.1 | acceptance/api/test_boards.py::test_brd04_*, acceptance/e2e/boards.spec.ts (BRD-04) | PASS |
 | BRD-05 | T2.1 | acceptance/api/test_boards.py::test_brd05_*, acceptance/e2e/boards.spec.ts (BRD-05) | PASS |
-| BRD-06 | T2.1, T2.2 | acceptance/api/test_boards.py::test_brd06_*, acceptance/e2e/boards.spec.ts (BRD-06) | PASS (доски; поиск папок — T2.2) |
-| BRD-07 | T2.2 | — | не проверено |
+| BRD-06 | T2.1, T2.2 | acceptance/api/test_boards.py::test_brd06_*, test_folders.py::test_brd06_*, acceptance/e2e/boards.spec.ts (BRD-06), folders.spec.ts (BRD-06) | PASS |
+| BRD-07 | T2.2 | acceptance/api/test_folders.py::test_brd07_*, acceptance/e2e/folders.spec.ts (BRD-07) | PASS |
 | BRD-08 | T7.4 | — | не проверено |
-| BRD-09 | T2.2 | — | не проверено |
-| BRD-10 | T2.2 | — | не проверено |
-| BRD-11 | T2.2 | — | не проверено |
+| BRD-09 | T2.2 | acceptance/api/test_folders.py::test_brd09_*, acceptance/e2e/folders.spec.ts (BRD-09) | PASS |
+| BRD-10 | T2.2 | acceptance/api/test_folders.py::test_brd10_*, acceptance/e2e/folders.spec.ts (BRD-10, desktop мышь + mobile касание) | PASS (BUG-001 minor) |
+| BRD-11 | T2.2 | acceptance/e2e/folders.spec.ts (BRD-11) | PASS |
 | BRD-12 | T9.1 | — | не проверено |
 | BRD-13 | T9.1 | — | не проверено |
 | BRD-14 | T9.1 | — | не проверено |
@@ -179,7 +179,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-STACK-01…04 (сервисы, тома, `.env.example`) | T0.1 | ручная, docs/qa/reports/T0.1.md | PASS |
 | ARCH-NET-01, 04, 05 (статика по LAN-IP, SPA-fallback, нет `localhost`) | T0.1 | acceptance/api/test_stack.py::test_arch_net* | PASS |
 | ARCH-NET-02, 03 (`0.0.0.0`, `HTTP_PORT`) | T0.1 | ручная, docs/qa/reports/T0.1.md | PASS |
-| ARCH-NET-06 (интерфейс грузится без ошибок) | T0.1 | acceptance/e2e/stack.spec.ts | PASS |
+| ARCH-NET-06 (интерфейс грузится без ошибок) | T0.1, T2.2 | acceptance/e2e/stack.spec.ts (с T2.2 допускается `401` от `/api/*` при итоге на `/login`) | PASS (BUG-002 minor) |
 | ARCH-PROXY-01…04 (`/api`, `/api/ws` через Caddy) | T0.1 | acceptance/api/test_stack.py::test_arch_proxy* | PASS |
 | ARCH-FRAME-01…08 (фрейм только для `/b/{token}/embed`; часть EMB-04) | T0.1 | acceptance/api/test_stack.py::test_arch_frame*, acceptance/e2e/stack.spec.ts | PASS |
 | ARCH-CFG-01…06 (обязательные переменные, пустые и неверные значения, секреты не в выводе) | T0.2 | acceptance/api/test_api_skeleton.py::test_arch_cfg* | PASS |
@@ -195,3 +195,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-ACC-01…07 (cookie `myboard_session` `HttpOnly`/`SameSite=Lax`/без `Secure` на http, случайная сессия, запрет фрейма для `/login`, запросы на адрес страницы, английский интерфейс, OpenAPI входа, mobile без горизонтальной прокрутки) | T1.2 | acceptance/api/test_login.py::test_arch_acc*, acceptance/e2e/login.spec.ts | PASS |
 | ARCH-T13-01…02 (флаги cookie и новый id сессии после смены пароля, контракт `PATCH` без 5xx в OpenAPI) | T1.3 | acceptance/api/test_session_revoke.py::test_arch_t13_* | PASS |
 | ARCH-T21-01…03 (`/` и `/boards/{id}`, запросы только на адрес страницы, без горизонтальной прокрутки; запрет фрейма — регрессия; эндпоинты досок в OpenAPI) | T2.1 | acceptance/e2e/boards.spec.ts (ARCH-T21-01), acceptance/e2e/web.spec.ts, acceptance/api/test_boards.py::test_arch_t21_* | PASS |
+| ARCH-T22-01…03 (`/` с папками и избранным — запросы только на адрес страницы, без горизонтальной прокрутки; эндпоинты папок и избранного в OpenAPI; запрет фрейма — регрессия) | T2.2 | acceptance/e2e/folders.spec.ts (ARCH-T22-01), acceptance/api/test_folders.py::test_arch_t22_*, acceptance/e2e/stack.spec.ts | PASS |
