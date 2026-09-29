@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа на `/` в клиенте.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся.
 
 ## Сервер `apps/api`
 
@@ -80,7 +80,7 @@ flowchart TB
 flowchart TB
   html["index.html<br/>div#root"]
   main["main.tsx<br/>createRoot(#root), StrictMode"]
-  routes["routes.tsx<br/>AppRoutes: wouter Switch / Route,<br/>/admin → Redirect /admin/users"]
+  routes["routes.tsx<br/>AppRoutes: wouter Switch / Route,<br/>/admin → Redirect /admin/users,<br/>/, /boards/:id, /templates в RequireAccount"]
   subgraph pages [pages]
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
     login["LoginPage<br/>/login: Sign in (ACC-01, ACC-02)"]
@@ -95,7 +95,9 @@ flowchart TB
     nf["NotFoundPage<br/>любой другой путь: Page not found"]
   end
   subgraph accountMod [account]
-    useAccount["useAccountSession()<br/>loading | signedOut | signedIn(name, email)"]
+    requireAcc["RequireAccount<br/>useAccountSession({watch: true});<br/>signedOut → Redirect /login (ACC-03, ACC-05)"]
+    ctx["accountContext.ts<br/>AccountSessionContext, useCurrentAccount()"]
+    useAccount["useAccountSession({watch?})<br/>loading | signedOut | signedIn(name, email);<br/>watch: опрос каждые SESSION_CHECK_INTERVAL_MS = 2000,<br/>visibilitychange, focus, onUnauthorized"]
     accountApi["accountApi.ts<br/>signIn, signOut, getSession,<br/>AccountApiError, errorMessage"]
   end
   subgraph adminMod [admin]
@@ -106,7 +108,7 @@ flowchart TB
     adminApi["adminApi.ts<br/>signIn, signOut, getSession, listUsers,<br/>createUser, updateUser, AdminApiError, errorMessage"]
   end
   subgraph apiMod [api]
-    client["client.ts<br/>createApiClient(origin = window.location.origin),<br/>api = openapi-fetch createClient&lt;paths&gt;"]
+    client["client.ts<br/>createApiClient(origin = window.location.origin),<br/>api = openapi-fetch createClient&lt;paths&gt;,<br/>onUnauthorized(listener): 401 любого ответа"]
     schema["schema.d.ts<br/>paths, components, operations<br/>(openapi-typescript)"]
   end
   subgraph realtimeMod [realtime]
@@ -116,13 +118,18 @@ flowchart TB
   server["apps/api: /api/*"]
 
   html --> main --> routes
-  routes --> login & boards & board & templates & tcopy & alogin & ausers & shared & embed & nf
+  routes --> login & tcopy & alogin & ausers & shared & embed & nf
+  routes -->|"/, /boards/:id, /templates"| requireAcc
+  requireAcc -->|"signedIn / loading"| boards & board & templates
+  requireAcc -->|"Provider value = session"| ctx
+  requireAcc --> useAccount
   board & templates & tcopy & shared & embed --> placeholder
-  login -->|"signedIn → Redirect /"| useAccount
+  login -->|"без watch; signedIn → Redirect /"| useAccount
   login -->|"signIn → navigate /"| accountApi
-  boards -->|"signedOut → Redirect /login"| useAccount
+  boards -->|"useCurrentAccount: имя"| ctx
   boards -->|"signOut → navigate /login"| accountApi
   useAccount -->|"getSession"| accountApi
+  useAccount -->|"onUnauthorized, кроме /api/login и /api/admin/*"| client
   accountApi -->|"type AccountSession"| schema
   accountApi --> client
   alogin --> useSession
@@ -145,10 +152,10 @@ flowchart TB
 - Потребители `api` — модули `account` и `admin`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*` и `/api/login`, `/api/logout`, `/api/session`.
 - `accountApi` показывает одно скупое сообщение для `401` и `422` — Invalid email or password. (ACC-02); `429` — Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
 - `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
-- Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`, `/` без сессии — на `/login`; `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
-- `/boards/:id`, `/templates`, `/t/:token`, `/b/:token`, `/b/:token/embed` — пока заглушки без проверки входа.
+- Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`; `/`, `/boards/:id`, `/templates` обёрнуты в `RequireAccount`: без сессии и после её отзыва — `Redirect /login` (replace). Отзыв замечается опросом `GET /api/session` раз в 2 с у видимой вкладки, сразу при возврате на вкладку и по любому ответу `401`, кроме `POST /api/login` и `/api/admin/*` (ACC-05, состояния — [states/session.md](states/session.md)); `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
+- `/boards/:id`, `/templates` — заглушки за `RequireAccount`; `/t/:token`, `/b/:token`, `/b/:token/embed` — заглушки без проверки входа.
 - Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts` и `account/fakeAccountServer.ts`.
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T1.2, f65eab9. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03 (вход пользователя досок); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
+Актуально на: T1.4, 6f59eaf. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
