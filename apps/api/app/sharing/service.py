@@ -36,7 +36,8 @@ def board_cookie_name(board_id: uuid.UUID) -> str:
 async def current_token(db: AsyncSession, board: Board) -> str:
     """SHR-01: действующий токен доски; при первом запросе он выдаётся."""
     if board.share_token is None:
-        # Условие `IS NULL` не даёт двум одновременным запросам выдать разные токены.
+        # Условие `IS NULL` не даёт двум одновременным запросам выдать разные токены:
+        # проигравший получает токен победителя.
         await db.execute(
             update(Board)
             .where(Board.id == board.id, Board.share_token.is_(None))
@@ -44,19 +45,20 @@ async def current_token(db: AsyncSession, board: Board) -> str:
         )
         await db.commit()
         await db.refresh(board)
-    assert board.share_token is not None
-    return board.share_token
+    token = board.share_token
+    if token is None:
+        raise RuntimeError("share_token не выдан")
+    return token
 
 
 async def reset_token(db: AsyncSession, board: Board) -> str:
     """SHR-06: новый токен; прежний и выданные по нему сессии перестают действовать сразу."""
-    board.share_token = new_token()
+    token = new_token()
+    board.share_token = token
     board.share_token_revoked_at = func.now()
     await delete_board_sessions(db, board.id)
     await db.commit()
-    await db.refresh(board)
-    assert board.share_token is not None
-    return board.share_token
+    return token
 
 
 async def board_by_token(db: AsyncSession, token: str) -> Board | None:
