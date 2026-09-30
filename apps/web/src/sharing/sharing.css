@@ -1,0 +1,62 @@
+/* Диалог Share и вход по ссылке: простая адаптивная вёрстка, на телефоне — во всю ширину. */
+.share-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 40%);
+}
+
+.share-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  font-family: system-ui, sans-serif;
+}
+
+.share-dialog h2,
+.share-dialog p {
+  margin: 0;
+}
+
+.share-link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.share-link input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.share-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e0a0a0;
+  border-radius: 6px;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.share-footer {
+  justify-content: flex-end;
+}
+
+.share-error {
+  color: #b00020;
+}

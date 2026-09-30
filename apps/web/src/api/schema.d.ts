@@ -369,6 +369,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/boards/{board_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Share Link
+         * @description SHR-01: ссылка на свою доску, чтобы скопировать и переслать.
+         */
+        get: operations["get_share_link_api_boards__board_id__share_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/boards/{board_id}/share/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Share Link
+         * @description SHR-06: новая ссылка; прежняя и сессии, выданные по ней, больше не действуют.
+         */
+        post: operations["reset_share_link_api_boards__board_id__share_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/share/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Shared Board
+         * @description SHR-02, SHR-05: доска по ссылке; `participant` — `null`, пока имя не введено.
+         */
+        get: operations["open_shared_board_api_share__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/share/{token}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Join Shared Board
+         * @description SHR-02, SHR-03: имя на сессию → cookie этой доски до закрытия браузера.
+         */
+        post: operations["join_shared_board_api_share__token__join_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -509,6 +589,41 @@ export interface components {
         Health: {
             /** Status */
             status: string;
+        };
+        /**
+         * JoinRequest
+         * @description SHR-03: отображаемое имя участника на эту сессию.
+         */
+        JoinRequest: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * Participant
+         * @description Участник по ссылке: отображаемое имя из сессии этой доски (SHR-03).
+         */
+        Participant: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * ShareLink
+         * @description SHR-01: действующая ссылка на доску; `url` собран из PUBLIC_BASE_URL.
+         */
+        ShareLink: {
+            /** Token */
+            token: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * SharedBoard
+         * @description Доска, открытая по ссылке; `participant` — `null`, пока имя не введено (SHR-02, SHR-03).
+         */
+        SharedBoard: {
+            /** Title */
+            title: string;
+            participant: components["schemas"]["Participant"] | null;
         };
         /** UserCreate */
         UserCreate: {
@@ -1420,6 +1535,162 @@ export interface operations {
                 content?: never;
             };
             /** @description Folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_share_link_api_boards__board_id__share_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLink"];
+                };
+            };
+            /** @description Board not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_share_link_api_boards__board_id__share_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareLink"];
+                };
+            };
+            /** @description Board not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_shared_board_api_share__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedBoard"];
+                };
+            };
+            /** @description Link is not available */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    join_shared_board_api_share__token__join_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedBoard"];
+                };
+            };
+            /** @description Link is not available */
             404: {
                 headers: {
                     [name: string]: unknown;
