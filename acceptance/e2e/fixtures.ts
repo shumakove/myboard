@@ -17,7 +17,7 @@ interface StandFixtures {
   /** Вкладка пользователя досок, созданного администратором (ADM-03, ACC-01). */
   boardUserPage: Page;
   /** Доска пользователя досок (BRD-01). */
-  board: { id: string };
+  board: { id: string; title?: string };
   /** Вкладка участника по ссылке /b/{token}, назвавшего имя (SHR-02, SHR-03). */
   linkParticipantPage: Page;
 }

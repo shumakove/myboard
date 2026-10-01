@@ -7,6 +7,7 @@ dependencies = [
     "pytest>=8.3",
     "httpx>=0.28",
     "websockets>=14.0",
+    "pycrdt>=0.14.8",
 ]
 
 [tool.uv]
