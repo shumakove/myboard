@@ -36,9 +36,9 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | SHR-01 | T3.1 | acceptance/api/test_sharing.py::test_shr01_*, acceptance/e2e/share.spec.ts (SHR-01) | PASS |
 | SHR-02 | T3.1 | acceptance/api/test_sharing.py::test_shr02_*, acceptance/e2e/share.spec.ts (SHR-02) | PASS |
 | SHR-03 | T3.1 | acceptance/api/test_sharing.py::test_shr03_*, acceptance/e2e/share.spec.ts (SHR-03) | PASS |
-| SHR-04 | T4.1 (канал), T11.2 | — | не проверено |
+| SHR-04 | T4.1 (канал), T11.2 | acceptance/api/test_realtime.py::test_shr04_*, test_col01_shr04_*; acceptance/e2e/realtime.spec.ts (SHR-04) | PASS (канал, T4.1); действия холста — T11.2 |
 | SHR-05 | T3.1 | acceptance/api/test_sharing.py::test_shr05_*, acceptance/e2e/share.spec.ts (SHR-05) | PASS |
-| SHR-06 | T3.1 | acceptance/api/test_sharing.py::test_shr06_*, acceptance/e2e/share.spec.ts (SHR-06) | PASS |
+| SHR-06 | T3.1, T4.1 (WebSocket) | acceptance/api/test_sharing.py::test_shr06_*, acceptance/api/test_realtime.py::test_shr06_*, acceptance/e2e/share.spec.ts, realtime.spec.ts (SHR-06) | PASS |
 | SHR-07 | T5.5 | — | не проверено |
 | CVS-01 | T5.1 | — | не проверено |
 | CVS-02 | T5.1 | — | не проверено |
@@ -156,7 +156,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | NTE-01 | T6.12 | — | не проверено |
 | NTE-02 | T6.12 | — | не проверено |
 | NTE-03 | T6.12 | — | не проверено |
-| COL-01 | T4.1 | — | не проверено |
+| COL-01 | T4.1 | acceptance/api/test_realtime.py::test_col01_*, acceptance/e2e/realtime.spec.ts (COL-01) | PASS |
 | COL-02 | T4.2 | — | не проверено |
 | COL-03 | T4.2 | — | не проверено |
 | COL-04 | T4.2 | — | не проверено |
@@ -197,3 +197,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-T21-01…03 (`/` и `/boards/{id}`, запросы только на адрес страницы, без горизонтальной прокрутки; запрет фрейма — регрессия; эндпоинты досок в OpenAPI) | T2.1 | acceptance/e2e/boards.spec.ts (ARCH-T21-01), acceptance/e2e/web.spec.ts, acceptance/api/test_boards.py::test_arch_t21_* | PASS |
 | ARCH-T22-01…03 (`/` с папками и избранным — запросы только на адрес страницы, без горизонтальной прокрутки; эндпоинты папок и избранного в OpenAPI; запрет фрейма — регрессия) | T2.2 | acceptance/e2e/folders.spec.ts (ARCH-T22-01), acceptance/api/test_folders.py::test_arch_t22_*, acceptance/e2e/stack.spec.ts | PASS |
 | ARCH-T31-01…04 (cookie участника `HttpOnly`/`SameSite=Lax`/без `Secure` на http, фрейм только для `/b/{token}/embed`, эндпоинты ссылки в OpenAPI, страницы ссылки — запросы только на адрес страницы, без горизонтальной прокрутки) | T3.1 | acceptance/api/test_sharing.py::test_arch_t31_*, acceptance/e2e/share.spec.ts (ARCH-T31-04) | PASS |
+| ARCH-T41-01…03 (канал `/api/ws` только для сессии владельца или cookie участника этой доски, неразличимый отказ, закрытие при выходе; адрес канала из адреса страницы без `localhost`; кадры `sync` STEP1/STEP2/UPDATE) | T4.1 | acceptance/api/test_realtime.py::test_arch_t41_*, acceptance/e2e/realtime.spec.ts (ARCH-T41-02) | PASS |
