@@ -14,7 +14,8 @@ import pytest
 
 from admin_helpers import admin_credentials, create_user, login
 from board_helpers import create_board, unique_title
-from stand import Client, StandConfigError, clients, pending, public_base_url
+from share_helpers import join, link
+from stand import Client, StandConfigError, clients, public_base_url
 from user_helpers import user_login
 
 
@@ -94,7 +95,15 @@ def board(board_user: Client) -> dict[str, str]:
 
 
 @pytest.fixture
-def link_participant(board: dict[str, str], clean_stack: str) -> Client:
-    """Участник по ссылке: вошёл по /b/{token} и назвал имя (SHR-02, SHR-03)."""
-    pending("участник по ссылке", "T3.1")
-    raise AssertionError("недостижимо")
+def link_participant(board_user: Client, board: dict[str, str], clean_stack: str) -> Iterator[Client]:
+    """Участник по ссылке: без учётки вошёл по /b/{token} и назвал имя (SHR-02, SHR-03).
+
+    API из handoff T3.1. Токен — в `client.token`, доска — в `client.board`.
+    """
+    token = link(board_user, board["id"])["token"]
+    with clients(clean_stack, "link_participant") as (one,):
+        resp = join(one, token, "QA Guest")
+        assert resp.status_code == 200, (resp.status_code, resp.text)
+        one.token = token  # type: ignore[attr-defined]
+        one.board = board  # type: ignore[attr-defined]
+        yield one
