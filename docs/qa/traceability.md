@@ -33,12 +33,12 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BRD-13 | T9.1 | — | не проверено |
 | BRD-14 | T9.1 | — | не проверено |
 | BRD-15 | T9.1 | — | не проверено |
-| SHR-01 | T3.1 | — | не проверено |
-| SHR-02 | T3.1 | — | не проверено |
-| SHR-03 | T3.1 | — | не проверено |
+| SHR-01 | T3.1 | acceptance/api/test_sharing.py::test_shr01_*, acceptance/e2e/share.spec.ts (SHR-01) | PASS |
+| SHR-02 | T3.1 | acceptance/api/test_sharing.py::test_shr02_*, acceptance/e2e/share.spec.ts (SHR-02) | PASS |
+| SHR-03 | T3.1 | acceptance/api/test_sharing.py::test_shr03_*, acceptance/e2e/share.spec.ts (SHR-03) | PASS |
 | SHR-04 | T4.1 (канал), T11.2 | — | не проверено |
-| SHR-05 | T3.1 | — | не проверено |
-| SHR-06 | T3.1 | — | не проверено |
+| SHR-05 | T3.1 | acceptance/api/test_sharing.py::test_shr05_*, acceptance/e2e/share.spec.ts (SHR-05) | PASS |
+| SHR-06 | T3.1 | acceptance/api/test_sharing.py::test_shr06_*, acceptance/e2e/share.spec.ts (SHR-06) | PASS |
 | SHR-07 | T5.5 | — | не проверено |
 | CVS-01 | T5.1 | — | не проверено |
 | CVS-02 | T5.1 | — | не проверено |
@@ -196,3 +196,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-T13-01…02 (флаги cookie и новый id сессии после смены пароля, контракт `PATCH` без 5xx в OpenAPI) | T1.3 | acceptance/api/test_session_revoke.py::test_arch_t13_* | PASS |
 | ARCH-T21-01…03 (`/` и `/boards/{id}`, запросы только на адрес страницы, без горизонтальной прокрутки; запрет фрейма — регрессия; эндпоинты досок в OpenAPI) | T2.1 | acceptance/e2e/boards.spec.ts (ARCH-T21-01), acceptance/e2e/web.spec.ts, acceptance/api/test_boards.py::test_arch_t21_* | PASS |
 | ARCH-T22-01…03 (`/` с папками и избранным — запросы только на адрес страницы, без горизонтальной прокрутки; эндпоинты папок и избранного в OpenAPI; запрет фрейма — регрессия) | T2.2 | acceptance/e2e/folders.spec.ts (ARCH-T22-01), acceptance/api/test_folders.py::test_arch_t22_*, acceptance/e2e/stack.spec.ts | PASS |
+| ARCH-T31-01…04 (cookie участника `HttpOnly`/`SameSite=Lax`/без `Secure` на http, фрейм только для `/b/{token}/embed`, эндпоинты ссылки в OpenAPI, страницы ссылки — запросы только на адрес страницы, без горизонтальной прокрутки) | T3.1 | acceptance/api/test_sharing.py::test_arch_t31_*, acceptance/e2e/share.spec.ts (ARCH-T31-04) | PASS |
