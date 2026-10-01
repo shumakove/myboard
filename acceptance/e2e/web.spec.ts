@@ -57,8 +57,21 @@ function isAuthRejection(problem: string): boolean {
   return /^401 https?:\/\/[^/]+\/api\//.test(problem) || /status of 401 \(Unauthorized\)/.test(problem);
 }
 
+// С T3.1 страница `/b/{token}` спрашивает `GET /api/share/{token}`; для выдуманного токена
+// стенда сервер отвечает отказом `404` (SHR-05), и браузер пишет «Failed to load resource … 404».
+// Это требуемый отказ, а не ошибка приложения; другие ответы 404 по-прежнему считаются ошибкой.
+function isLinkRejection(problem: string): boolean {
+  return /^404 https?:\/\/[^/]+\/api\/share\//.test(problem);
+}
+
 function appProblems(w: Watch): string[] {
-  return w.problems.filter((p) => !isAuthRejection(p));
+  const linkRefused = w.problems.some(isLinkRejection);
+  return w.problems.filter(
+    (p) =>
+      !isAuthRejection(p) &&
+      !isLinkRejection(p) &&
+      !(linkRefused && /status of 404 \(Not Found\)/.test(p)),
+  );
 }
 
 async function rootText(page: Page): Promise<string> {
@@ -86,6 +99,9 @@ for (const path of ROUTES) {
     expect(await page.locator("html").getAttribute("lang")).toBe("en");
     if (USER_ROUTES.includes(path)) {
       expect(new URL(page.url()).pathname).toBe("/login");
+      expect(appProblems(w)).toEqual([]);
+    } else if (path.startsWith("/b/") && !path.includes("/embed")) {
+      await expect(page.getByText("This link is not available.")).toBeVisible();
       expect(appProblems(w)).toEqual([]);
     } else {
       expect(w.problems).toEqual([]);
@@ -178,6 +194,9 @@ for (const path of [
     expect(await rootText(page)).not.toBe("");
     if (path.startsWith("/boards/")) {
       expect(new URL(page.url()).pathname).toBe("/login");
+      expect(appProblems(w)).toEqual([]);
+    } else if (path.startsWith("/b/") && !path.includes("/embed")) {
+      await expect(page.getByText("This link is not available.")).toBeVisible();
       expect(appProblems(w)).toEqual([]);
     } else {
       expect(w.problems).toEqual([]);

@@ -1,7 +1,6 @@
 // Фикстуры e2e-стенда QA (Q0.1). Тесты импортируют `test` и `expect` отсюда.
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
 import { apiAdminLogin } from './admin';
-import { pending } from './stand';
 import { apiUserLogin, createBoardUser } from './user';
 
 /** Независимый браузерный клиент: свой контекст (cookie, хранилище) и вкладка. */
@@ -55,7 +54,22 @@ export const test = base.extend<StandFixtures>({
     if (res.status() !== 201) throw new Error(`создание доски: ${res.status()} ${await res.text()}`);
     await use((await res.json()) as { id: string });
   },
-  linkParticipantPage: async ({}, _use) => pending('участник по ссылке', 'T3.1'),
+  linkParticipantPage: async (
+    { browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor, boardUserPage, board },
+    use,
+  ) => {
+    // Ссылка владельца и вход участника — API из handoff T3.1; контекст без сессии пользователя.
+    const res = await boardUserPage.request.get(`/api/boards/${board.id}/share`);
+    if (res.status() !== 200) throw new Error(`ссылка на доску: ${res.status()} ${await res.text()}`);
+    const { token } = (await res.json()) as { token: string };
+    const context = await browser.newContext({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+    const joined = await context.request.post(`/api/share/${token}/join`, { data: { name: 'QA Guest' } });
+    if (joined.status() !== 200) throw new Error(`вход по ссылке: ${joined.status()} ${await joined.text()}`);
+    const page = await context.newPage();
+    await page.goto(`/b/${token}`);
+    await use(page);
+    await context.close();
+  },
 });
 
 export { expect };
