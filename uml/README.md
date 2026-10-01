@@ -33,7 +33,7 @@
 | T1.3 | `states/session.md`, `states/user-account.md` |
 | T1.4 | `states/session.md`, `components.md` (клиент) |
 | T2.1, T2.2 | `data-model.md`, `components.md` |
-| T3.1 | `data-model.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
+| T3.1 | `data-model.md`, `components.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
 | T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` |
 | T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов) |
 | T7.* | `data-model.md`, `board-document.md`, `sequences/media-upload.md` |
@@ -50,8 +50,11 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa |
-| [components.md](components.md) | T2.2, 6819f64 |
-| [data-model.md](data-model.md) | T2.2, 6819f64 |
+| [components.md](components.md) | T3.1, d4a2685 |
+| [data-model.md](data-model.md) | T3.1, d4a2685 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
-| [states/session.md](states/session.md) | сервер: T1.3, b53b509; вкладка: T1.4, 6f59eaf |
+| [sequences/link-join.md](sequences/link-join.md) | T3.1, d4a2685 |
+| [sequences/link-reset.md](sequences/link-reset.md) | T3.1, d4a2685 |
+| [states/session.md](states/session.md) | сервер: T1.3, b53b509; вкладка: T1.4, 6f59eaf; участник по ссылке: T3.1, d4a2685 |
+| [states/share-link.md](states/share-link.md) | T3.1, d4a2685 |
 | [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
