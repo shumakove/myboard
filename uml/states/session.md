@@ -1,6 +1,6 @@
 # Сессия
 
-Строка таблицы `sessions` и cookie браузера. Реализованы сессии администратора (T1.1, cookie `myboard_admin`) и пользователя досок (T1.2, cookie `myboard_session`). Сессии участника по ссылке — T3.1. Реакция открытой вкладки на отзыв сессии — T1.4.
+Строка таблицы `sessions` и cookie браузера. Реализованы сессии администратора (T1.1, cookie `myboard_admin`) и пользователя досок (T1.2, cookie `myboard_session`). Сессия участника по ссылке (T3.1) — строка `sessions` с `subject_type = guest` и cookie `myboard_board_{board_id.hex}` своей доски. Реакция открытой вкладки на отзыв сессии — T1.4.
 
 ## Сессия администратора
 
@@ -35,6 +35,29 @@ stateDiagram-v2
 - `expires_at` сейчас всегда `NULL`, срок сессии в базе не проверяется. Строка сессии, cookie которой браузер выбросил (`Orphaned`), остаётся в базе — очистки нет.
 
 Актуально на: T1.3, b53b509. Требования: ADM-01, ADM-04, ADM-05, ACC-01, ACC-03.
+
+## Сессия участника по ссылке
+
+Модуль `sharing` (`service.join`, `service.participant`, `service.reset_token`) поверх `identity.sessions` (`create_session`, `find_board_session`, `delete_session`, `delete_board_sessions`).
+
+```mermaid
+stateDiagram-v2
+  [*] --> Active: POST /api/share/{token}/join {name} → 200 (SHR-02, SHR-03)<br/>create_session(GUEST, uuid4, board_id, display_name):<br/>INSERT sessions, Set-Cookie myboard_board_{board_id.hex} (без Max-Age)
+  Active --> Active: GET /api/share/{token}<br/>find_board_session(cookie, board_id) → participant {name}
+  Active --> Replaced: POST /api/share/{token}/join {name} тем же браузером<br/>delete_session(cookie), затем новая сессия с новым именем
+  Replaced --> [*]
+  Active --> [*]: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>delete_board_sessions(board_id): DELETE всех guest-сессий доски
+  Active --> Orphaned: браузер закрыт<br/>(cookie без Max-Age)
+  Orphaned --> [*]
+```
+
+- Cookie: `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` только при `https://`; без `Max-Age` — до закрытия браузера. У каждой доски своя cookie: участник может быть на нескольких досках под разными именами, сброс ссылки одной доски не задевает другие.
+- Сессия принимается только на своей доске (`board_id` в условии `find_board_session`) и только по действующему токену: маршрут сначала ищет доску по токену (`board_by_token`), отозванный токен — `404 Link is not available` при любой cookie.
+- После сброса прежняя cookie на новой ссылке даёт `participant: null` — участник снова вводит имя. Сессии владельца и гостей других досок сброс не трогает.
+- Гостевая сессия не является сессией пользователя досок (`find_subject(…, USER)` её не находит): `/api/boards*`, `/api/folders*` → `401`, `/` и `/boards/:id` уводят на `/login`. Учётная запись не создаётся.
+- Строка `Orphaned` остаётся в базе до сброса ссылки доски — отдельной очистки нет. Открытая вкладка участника о сбросе сама не узнаёт: отказ видит при следующем запросе (канала WebSocket ещё нет).
+
+Актуально на: T3.1, d4a2685. Требования: SHR-02, SHR-03, SHR-05, SHR-06.
 
 ## Вкладка пользователя досок
 

@@ -1,6 +1,6 @@
 # Модель данных PostgreSQL
 
-Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models` и `app.library.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
+Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2), `0005_sharing_link` (T3.1); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models` и `app.library.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
 
 ```mermaid
 erDiagram
@@ -20,9 +20,11 @@ erDiagram
   }
   sessions {
     varchar_64 id PK "SHA-256 (hex) значения cookie"
-    varchar_16 subject_type "admin (myboard_admin) или user (myboard_session)"
-    uuid subject_id "ix_sessions_subject_id"
+    varchar_16 subject_type "admin (myboard_admin), user (myboard_session) или guest (myboard_board_{board_id.hex})"
+    uuid subject_id "ix_sessions_subject_id; у guest — случайный uuid4"
     timestamptz expires_at "nullable, пока не заполняется"
+    uuid board_id FK "nullable, fk_sessions_board_id_boards, ix_sessions_board_id; только у guest (SHR-02)"
+    varchar_200 display_name "nullable; имя участника по ссылке (SHR-03)"
     timestamptz created_at "server_default now()"
   }
   folders {
@@ -41,6 +43,8 @@ erDiagram
     timestamptz created_at "server_default now() (BRD-05)"
     timestamptz updated_at "server_default now(), now() при переименовании (BRD-04, BRD-05)"
     timestamptz deleted_at "nullable, пометка удаления (BRD-03)"
+    varchar_64 share_token UK "nullable, uq_boards_share_token; NULL — ссылка ещё не выдана (SHR-01, SHR-06)"
+    timestamptz share_token_revoked_at "nullable, момент последнего сброса ссылки (SHR-06)"
   }
   favorites {
     uuid user_id PK "pk_favorites; fk_favorites_user_id_users"
@@ -50,6 +54,7 @@ erDiagram
   }
   admins ||--o{ sessions : "subject_type = admin"
   users ||--o{ sessions : "subject_type = user"
+  boards |o--o{ sessions : "board_id, subject_type = guest"
   users ||--o{ boards : "owner_id"
   users ||--o{ folders : "owner_id"
   folders |o--o{ folders : "parent_id"
@@ -72,6 +77,10 @@ erDiagram
 - Перенос доски в папку меняет только `boards.folder_id` (`updated_at` прежний): это раскладка списка, а не правка доски. Папка должна принадлежать владельцу доски.
 - Избранное (BRD-07) — строка `favorites` на пару «пользователь — цель»; повторное добавление игнорируется (`ON CONFLICT DO NOTHING`), снятие — `DELETE`. Внешнего ключа на цель нет (полиморфная связь): владение проверяет маршрут до записи, а строка избранного удалённой доски остаётся, но не видна, потому что флаг `favorite` проставляется только живым доскам из выборки `_owned`.
 - Поиск (BRD-06) — `title ILIKE '%…%'` с экранированием `%`, `_`, `\` (по `boards` и по `folders` владельца, `text_search.contains`); фильтр (BRD-05) — `updated_at >= modified_since`; порядок (BRD-05) — `updated_at DESC`, `created_at DESC` или `lower(title) ASC`, при равенстве `id ASC`. «Недавние» (BRD-04) — первые 8 по `updated_at DESC`.
-- Столбцов обложки и токенов ссылок в `boards`, столбцов `sessions.board_id` и `sessions.display_name` (сессия участника по ссылке), таблиц `board_updates`, `board_snapshots` пока нет — появятся в задачах T3.1, T4.* и далее.
+- Ссылка на доску (T3.1, модуль `sharing`): `boards.share_token` — `secrets.token_urlsafe(32)` (43 символа), не связан с `id`. Выдаётся при первом `GET /api/boards/{id}/share` запросом `UPDATE boards SET share_token = … WHERE id = … AND share_token IS NULL` — одновременные первые запросы получают один токен. Сброс (`reset_token`) перезаписывает `share_token` новым значением, ставит `share_token_revoked_at = now()` и в той же транзакции удаляет гостевые сессии доски (`delete_board_sessions`). Прежний токен в базе не остаётся, поэтому отозванный и несуществующий токен неразличимы.
+- Доска по ссылке (`board_by_token`): `share_token = :token AND deleted_at IS NULL`; пустой токен или длиннее 64 символов в базу не идёт. Удалённая доска по ссылке не открывается.
+- Сессия участника по ссылке — строка `sessions` с `subject_type = guest`, случайным `subject_id`, `board_id` и `display_name`; строк в `users` не создаётся (SHR-02). Принимается только на своей доске (`find_board_session`: `id = sha256(cookie) AND subject_type = guest AND board_id = :board`). Повторный `join` того же браузера удаляет прежнюю строку и создаёт новую. Гостевая сессия не проходит `require_user` — маршруты `library` ей недоступны.
+- Внешний ключ `sessions.board_id → boards.id` без каскада: строки `boards` не удаляются (только `deleted_at`).
+- Столбцов обложки и ссылки-шаблона в `boards`, таблиц `board_updates`, `board_snapshots` пока нет — появятся в задачах T4.*, T7.4, T9.1 и далее.
 
-Актуально на: T2.2, 6819f64. Требования: ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10.
+Актуально на: T3.1, d4a2685. Требования: ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06.
