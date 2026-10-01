@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { board } from "../library/fakeLibraryServer";
 import { installFakeSharingServer } from "../sharing/fakeSharingServer";
+import { FakeBoardServer, FakeSocket } from "../realtime/fakeSocket";
 import { AppRoutes } from "../routes";
 
 function openAt(path: string) {
@@ -112,5 +113,41 @@ describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", (
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Network error. Try again.",
     );
+  });
+
+  it("SHR-04: участник открывает канал документа по токену ссылки", async () => {
+    guestServer({ "tok-1": "Kate" });
+    openAt("/b/tok-1");
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Connecting to the board…",
+    );
+    const socket = FakeSocket.last();
+    expect(socket.url).toBe(`ws://${window.location.host}/api/ws?token=tok-1`);
+    act(() => {
+      new FakeBoardServer().accept(socket);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Live:");
+  });
+
+  it("SHR-06: после сброса ссылки открытая доска закрывается с отказом", async () => {
+    const server = guestServer({ "tok-1": "Kate" });
+    openAt("/b/tok-1");
+    await screen.findByRole("status");
+    const socket = FakeSocket.last();
+    act(() => {
+      new FakeBoardServer().accept(socket);
+    });
+
+    server.links["b-1"] = "tok-2";
+    act(() => {
+      socket.drop(4403);
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This link is not available.",
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(FakeSocket.instances).toHaveLength(1);
   });
 });

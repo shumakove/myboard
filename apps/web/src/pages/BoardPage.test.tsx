@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { board, installFakeLibraryServer } from "../library/fakeLibraryServer";
+import { FakeBoardServer, FakeSocket } from "../realtime/fakeSocket";
 import { AppRoutes } from "../routes";
 
 function openAt(path: string) {
@@ -51,5 +52,26 @@ describe("/boards/{id} — своя доска (BRD-01)", () => {
       await screen.findByRole("button", { name: "Sign in" }),
     ).toBeInTheDocument();
     expect(location.history.at(-1)).toBe("/login");
+  });
+
+  it("COL-01: открывает канал документа доски и показывает состояние связи", async () => {
+    installFakeLibraryServer({ boards: [board("b-1", "Roadmap")] });
+    openAt("/boards/b-1");
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Connecting to the board…",
+    );
+    const socket = FakeSocket.last();
+    expect(socket.url).toBe(`ws://${window.location.host}/api/ws?board=b-1`);
+
+    act(() => {
+      new FakeBoardServer().accept(socket);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Live:");
+
+    act(() => {
+      socket.drop();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Offline.");
   });
 });
