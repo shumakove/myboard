@@ -1,6 +1,6 @@
 # Модель данных PostgreSQL
 
-Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2), `0005_sharing_link` (T3.1); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models` и `app.library.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
+Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2), `0005_sharing_link` (T3.1), `0006_realtime_board_updates` (T4.1); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models`, `app.library.models` и `app.realtime.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
 
 ```mermaid
 erDiagram
@@ -41,7 +41,7 @@ erDiagram
     uuid folder_id FK "nullable, fk_boards_folder_id_folders, ix_boards_folder_id (BRD-10)"
     varchar_200 title "Untitled board по умолчанию (BRD-01)"
     timestamptz created_at "server_default now() (BRD-05)"
-    timestamptz updated_at "server_default now(), now() при переименовании (BRD-04, BRD-05)"
+    timestamptz updated_at "server_default now(), now() при переименовании и принятой правке документа (BRD-04, BRD-05)"
     timestamptz deleted_at "nullable, пометка удаления (BRD-03)"
     varchar_64 share_token UK "nullable, uq_boards_share_token; NULL — ссылка ещё не выдана (SHR-01, SHR-06)"
     timestamptz share_token_revoked_at "nullable, момент последнего сброса ссылки (SHR-06)"
@@ -50,6 +50,12 @@ erDiagram
     uuid user_id PK "pk_favorites; fk_favorites_user_id_users"
     varchar_16 target_type PK "board или folder, ck_favorites_target_type"
     uuid target_id PK "boards.id или folders.id, без FK (BRD-07)"
+    timestamptz created_at "server_default now()"
+  }
+  board_updates {
+    uuid board_id PK "pk_board_updates; fk_board_updates_board_id_boards"
+    bigint seq PK "порядок применения на сервере с 1, без autoincrement"
+    bytea update "обновление Yjs как пришло от клиента (COL-01)"
     timestamptz created_at "server_default now()"
   }
   admins ||--o{ sessions : "subject_type = admin"
@@ -62,6 +68,7 @@ erDiagram
   users ||--o{ favorites : "user_id"
   boards |o--o{ favorites : "target_type = board"
   folders |o--o{ favorites : "target_type = folder"
+  boards ||--o{ board_updates : "board_id"
 ```
 
 - Связь `sessions → admins/users` полиморфная (`subject_type` + `subject_id`), внешнего ключа в базе нет.
@@ -81,6 +88,8 @@ erDiagram
 - Доска по ссылке (`board_by_token`): `share_token = :token AND deleted_at IS NULL`; пустой токен или длиннее 64 символов в базу не идёт. Удалённая доска по ссылке не открывается.
 - Сессия участника по ссылке — строка `sessions` с `subject_type = guest`, случайным `subject_id`, `board_id` и `display_name`; строк в `users` не создаётся (SHR-02). Принимается только на своей доске (`find_board_session`: `id = sha256(cookie) AND subject_type = guest AND board_id = :board`). Повторный `join` того же браузера удаляет прежнюю строку и создаёт новую. Гостевая сессия не проходит `require_user` — маршруты `library` ей недоступны.
 - Внешний ключ `sessions.board_id → boards.id` без каскада: строки `boards` не удаляются (только `deleted_at`).
-- Столбцов обложки и ссылки-шаблона в `boards`, таблиц `board_updates`, `board_snapshots` пока нет — появятся в задачах T4.*, T7.4, T9.1 и далее.
+- Журнал документа доски (T4.1, модуль `realtime`): строка `board_updates` на каждое принятое обновление Yjs (`STEP2` или `UPDATE` клиента, кроме пустого `00 00`). `seq` назначает `BoardRoom` под своей блокировкой: при открытии доски — `max(seq)` из журнала, далее +1 на обновление. Запись и `UPDATE boards SET updated_at = now()` (`library.service.touch_board`) — одна транзакция (`store.append_update`), рассылка другим соединениям — только после неё. Повреждённое обновление в журнал не попадает.
+- Документ доски на сервере собирается из всех строк журнала по `seq` (`store.load_updates`); строки не удаляются — снимков и сжатия журнала пока нет (T4.3). Внешний ключ `board_updates.board_id → boards.id` без каскада.
+- Столбцов обложки и ссылки-шаблона в `boards`, таблицы `board_snapshots` пока нет — появятся в задачах T4.3, T7.4, T9.1 и далее.
 
-Актуально на: T3.1, d4a2685. Требования: ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06.
+Актуально на: T4.1, 28e1b09. Требования: COL-01, ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06.

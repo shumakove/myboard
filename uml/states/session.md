@@ -32,9 +32,10 @@ stateDiagram-v2
 - Любое поле `password` в `PATCH /api/admin/users/{id}` (даже прежнее значение) отзывает все сессии пользователя (ADM-04); смена только имени или почты их не трогает — выданная ранее сессия продолжает действовать и в `GET /api/session` видит новые данные.
 - Отзыв идёт в той же транзакции, что и правка учётки, и до изменения полей: при отказе `409` (почта занята) не меняются ни пароль, ни сессии. Сессии других пользователей и администратора не затрагиваются.
 - Отозванная сессия: `GET /api/session` → `200 {authenticated: false}`, маршруты с `require_user` → `401`. Открытая вкладка узнаёт об этом сама — опросом (см. «Вкладка пользователя досок», ACC-05).
+- Канал документа `/api/ws?board={id}` (T4.1) принимает только `Active` сессию пользователя досок — владельца живой доски (`realtime.access._owner`). Открытый канал перепроверяет доступ раз в 5 с: выход, смена пароля, отключение учётки, удаление доски закрывают его кодом `4403` не позже чем через 5 с; сброс ссылки канал владельца не трогает.
 - `expires_at` сейчас всегда `NULL`, срок сессии в базе не проверяется. Строка сессии, cookie которой браузер выбросил (`Orphaned`), остаётся в базе — очистки нет.
 
-Актуально на: T1.3, b53b509. Требования: ADM-01, ADM-04, ADM-05, ACC-01, ACC-03.
+Актуально на: T1.3, b53b509; канал WebSocket — T4.1, 28e1b09. Требования: ADM-01, ADM-04, ADM-05, ACC-01, ACC-03, COL-01.
 
 ## Сессия участника по ссылке
 
@@ -44,9 +45,10 @@ stateDiagram-v2
 stateDiagram-v2
   [*] --> Active: POST /api/share/{token}/join {name} → 200 (SHR-02, SHR-03)<br/>create_session(GUEST, uuid4, board_id, display_name):<br/>INSERT sessions, Set-Cookie myboard_board_{board_id.hex} (без Max-Age)
   Active --> Active: GET /api/share/{token}<br/>find_board_session(cookie, board_id) → participant {name}
+  Active --> Active: WS /api/ws?token={token} (T4.1)<br/>authorize → _participant: board_by_token, find_board_session,<br/>перепроверка раз в 5 с
   Active --> Replaced: POST /api/share/{token}/join {name} тем же браузером<br/>delete_session(cookie), затем новая сессия с новым именем
   Replaced --> [*]
-  Active --> [*]: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>delete_board_sessions(board_id): DELETE всех guest-сессий доски
+  Active --> [*]: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>delete_board_sessions(board_id): DELETE всех guest-сессий доски,<br/>Hub.close_participants: открытые каналы → close(4403)
   Active --> Orphaned: браузер закрыт<br/>(cookie без Max-Age)
   Orphaned --> [*]
 ```
@@ -55,9 +57,9 @@ stateDiagram-v2
 - Сессия принимается только на своей доске (`board_id` в условии `find_board_session`) и только по действующему токену: маршрут сначала ищет доску по токену (`board_by_token`), отозванный токен — `404 Link is not available` при любой cookie.
 - После сброса прежняя cookie на новой ссылке даёт `participant: null` — участник снова вводит имя. Сессии владельца и гостей других досок сброс не трогает.
 - Гостевая сессия не является сессией пользователя досок (`find_subject(…, USER)` её не находит): `/api/boards*`, `/api/folders*` → `401`, `/` и `/boards/:id` уводят на `/login`. Учётная запись не создаётся.
-- Строка `Orphaned` остаётся в базе до сброса ссылки доски — отдельной очистки нет. Открытая вкладка участника о сбросе сама не узнаёт: отказ видит при следующем запросе (канала WebSocket ещё нет).
+- Строка `Orphaned` остаётся в базе до сброса ссылки доски — отдельной очистки нет. Открытая вкладка участника узнаёт о сбросе сразу: канал `/api/ws` закрывается кодом `4403`, страница перепроверяет ссылку и показывает Board unavailable (T4.1).
 
-Актуально на: T3.1, d4a2685. Требования: SHR-02, SHR-03, SHR-05, SHR-06.
+Актуально на: T4.1, 28e1b09. Требования: SHR-02, SHR-03, SHR-04, SHR-05, SHR-06.
 
 ## Вкладка пользователя досок
 

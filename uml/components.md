@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`).
 
 ## Сервер `apps/api`
 
@@ -13,7 +13,7 @@ flowchart TB
     migrations["migrations<br/>alembic_config(), upgrade_to_head()"]
     health["health.router<br/>GET /health → Health"]
   end
-  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS,<br/>app.state.admin_login_limiter,<br/>app.state.user_login_limiter"]
+  main["app.main<br/>create_app(settings), lifespan,<br/>API_PREFIX = /api, MODULE_ROUTERS,<br/>app.state.admin_login_limiter,<br/>app.state.user_login_limiter, app.state.hub"]
   subgraph identity [app.identity]
     irouter["router<br/>include_router(admin_router, account_router)"]
     iadmin["admin_router (prefix /admin, тег admin)<br/>POST /login, POST /logout, GET /session,<br/>GET /users, POST /users, PATCH /users/{user_id};<br/>require_admin / AdminDep"]
@@ -32,7 +32,7 @@ flowchart TB
     lfolders["folder_router (prefix /folders, тег library)<br/>GET '' (?q=), POST '',<br/>PUT /{folder_id}/position,<br/>PUT, DELETE /{folder_id}/favorite; UserDep"]
     lerrors["errors<br/>BOARD_NOT_FOUND, FOLDER_NOT_FOUND → 404,<br/>FOLDER_CYCLE → 409, not_found()"]
     lschemas["schemas<br/>BoardOut, BoardCreate, BoardRename, BoardMove,<br/>FolderOut, FolderCreate, FolderMove,<br/>BoardSort (updated | created | title),<br/>Title, DEFAULT_TITLE = Untitled board"]
-    lservice["service<br/>list_boards, recent_boards (RECENT_LIMIT = 8),<br/>get_board, create_board, rename_board,<br/>move_board, delete_board; _owned"]
+    lservice["service<br/>list_boards, recent_boards (RECENT_LIMIT = 8),<br/>get_board, create_board, rename_board,<br/>touch_board, move_board, delete_board; _owned"]
     lfolderSvc["folders<br/>list_folders, get_folder, create_folder,<br/>move_folder; _lock_owned (FOR UPDATE), _is_within;<br/>FolderNotFoundError, FolderCycleError"]
     lfav["favorites<br/>favorite_ids, set_favorite<br/>(INSERT … ON CONFLICT DO NOTHING / DELETE)"]
     lsearch["text_search<br/>contains(): ILIKE, экранирование % _ \\"]
@@ -43,13 +43,21 @@ flowchart TB
     sschemas["schemas<br/>ShareLink {token, url}, SharedBoard {title, participant},<br/>Participant {name}, JoinRequest {name: Name}"]
     sservice["service<br/>new_token (token_urlsafe(32)), board_cookie_name,<br/>current_token, reset_token, board_by_token,<br/>participant, join; TOKEN_MAX_LENGTH = 64"]
   end
+  subgraph realtimeApi [app.realtime]
+    rrouter["router (тег realtime)<br/>WebSocket /ws?board= | ?token=: board_socket,<br/>_same_origin, _receive, _handle, _watch_access;<br/>ACCESS_CHECK_SECONDS = 5,<br/>POLICY_VIOLATION = 1008, INVALID_PAYLOAD = 1007"]
+    raccess["access<br/>AccessRequest {board, token, cookies},<br/>BoardAccess {board_id, guest},<br/>authorize → _owner | _participant"]
+    rprotocol["protocol<br/>MessageType.SYNC, SyncKind STEP1/STEP2/UPDATE,<br/>SyncMessage, encode_sync, decode, ProtocolError"]
+    rhub["hub<br/>Hub: join, leave, persist, close_participants;<br/>ACCESS_REVOKED = 4403, hub_of"]
+    rroom["room<br/>BoardRoom (pycrdt.Doc): state_vector,<br/>missing_since, apply; Peer: send, close;<br/>EMPTY_UPDATE"]
+    rstore["store<br/>load_updates, last_seq, append_update"]
+    rmodels["models<br/>BoardUpdate (board_updates)"]
+  end
   subgraph modules [Модули: пустые APIRouter, маршрутов пока нет]
-    realtime[realtime.router]
     history[history.router]
     media[media.router]
     backup[backup.router]
   end
-  alembic["app.migrations<br/>env.py, versions/0001_baseline, 0002_identity,<br/>0003_library_boards, 0004_library_folders,<br/>0005_sharing_link"]
+  alembic["app.migrations<br/>env.py, versions/0001_baseline, 0002_identity,<br/>0003_library_boards, 0004_library_folders,<br/>0005_sharing_link,<br/>0006_realtime_board_updates"]
   pg[(PostgreSQL)]
 
   entry -->|"1. load_settings()<br/>ошибка → stderr, exit 1"| settings
@@ -64,7 +72,9 @@ flowchart TB
   main -->|"include_router(prefix=/api)"| irouter
   main -->|"include_router(prefix=/api)"| lrouter
   main -->|"include_router(prefix=/api)"| srouter
+  main -->|"include_router(prefix=/api)"| rrouter
   main -->|"include_router(prefix=/api)"| modules
+  main -->|"lifespan: Hub(session_factory)"| rhub
   irouter --> iadmin & iaccount
   iadmin & iaccount --> ihttp & ischemas & iservice & isessions
   iadmin -->|"admin_login_limiter"| ilimit
@@ -95,6 +105,21 @@ flowchart TB
   sschemas -->|"Name"| ischemas
   sservice -->|"create_session(GUEST), find_board_session,<br/>delete_session, delete_board_sessions"| isessions
   sservice -->|"Board.share_token"| lmodels
+  srouter -->|"reset_share_link: close_participants"| rhub
+  rrouter -->|"authorize"| raccess
+  rrouter -->|"decode, encode_sync"| rprotocol
+  rrouter -->|"hub_of: join, leave, persist"| rhub
+  rrouter -->|"apply, missing_since, state_vector"| rroom
+  rrouter -->|"session_factory"| db
+  raccess -->|"find_subject, find_board_session, active_user"| isessions & iservice
+  raccess -->|"get_board"| lservice
+  raccess -->|"board_by_token, board_cookie_name"| sservice
+  rhub --> rroom
+  rhub -->|"load_updates, last_seq, append_update"| rstore
+  rroom -->|"encode_sync, ProtocolError"| rprotocol
+  rstore -->|"touch_board"| lservice
+  rstore --> rmodels
+  rmodels -->|"Base; board_id → boards.id"| db
   db -->|"SQLAlchemy async, psycopg 3"| pg
   alembic -->|"синхронный движок psycopg"| pg
 ```
@@ -108,10 +133,11 @@ flowchart TB
 - `create_folder` и `move_folder` блокируют все папки владельца (`SELECT … FOR UPDATE`): создания и переносы одного владельца идут по очереди. `move_folder` отвергает вложение в себя или потомка (`_is_within`) до изменений, вставляет папку на индекс `position` (больше числа соседей — в конец) и перенумеровывает соседей нового родителя с 0.
 - Лимиты попыток входа в панель и входа пользователя — два отдельных экземпляра `LoginRateLimiter` в `app.state`.
 - `Settings` — семь обязательных переменных (`PUBLIC_BASE_URL`, `SECRET_KEY`, `DATABASE_URL`, `MEDIA_ROOT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `MAX_UPLOAD_BYTES`); пустое значение равно отсутствию. `MAX_UPLOAD_BYTES` > 0, `PUBLIC_BASE_URL` — `http://` или `https://`; свойство `secure_cookies` истинно только для `https://` и задаёт флаг `Secure` cookie сессии.
-- Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`, `0003` — `boards`, `0004` — `folders`, `favorites` и `boards.folder_id`, `0005` — `boards.share_token`, `boards.share_token_revoked_at`, `sessions.board_id`, `sessions.display_name`; `downgrade()` бросает `NotImplementedError`.
-- WebSocket `/api/ws` не реализован (появится в T4.1).
+- Миграции только вперёд: `0001` пустая, `0002` создаёт `admins`, `users`, `sessions`, `0003` — `boards`, `0004` — `folders`, `favorites` и `boards.folder_id`, `0005` — `boards.share_token`, `boards.share_token_revoked_at`, `sessions.board_id`, `sessions.display_name`, `0006` — `board_updates`; `downgrade()` бросает `NotImplementedError`.
+- WebSocket `/api/ws` (тег `realtime`, T4.1): владелец — `?board={id}` с cookie `myboard_session`, участник — `?token={token}` с cookie своей доски; нет права или чужой `Origin` — `403` на рукопожатие. Сообщения `sync` (`STEP1`/`STEP2`/`UPDATE`), коды закрытия `1007` и `4403` — [ws-protocol.md](ws-protocol.md); сценарий — [sequences/sync.md](sequences/sync.md). Один процесс держит все соединения: `Hub` хранит `BoardRoom` открытых досок в памяти и выгружает доску, когда уходит последнее соединение.
+- `POST /api/boards/{board_id}/share/reset` после записи нового токена вызывает `Hub.close_participants` — открытые каналы участников этой доски закрываются `4403` (SHR-06).
 
-Актуально на: T3.1, d4a2685. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (модуль `library`), SHR-01…SHR-03, SHR-05, SHR-06 (модуль `sharing`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 11.
+Актуально на: T4.1, 28e1b09. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (модуль `library`), SHR-01…SHR-03, SHR-05, SHR-06 (модуль `sharing`), COL-01, SHR-04 (канал, модуль `realtime`); каркас — ARCHITECTURE.md, разделы 3, 5, 7, 10, 11.
 
 ## Клиент `apps/web`
 
@@ -124,12 +150,12 @@ flowchart TB
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
     login["LoginPage<br/>/login: Sign in (ACC-01, ACC-02)"]
     boards["BoardsPage<br/>/: Boards, имя, Sign out (ACC-03);<br/>version: перезагрузка списков и дерева после правок;<br/>reveal(folderId), moved(move): раскрыть путь"]
-    board["BoardPage<br/>/boards/:id: название доски или Board unavailable;<br/>кнопка Share → ShareDialog; The canvas is not available yet."]
+    board["BoardPage<br/>/boards/:id: название доски или Board unavailable;<br/>кнопка Share → ShareDialog; BoardLive (owner),<br/>ownerHasAccess: getBoard, 401/404 → false"]
     templates["TemplatesPage<br/>/templates"]
     tcopy["TemplateCopyPage<br/>/t/:token"]
     alogin["AdminLoginPage<br/>/admin/login: Admin sign in"]
     ausers["AdminUsersPage<br/>/admin/users: Users, Sign out"]
-    shared["SharedBoardPage + NameForm<br/>/b/:token: Your name, Join board (SHR-03) →<br/>You joined as …; Board unavailable (SHR-05)"]
+    shared["SharedBoardPage + NameForm<br/>/b/:token: Your name, Join board (SHR-03) →<br/>You joined as …, BoardLive (participant);<br/>Board unavailable (SHR-05); participantHasAccess, recheck"]
     embed["EmbeddedBoardPage<br/>/b/:token/embed"]
     nf["NotFoundPage<br/>любой другой путь: Page not found"]
   end
@@ -176,7 +202,13 @@ flowchart TB
   end
   subgraph realtimeMod [realtime]
     sock["socketUrl.ts<br/>socketUrl(page = window.location):<br/>https: → wss:, иначе ws:; host страницы + /api/ws"]
+    live["BoardLive({target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01)"]
+    useConn["useBoardConnection(target, checkAccess)<br/>{board, status}; boardSocketUrl(target):<br/>?board={id} | ?token={token}"]
+    conn["BoardConnection({doc, url, onStatus, checkAccess})<br/>connecting | online | offline | closed;<br/>retryDelays 500…8000 мс, destroy()"]
+    bdoc["boardDocument.ts<br/>BoardDocument, createBoardDocument():<br/>objects, trash, comments, timer, votes, notes"]
+    msgs["messages.ts<br/>MessageType, SyncKind, CloseCode,<br/>encodeSync, decodeMessage (lib0)"]
   end
+  yjs["yjs, lib0"]
   oas["openapi.json<br/>pnpm api:fetch ← $PUBLIC_BASE_URL/api/openapi.json"]
   server["apps/api: /api/*"]
 
@@ -221,6 +253,14 @@ flowchart TB
   list -->|"listBoards"| libApi
   brow -->|"renameBoard, deleteBoard"| libApi
   board -->|"getBoard"| libApi
+  board & shared --> live
+  shared -->|"onClosed → recheck: openSharedBoard"| sApi
+  live --> useConn
+  useConn --> conn & bdoc
+  useConn -->|"socketUrl"| sock
+  conn --> msgs
+  conn & bdoc & msgs --> yjs
+  conn -->|"WebSocket к происхождению страницы, /api/ws"| server
   tree -->|"listFolders, listBoards"| libApi
   fsearch -->|"listFolders(q)"| libApi
   nfolder -->|"createFolder"| libApi
@@ -249,7 +289,7 @@ flowchart TB
   client -->|"HTTP к происхождению страницы, пути /api/…"| server
 ```
 
-- Потребители `api` — модули `account`, `admin`, `library` и `sharing`; `socketUrl` пока не используется. В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*`, `/api/login`, `/api/logout`, `/api/session`, `/api/boards*`, `/api/folders*` и `/api/share/*` (T3.1). Внешняя библиотека модуля `library` — `@dnd-kit/core` (перетаскивание указателем: мышь, палец, перо).
+- Потребители `api` — модули `account`, `admin`, `library` и `sharing`; `realtime` ходит в API только через WebSocket (`socketUrl` → `boardSocketUrl`), проверку доступа после разрыва ему передают страницы (`checkAccess`). В `schema.d.ts` — `GET /api/health`, маршруты `/api/admin/*`, `/api/login`, `/api/logout`, `/api/session`, `/api/boards*`, `/api/folders*` и `/api/share/*` (T3.1). Внешняя библиотека модуля `library` — `@dnd-kit/core` (перетаскивание указателем: мышь, палец, перо).
 - `libraryApi` переводит ответы в текст: `404` Board not found., `422` Enter a board name up to 200 characters., прочие — Something went wrong. Try again., сетевой сбой — Network error. Try again. `getBoard` отвечает на `422` (неверный формат `id`) тем же Board not found. Поиск, сортировку и фильтр выполняет сервер: `BoardList` передаёт `q` (после паузы 300 мс), `sort` и `modified_since` (Any time, Last 24 hours, Last 7 days, Last 30 days). После переименования, удаления, создания папки, переноса и смены избранного `BoardsPage` увеличивает `version`, и `RecentBoards`, `BoardList` и `useLibraryTree` загружаются заново; пустой блок Recent скрыт.
 - Боковой список (T2.2): дерево строится на клиенте из плоских `GET /api/folders` и `GET /api/boards` (`buildTree`: папки по `position`, в папке — подпапки и её доски; доски верхнего уровня в дереве не показываются). Раздел Favorites — папки и доски с `favorite = true`; папка по нажатию раскрывается в дереве (`reveal`: раскрыть путь, подсветить и сфокусировать). Новая папка свёрнута; развёрнутые папки хранятся в `localStorage` (BRD-11). При запросе в поиске под ним появляется Matching folders (BRD-06).
 - Перетаскивание (BRD-10): ручка `Drag …` у строк All boards, досок и папок дерева. Над строкой папки для папки — верхняя четверть «перед», нижняя «после», середина «внутрь»; для доски — вся строка «внутрь»; свободное место раздела Folders — верхний уровень. `planMove` превращает сброс в `PUT /api/folders/{id}/position` или `PUT /api/boards/{id}/folder`; попытка вложить папку в себя или потомка до запроса даёт `FOLDER_CYCLE` в строке ошибки бокового списка (`role=alert`), ответ `409` сервера — тот же текст. После переноса раскрывается папка назначения.
@@ -258,9 +298,10 @@ flowchart TB
 - `accountApi` показывает одно скупое сообщение для `401` и `422` — Invalid email or password. (ACC-02); `429` — Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
 - `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
 - Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`; `/`, `/boards/:id`, `/templates` обёрнуты в `RequireAccount`: без сессии и после её отзыва — `Redirect /login` (replace). Отзыв замечается опросом `GET /api/session` раз в 2 с у видимой вкладки, сразу при возврате на вкладку и по любому ответу `401`, кроме `POST /api/login` и `/api/admin/*` (ACC-05, состояния — [states/session.md](states/session.md)); `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
-- `/boards/:id` за `RequireAccount` показывает название своей доски (холста пока нет); чужая, удалённая и несуществующая — Board unavailable / Board not found. `/templates` — заглушка за `RequireAccount`; `/t/:token`, `/b/:token/embed` — заглушки без проверки входа. `/b/:token` без `RequireAccount`: сессию участника хранит cookie этой доски, страница узнаёт имя из `GET /api/share/{token}`; холста пока нет.
+- `/boards/:id` за `RequireAccount` показывает название своей доски и строку состояния связи `BoardLive` (холста пока нет, T5.*); чужая, удалённая и несуществующая — Board unavailable / Board not found. `/templates` — заглушка за `RequireAccount`; `/t/:token`, `/b/:token/embed` — заглушки без проверки входа. `/b/:token` без `RequireAccount`: сессию участника хранит cookie этой доски, страница узнаёт имя из `GET /api/share/{token}`, затем открывает `BoardLive` по токену; закрытый без доступа канал (сброс ссылки) ведёт к повторному `GET /api/share/{token}` и Board unavailable без перезагрузки. Холста пока нет.
+- Модуль `realtime` (T4.1): один `Y.Doc` на открытую доску (`useBoardConnection`), `BoardConnection` — провайдер документа поверх `/api/ws` (сценарий — [sequences/sync.md](sequences/sync.md), кадры — [ws-protocol.md](ws-protocol.md)). Внешние библиотеки — `yjs`, `lib0`. Двойник сокета в тестах — `realtime/fakeSocket.ts`.
 - Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts`, `account/fakeAccountServer.ts` и `library/fakeLibraryServer.ts` (подключается к двойнику входа через `extraRoute`).
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T3.1, d4a2685. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
+Актуально на: T4.1, 28e1b09. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски); каркас — ARCHITECTURE.md, разделы 3, 4, 10.
