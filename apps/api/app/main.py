@@ -17,6 +17,7 @@ from app.identity.router import router as identity_router
 from app.identity.service import ensure_first_admin
 from app.library.router import router as library_router
 from app.media.router import router as media_router
+from app.realtime.hub import Hub
 from app.realtime.router import router as realtime_router
 from app.sharing.router import router as sharing_router
 
@@ -46,6 +47,7 @@ def create_app(settings: Settings) -> FastAPI:
         await anyio.to_thread.run_sync(upgrade_to_head, settings.database_url)
         engine = create_engine(settings.database_url)
         app.state.session_factory = create_session_factory(engine)
+        app.state.hub = Hub(app.state.session_factory)
         await ensure_first_admin(
             app.state.session_factory, settings.admin_email, settings.admin_password
         )

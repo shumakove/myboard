@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
-import { errorMessage, getBoard, type Board } from "../library/libraryApi";
+import {
+  errorMessage,
+  getBoard,
+  LibraryApiError,
+  type Board,
+} from "../library/libraryApi";
+import { BoardLive } from "../realtime/BoardLive";
 import { ShareDialog } from "../sharing/ShareDialog";
 import "../account/account.css";
 
@@ -12,7 +18,8 @@ type BoardState =
 /**
  * `/boards/{id}` — своя доска (BRD-01 открывает её сразу после создания).
  * Чужая, удалённая и несуществующая доска одинаково «не найдена». Кнопка Share — ссылка
- * для участников (SHR-01, SHR-06). Холст — T4.1, T5.*.
+ * для участников (SHR-01, SHR-06). Документ доски синхронизируется по `/api/ws` (COL-01);
+ * холст — T5.*.
  */
 export function BoardPage() {
   const { id } = useParams<{ id: string }>();
@@ -60,7 +67,10 @@ export function BoardPage() {
               Share
             </button>
           </p>
-          <p>The canvas is not available yet.</p>
+          <BoardLive
+            target={{ kind: "owner", boardId: state.board.id }}
+            checkAccess={() => ownerHasAccess(state.board.id)}
+          />
           {sharing && (
             <ShareDialog
               boardId={state.board.id}
@@ -73,4 +83,17 @@ export function BoardPage() {
       )}
     </main>
   );
+}
+
+/** После разрыва канала: доска ещё своя и не удалена? Без сессии клиент уводит на /login. */
+async function ownerHasAccess(boardId: string): Promise<boolean> {
+  try {
+    await getBoard(boardId);
+    return true;
+  } catch (err: unknown) {
+    return !(
+      err instanceof LibraryApiError &&
+      (err.status === 401 || err.status === 404)
+    );
+  }
 }

@@ -15,6 +15,7 @@ from app.identity.sessions import set_session_cookie
 from app.library import service as library
 from app.library.errors import BOARD_NOT_FOUND, not_found
 from app.library.models import Board
+from app.realtime.hub import hub_of
 from app.sharing import service
 from app.sharing.schemas import JoinRequest, Participant, SharedBoard, ShareLink
 
@@ -60,7 +61,9 @@ async def reset_share_link(
 ) -> ShareLink:
     """SHR-06: новая ссылка; прежняя и сессии, выданные по ней, больше не действуют."""
     board = await _owned_board(db, user.id, board_id)
-    return _link(request, await service.reset_token(db, board))
+    token = await service.reset_token(db, board)
+    await hub_of(request).close_participants(board.id)
+    return _link(request, token)
 
 
 @router.get("/share/{token}", responses=_LINK_UNAVAILABLE)

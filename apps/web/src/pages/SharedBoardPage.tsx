@@ -1,4 +1,4 @@
-import { useEffect, useState, type SubmitEvent } from "react";
+import { useCallback, useEffect, useState, type SubmitEvent } from "react";
 import { useParams } from "wouter";
 import {
   joinSharedBoard,
@@ -8,6 +8,7 @@ import {
   sharingErrorMessage,
   type SharedBoard,
 } from "../sharing/sharingApi";
+import { BoardLive } from "../realtime/BoardLive";
 import "../account/account.css";
 
 type PageState =
@@ -19,7 +20,8 @@ type PageState =
 /**
  * `/b/{token}` — участник по ссылке без учётной записи (SHR-02): сначала имя на сессию
  * (SHR-03), затем доска. Отозванная и несуществующая ссылка — один отказ (SHR-05).
- * Холст — T4.1, T5.*; переход к объекту `?object={id}` — SHR-07, T5.5.
+ * Документ доски синхронизируется по `/api/ws` с теми же правами, что у владельца
+ * (COL-01, SHR-04); холст — T5.*; переход к объекту `?object={id}` — SHR-07, T5.5.
  */
 export function SharedBoardPage() {
   const { token } = useParams<{ token: string }>();
@@ -37,6 +39,19 @@ export function SharedBoardPage() {
     return () => {
       active = false;
     };
+  }, [token]);
+
+  // Канал закрыт без доступа (сброс ссылки, сессия отозвана): заново спросить сервер,
+  // чтобы показать отказ или форму имени.
+  const recheck = useCallback(() => {
+    openSharedBoard(token).then(
+      (board) => {
+        setState({ status: "ready", board });
+      },
+      (err: unknown) => {
+        setState(failure(err));
+      },
+    );
   }, [token]);
 
   if (state.status === "loading") {
@@ -74,11 +89,24 @@ export function SharedBoardPage() {
       ) : (
         <>
           <p>You joined as {board.participant.name}.</p>
-          <p>The canvas is not available yet.</p>
+          <BoardLive
+            target={{ kind: "participant", token }}
+            checkAccess={() => participantHasAccess(token)}
+            onClosed={recheck}
+          />
         </>
       )}
     </main>
   );
+}
+
+/** После разрыва канала: ссылка действует и сессия участника жива? */
+async function participantHasAccess(token: string): Promise<boolean> {
+  try {
+    return (await openSharedBoard(token)).participant !== null;
+  } catch (err: unknown) {
+    return !(err instanceof SharingApiError && err.status === 404);
+  }
 }
 
 function failure(err: unknown): PageState {

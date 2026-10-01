@@ -1,15 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { board } from "../library/fakeLibraryServer";
 import { AppRoutes } from "../routes";
+
 import {
   BASE_URL,
   installFakeSharingServer,
   stubCopyCommand,
 } from "./fakeSharingServer";
+
+// На странице доски есть и строка состояния связи — сообщения ищутся в диалоге.
+const dialog = () => screen.getByRole("dialog", { name: "Share board" });
 
 function openBoard(id = "b-1") {
   const location = memoryLocation({ path: `/boards/${id}` });
@@ -69,7 +73,9 @@ describe("диалог Share на /boards/{id} (SHR-01, SHR-06)", () => {
     expect(copyCommand).toHaveBeenCalledWith("copy");
     expect(field.selectionStart).toBe(0);
     expect(field.selectionEnd).toBe(field.value.length);
-    expect(await screen.findByRole("status")).toHaveTextContent("Link copied.");
+    expect(await within(dialog()).findByRole("status")).toHaveTextContent(
+      "Link copied.",
+    );
   });
 
   it("SHR-01: если копирование недоступно — просит скопировать вручную", async () => {
@@ -103,7 +109,7 @@ describe("диалог Share на /boards/{id} (SHR-01, SHR-06)", () => {
     const renewed = `${BASE_URL}/b/${server.links["b-1"] ?? ""}`;
     expect(server.links["b-1"]).not.toBe("tok-1");
     expect(await screen.findByDisplayValue(renewed)).toBe(field);
-    expect(screen.getByRole("status")).toHaveTextContent(
+    expect(within(dialog()).getByRole("status")).toHaveTextContent(
       "The previous link no longer works.",
     );
     expect(screen.queryByRole("group", { name: "Confirm reset" })).toBeNull();

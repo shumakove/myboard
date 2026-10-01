@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.folders import FolderNotFoundError, get_folder
@@ -75,6 +75,11 @@ async def rename_board(
     await db.commit()
     await db.refresh(board)
     return board
+
+
+async def touch_board(db: AsyncSession, board_id: uuid.UUID) -> None:
+    """BRD-04: принятая правка документа поднимает доску в «недавних» (без commit)."""
+    await db.execute(update(Board).where(Board.id == board_id).values(updated_at=func.now()))
 
 
 async def move_board(
