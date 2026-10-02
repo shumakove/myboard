@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { BoardConnection, type ConnectionStatus } from "./boardConnection";
+import { BoardPresence } from "./boardPresence";
 import { createBoardDocument, type BoardDocument } from "./boardDocument";
 import { socketUrl, type PageAddress } from "./socketUrl";
 
@@ -20,20 +21,25 @@ export function boardSocketUrl(
 }
 
 /**
- * Документ доски, синхронизированный с сервером (COL-01), и состояние связи.
+ * Документ доски, синхронизированный с сервером (COL-01), присутствие на доске
+ * (COL-02…COL-04, COL-09) и состояние связи.
  * `checkAccess` вызывается после разрыва: `false` — доступа нет, переподключения не будет.
  */
 export function useBoardConnection(
   target: BoardTarget,
   checkAccess: () => Promise<boolean>,
-): { board: BoardDocument; status: ConnectionStatus } {
+): {
+  board: BoardDocument;
+  presence: BoardPresence;
+  status: ConnectionStatus;
+} {
   const url = boardSocketUrl(target);
   const [state, setState] = useState(() => initialState(url));
   if (state.url !== url) {
     // Другая доска — своя копия документа (обновление состояния при смене свойства).
     setState(initialState(url));
   }
-  const { board } = state;
+  const { board, presence } = state;
   const checkAccessRef = useRef(checkAccess);
   useEffect(() => {
     checkAccessRef.current = checkAccess;
@@ -43,6 +49,7 @@ export function useBoardConnection(
     const connection = new BoardConnection({
       doc: board.doc,
       url,
+      presence,
       onStatus: (status) => {
         setState((current) =>
           current.board === board ? { ...current, status } : current,
@@ -53,17 +60,23 @@ export function useBoardConnection(
     return () => {
       connection.destroy();
     };
-  }, [board, url]);
+  }, [board, presence, url]);
 
-  return { board, status: state.status };
+  return { board, presence, status: state.status };
 }
 
 interface ConnectionState {
   url: string;
   board: BoardDocument;
+  presence: BoardPresence;
   status: ConnectionStatus;
 }
 
 function initialState(url: string): ConnectionState {
-  return { url, board: createBoardDocument(), status: "connecting" };
+  return {
+    url,
+    board: createBoardDocument(),
+    presence: new BoardPresence(),
+    status: "connecting",
+  };
 }

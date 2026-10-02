@@ -63,14 +63,17 @@ describe("маршруты интерфейса (ARCHITECTURE.md, раздел 4
     [`/b/${token}`, "Shared board"],
     [`/b/${token}/embed`, "Embedded board"],
     [`/b/${token}?object=obj-1`, "Shared board"],
-  ])("%s открывает страницу «%s» без ошибок в консоли", (path, title) => {
+  ])("%s открывает страницу «%s» без ошибок в консоли", async (path, title) => {
     const consoleError = vi.spyOn(console, "error");
     const consoleWarn = vi.spyOn(console, "warn");
 
     openPath(path);
 
+    // Страницы пользователя досок появляются после проверки сессии, остальные — сразу.
+    const heading = { level: 1, name: title } as const;
     expect(
-      screen.getByRole("heading", { level: 1, name: title }),
+      screen.queryByRole("heading", heading) ??
+        (await screen.findByRole("heading", heading)),
     ).toBeInTheDocument();
     expect(consoleError).not.toHaveBeenCalled();
     expect(consoleWarn).not.toHaveBeenCalled();

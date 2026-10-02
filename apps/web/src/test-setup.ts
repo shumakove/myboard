@@ -7,6 +7,8 @@ afterEach(cleanup);
 
 // jsdom не прокручивает: боковой список вызывает scrollIntoView у найденной папки.
 Element.prototype.scrollIntoView = () => undefined;
+// jsdom не реализует захват указателя: холст захватывает его при перетаскивании вида.
+Element.prototype.setPointerCapture = () => undefined;
 
 // Страницы доски открывают канал /api/ws: в тестах — двойник без сети.
 globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;

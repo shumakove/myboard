@@ -217,10 +217,18 @@
 }
 
 .library-drag {
-  padding: 4px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* BUG-001: сенсорная цель не меньше 44×44 px — пальцем попасть так же легко, как мышью */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   border: 0;
   background: none;
   color: #888;
+  font-size: 1.25rem;
   cursor: grab;
   touch-action: none; /* BRD-10: палец тянет ручку, а не прокручивает страницу */
 }

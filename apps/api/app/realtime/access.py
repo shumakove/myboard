@@ -31,6 +31,8 @@ class AccessRequest:
 class BoardAccess:
     board_id: uuid.UUID
     guest: bool
+    # Имя для присутствия и курсора (COL-02): имя учётки владельца или имя участника.
+    name: str
 
 
 async def authorize(db: AsyncSession, request: AccessRequest) -> BoardAccess | None:
@@ -51,7 +53,7 @@ async def _owner(db: AsyncSession, board: str, cookies: Mapping[str, str]) -> Bo
     user = await identity.active_user(db, user_id) if user_id is not None else None
     if user is None or await library.get_board(db, user.id, board_id) is None:
         return None
-    return BoardAccess(board_id, guest=False)
+    return BoardAccess(board_id, guest=False, name=user.name)
 
 
 async def _participant(
@@ -61,6 +63,7 @@ async def _participant(
     if board is None:
         return None
     cookie = cookies.get(sharing.board_cookie_name(board.id))
-    if await find_board_session(db, cookie, board.id) is None:
+    session = await find_board_session(db, cookie, board.id)
+    if session is None:
         return None
-    return BoardAccess(board.id, guest=True)
+    return BoardAccess(board.id, guest=True, name=session.display_name or "")
