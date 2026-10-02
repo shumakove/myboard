@@ -1,9 +1,11 @@
 import * as Y from "yjs";
+import type { BoardPresence } from "./boardPresence";
 import {
   decodeMessage,
+  encodeAwareness,
   encodeSync,
   SyncKind,
-  type SyncMessage,
+  type ServerMessage,
 } from "./messages";
 
 /**
@@ -17,6 +19,8 @@ export type ConnectionStatus = "connecting" | "online" | "offline" | "closed";
 export interface BoardConnectionOptions {
   doc: Y.Doc;
   url: string;
+  /** Присутствие и курсоры (COL-02…COL-04, COL-09) по тому же каналу. */
+  presence?: BoardPresence;
   onStatus?: (status: ConnectionStatus) => void;
   /** После разрыва: есть ли ещё доступ к доске. `false` останавливает переподключение. */
   checkAccess?: () => Promise<boolean>;
@@ -54,6 +58,7 @@ export class BoardConnection {
     this.stop();
     this.socket?.close(1000);
     this.socket = null;
+    this.options.presence?.detach();
   }
 
   private connect(): void {
@@ -63,6 +68,11 @@ export class BoardConnection {
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
       this.send(socket, SyncKind.Step1, Y.encodeStateVector(this.options.doc));
+      this.options.presence?.attach((state) => {
+        if (socket.readyState === SOCKET_OPEN) {
+          socket.send(encodeAwareness(state));
+        }
+      });
     };
     socket.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
@@ -72,19 +82,24 @@ export class BoardConnection {
     socket.onclose = () => {
       if (this.socket !== socket) return;
       this.socket = null;
+      this.options.presence?.detach();
       void this.afterDisconnect();
     };
     this.socket = socket;
   }
 
   private receive(socket: WebSocket, frame: Uint8Array): void {
-    let message: SyncMessage | null;
+    let message: ServerMessage | null;
     try {
       message = decodeMessage(frame);
     } catch {
       message = null;
     }
     if (message === null) return;
+    if (message.type !== "sync") {
+      this.options.presence?.receive(message);
+      return;
+    }
     const { doc } = this.options;
     if (message.kind === SyncKind.Step1) {
       // Сервер просит недостающее: сюда попадают и правки, сделанные без связи.

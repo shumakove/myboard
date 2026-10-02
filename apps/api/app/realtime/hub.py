@@ -52,6 +52,8 @@ class Hub:
             return
         for peer in [peer for peer in room.peers if peer.guest]:
             await peer.close(ACCESS_REVOKED)
+        # Не ждём, пока закрытые соединения дочитают: участники пропадают из списка сразу.
+        await room.announce_leave()
 
 
 def hub_of(connection: HTTPConnection) -> Hub:

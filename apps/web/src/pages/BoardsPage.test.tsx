@@ -59,6 +59,17 @@ describe("/ — доступ пользователя досок (ACC-03)", () =
     expect(location.history.at(-1)).toBe("/login");
   });
 
+  it("BUG-002: без сессии не запрашивает доски и папки до ухода на /login", async () => {
+    const { account } = installFakeLibraryServer({ signedIn: false });
+    openAt("/");
+
+    expect(
+      await screen.findByRole("button", { name: "Sign in" }),
+    ).toBeInTheDocument();
+    const paths = account.calls.map((call) => call.path);
+    expect(paths.filter((path) => path !== "/api/session")).toEqual([]);
+  });
+
   it("выход завершает сессию и возвращает на /login", async () => {
     const { account } = installFakeLibraryServer();
     const location = openAt("/");
@@ -102,9 +113,11 @@ describe("/ — доступ пользователя досок (ACC-03)", () =
     installFakeLibraryServer({ failingPaths: ["/api/boards"] });
     const location = openAt("/");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Something went wrong. Try again.",
-    );
+    // Список и боковое дерево загружают доски одновременно — ошибку показывают оба.
+    const alerts = await screen.findAllByRole("alert");
+    for (const alert of alerts) {
+      expect(alert).toHaveTextContent("Something went wrong. Try again.");
+    }
     expect(screen.getByText(USER.name)).toBeInTheDocument();
     expect(location.history.at(-1)).toBe("/");
   });

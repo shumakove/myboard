@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { BoardConnection, type ConnectionStatus } from "./boardConnection";
+import { AWARENESS_INTERVAL_MS, BoardPresence } from "./boardPresence";
 import { createBoardDocument, type BoardDocument } from "./boardDocument";
-import { FakeBoardServer, FakeSocket } from "./fakeSocket";
-import { decodeMessage, SyncKind } from "./messages";
+import { decodeClientFrame, FakeBoardServer, FakeSocket } from "./fakeSocket";
+import { SyncKind } from "./messages";
 
 interface Client {
   board: BoardDocument;
+  presence: BoardPresence;
   connection: BoardConnection;
   statuses: ConnectionStatus[];
 }
@@ -15,16 +17,18 @@ function connect(
   checkAccess: () => Promise<boolean> = () => Promise.resolve(true),
 ): Client {
   const board = createBoardDocument();
+  const presence = new BoardPresence();
   const statuses: ConnectionStatus[] = [];
   const connection = new BoardConnection({
     doc: board.doc,
     url: "ws://192.168.1.20:8080/api/ws?board=b-1",
+    presence,
     onStatus: (status) => statuses.push(status),
     checkAccess,
     createSocket: (url) => new FakeSocket(url) as unknown as WebSocket,
     retryDelays: [100],
   });
-  return { board, connection, statuses };
+  return { board, presence, connection, statuses };
 }
 
 function addSticker(board: BoardDocument): Y.Map<unknown> {
@@ -157,7 +161,75 @@ describe("BoardConnection — синхронизация документа до
     addSticker(client.board);
 
     expect(socket.readyState).toBe(3);
-    const kinds = socket.sent.map((frame) => decodeMessage(frame)?.kind);
-    expect(kinds).not.toContain(SyncKind.Update);
+    const updates = socket.sent
+      .map(decodeClientFrame)
+      .filter((m) => m.type === "sync" && m.kind === SyncKind.Update);
+    expect(updates).toEqual([]);
+  });
+});
+
+describe("BoardConnection — присутствие (COL-02, COL-09)", () => {
+  let server: FakeBoardServer;
+
+  beforeEach(() => {
+    FakeSocket.instances = [];
+    server = new FakeBoardServer();
+    // Своё состояние уходит не чаще AWARENESS_INTERVAL_MS.
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("второй клиент видит первого в списке и его курсор; после отключения — нет", () => {
+    const owner = connect();
+    server.accept(FakeSocket.last(), "Alice");
+    const ownerSocket = FakeSocket.last();
+    const guest = connect();
+    server.accept(FakeSocket.last(), "Kate");
+
+    owner.presence.setLocal({ cursor: { x: 40, y: 50 } });
+    vi.advanceTimersByTime(AWARENESS_INTERVAL_MS);
+
+    const seen = guest.presence.getSnapshot().peers;
+    expect(seen.map((p) => [p.name, p.self])).toEqual([
+      ["Alice", false],
+      ["Kate", true],
+    ]);
+    expect(seen[0]?.state.cursor).toEqual({ x: 40, y: 50 });
+
+    server.disconnect(ownerSocket);
+    expect(guest.presence.getSnapshot().peers.map((p) => p.name)).toEqual([
+      "Kate",
+    ]);
+  });
+
+  it("поздно вошедший сразу видит курсор того, кто уже на доске", () => {
+    const owner = connect();
+    server.accept(FakeSocket.last(), "Alice");
+    owner.presence.setLocal({ cursor: { x: 1, y: 2 } });
+    vi.advanceTimersByTime(AWARENESS_INTERVAL_MS);
+
+    const late = connect();
+    server.accept(FakeSocket.last(), "Kate");
+
+    expect(late.presence.getSnapshot().peers[0]?.state.cursor).toEqual({
+      x: 1,
+      y: 2,
+    });
+  });
+
+  it("присутствие не попадает в документ доски", () => {
+    const owner = connect();
+    server.accept(FakeSocket.last(), "Alice");
+    owner.presence.setLocal({ cursor: { x: 1, y: 2 } });
+
+    const frames = FakeSocket.last().sent.map(decodeClientFrame);
+    expect(frames.some((f) => f.type === "awareness")).toBe(true);
+    expect(
+      frames.filter((f) => f.type === "sync" && f.kind === SyncKind.Update),
+    ).toEqual([]);
+    expect(server.doc.share.size).toBe(0);
   });
 });

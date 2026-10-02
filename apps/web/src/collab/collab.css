@@ -1,0 +1,93 @@
+/* Холст и панель присутствия: на узком экране панель уходит под холст. */
+.board-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .board-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.board-stage {
+  position: relative;
+  border-radius: 8px;
+}
+
+.board-stage[data-following] {
+  outline: 3px solid;
+}
+
+.follow-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 6px 4px 12px;
+  border-radius: 6px;
+  background: #222;
+  color: #fff;
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.remote-cursor {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+
+.remote-cursor-name {
+  margin: 14px 0 0 -4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.presence h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.presence ul {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.presence li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.presence-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.presence-name {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.presence-note {
+  color: #666;
+  font-size: 0.875em;
+}

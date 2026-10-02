@@ -1,10 +1,12 @@
-"""Модуль realtime: синхронизация документа доски по WebSocket `/api/ws` (COL-01, SHR-04, SHR-06).
+"""Модуль realtime: синхронизация документа доски по WebSocket `/api/ws` (COL-01, SHR-04, SHR-06),
+присутствие и курсоры (COL-02…COL-04, COL-09).
 
 Клиенты эмулируются документом `pycrdt` и кадрами y-protocols (как у `yjs` в браузере).
 Все «браузеры» работают через один TestClient — одно приложение и один цикл событий;
 cookie каждого браузера передаются явно.
 """
 
+import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -31,6 +33,8 @@ ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 ALICE = {"name": "Alice", "email": "alice@example.com", "password": "alice-pw"}
 BOB = {"name": "Bob", "email": "bob@example.com", "password": "bob-pw"}
 
+SYNC, AWARENESS, PRESENCE = 0, 1, 2
+
 POLICY_VIOLATION = 1008
 INVALID_PAYLOAD = 1007
 ACCESS_REVOKED = 4403
@@ -44,6 +48,10 @@ def create_sync_step1_message(state: bytes) -> bytes:
 
 def create_sync_step2_message(update: bytes) -> bytes:
     return bytes([0, YSyncMessageType.SYNC_STEP2]) + write_message(update)
+
+
+def create_awareness_message(state: Any) -> bytes:
+    return bytes([AWARENESS]) + write_message(json.dumps(state).encode())
 
 
 def _cookie_header(cookies: Cookies) -> dict[str, str]:
@@ -109,12 +117,18 @@ def kate(client: TestClient, link: str) -> Cookies:
 
 
 class YClient:
-    """Браузер с документом доски: рукопожатие sync, правки и приём чужих правок."""
+    """Браузер с документом доски: рукопожатие sync, правки и приём чужих правок.
+
+    Кадры присутствия, пришедшие во время ожидания sync, складываются в `presence`
+    и `awareness` по порядку прихода.
+    """
 
     def __init__(self, websocket: WebSocketTestSession) -> None:
         self.ws = websocket
         self.doc: Doc[Any] = Doc()
         self.objects = self.doc.get("objects", type=Map)
+        self.presence: list[dict[str, Any]] = []
+        self.awareness: list[dict[str, Any]] = []
 
     def handshake(self) -> None:
         # Сервер первым присылает свой вектор версии; клиент досылает, чего у сервера нет.
@@ -127,11 +141,38 @@ class YClient:
         self.doc.apply_update(missing)
 
     def receive(self) -> tuple[int, bytes]:
-        frame = self.ws.receive_bytes()
-        assert frame[0] == 0  # sync
-        payload = Decoder(frame[2:]).read_message()
+        """Следующий кадр sync: (подтип, байты)."""
+        while True:
+            frame = self.ws.receive_bytes()
+            if frame[0] == SYNC:
+                payload = Decoder(frame[2:]).read_message()
+                assert payload is not None
+                return frame[1], payload
+            self._keep(frame)
+
+    def _keep(self, frame: bytes) -> None:
+        payload = Decoder(frame[1:]).read_message()
         assert payload is not None
-        return frame[1], payload
+        message: dict[str, Any] = json.loads(payload)
+        if frame[0] == PRESENCE:
+            self.presence.append(message)
+        else:
+            assert frame[0] == AWARENESS
+            self.awareness.append(message)
+
+    def next_presence(self) -> dict[str, Any]:
+        """Ближайший ещё не просмотренный кадр presence (ждёт, если его нет)."""
+        while not self.presence:
+            self._keep(self.ws.receive_bytes())
+        return self.presence.pop(0)
+
+    def next_awareness(self) -> dict[str, Any]:
+        while not self.awareness:
+            self._keep(self.ws.receive_bytes())
+        return self.awareness.pop(0)
+
+    def send_awareness(self, state: Any) -> None:
+        self.ws.send_bytes(create_awareness_message(state))
 
     def receive_update(self) -> None:
         kind, update = self.receive()
@@ -326,6 +367,12 @@ def test_corrupted_update_closes_only_sender(
         b"\x00\x02\x10abc",  # длина больше кадра
         b"\x00\x02\x02\x00\x00\xff",  # лишние байты
         b"\x00\x00\x01\xff",  # повреждённый вектор версии
+        b"\x02\x02{}",  # presence шлёт только сервер
+        b"\x01\x03abc",  # awareness не JSON
+        b"\x01\x02[]",  # awareness не объект
+        b'\x01\x0a{"x": NaN}',  # NaN — не JSON
+        b"\x01\x02{}\x00",  # лишние байты после awareness
+        create_awareness_message({"pad": "x" * 5000}),  # слишком большое состояние
     ],
 )
 def test_malformed_frame_closes_connection(
@@ -433,3 +480,154 @@ def test_foreign_page_cannot_open_channel(client: TestClient, alice: Cookies, bo
     same_origin = _cookie_header(alice) | {"origin": "http://testserver"}
     with client.websocket_connect(f"/api/ws?board={board}", headers=same_origin) as ws:
         YClient(ws).handshake()
+
+
+# --- Присутствие и курсоры (COL-02…COL-04, COL-09) -----------------------------------
+
+
+def _names(presence: dict[str, Any]) -> list[str]:
+    return sorted(peer["name"] for peer in presence["peers"])
+
+
+def test_col09_everyone_on_board_is_listed_until_they_leave(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        alone = owner.next_presence()
+        assert alone["peers"] == [{"peer": alone["self"], "name": "Alice"}]
+
+        # Каждый вход и выход — один новый список у каждого присутствующего.
+        with _connect(client, f"token={link}", kate) as guest:
+            seen_by_guest = guest.next_presence()
+            seen_by_owner = owner.next_presence()
+            assert _names(seen_by_guest) == _names(seen_by_owner) == ["Alice", "Kate"]
+            # Каждый узнаёт свой id в списке, у всех один и тот же список.
+            assert seen_by_guest["peers"] == seen_by_owner["peers"]
+            assert seen_by_guest["self"] != seen_by_owner["self"]
+
+        # Отключение — участник пропадает из списка у оставшихся.
+        assert owner.next_presence()["peers"] == [{"peer": alone["self"], "name": "Alice"}]
+
+
+def test_col02_cursor_and_name_reach_other_participant(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        kate_id = guest.next_presence()["self"]
+        state = {"cursor": {"x": 120.5, "y": -40}, "camera": {"x": 0, "y": 0, "zoom": 1}}
+        guest.send_awareness(state)
+
+        assert owner.next_awareness() == {"peer": kate_id, "name": "Kate", "state": state}
+
+        # Курсор владельца тоже виден участнику; своё состояние отправителю не возвращается.
+        owner.send_awareness({"cursor": {"x": 1, "y": 2}})
+        received = guest.next_awareness()
+        assert received["name"] == "Alice"
+        assert received["state"] == {"cursor": {"x": 1, "y": 2}}
+        guest.flush()
+        owner.flush()
+        assert guest.awareness == []
+        assert owner.awareness == []
+
+
+def test_col02_name_comes_from_session_not_from_client(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.send_awareness({"name": "Alice", "cursor": {"x": 0, "y": 0}})
+        assert owner.next_awareness()["name"] == "Kate"
+
+
+def test_col02_late_participant_sees_current_cursors(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        owner_id = owner.next_presence()["self"]
+        owner.send_awareness({"cursor": {"x": 5, "y": 6}})
+        owner.flush()
+        with _connect(client, f"token={link}", kate) as late:
+            assert late.next_awareness() == {
+                "peer": owner_id,
+                "name": "Alice",
+                "state": {"cursor": {"x": 5, "y": 6}},
+            }
+
+
+def test_col04_followed_participant_camera_reaches_follower(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        kate_id = guest.next_presence()["self"]
+        owner_id = owner.next_presence()["self"]
+        # Владелец следит за участником; каждое перемещение вида участника доходит до него.
+        owner.send_awareness({"following": kate_id})
+        assert guest.next_awareness()["state"] == {"following": kate_id}
+        for x in (100, 250):
+            guest.send_awareness({"camera": {"x": x, "y": 10, "zoom": 2}})
+            message = owner.next_awareness()
+            assert message["peer"] == kate_id
+            assert message["state"]["camera"] == {"x": x, "y": 10, "zoom": 2}
+        owner.send_awareness({"following": None})
+        assert guest.next_awareness() == {
+            "peer": owner_id,
+            "name": "Alice",
+            "state": {"following": None},
+        }
+
+
+def test_presence_stays_out_of_document_and_journal(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.send_awareness({"cursor": {"x": 1, "y": 1}, "following": None})
+        owner.next_awareness()
+        owner.flush()
+        assert (
+            _sql(settings, "SELECT count(*) FROM board_updates WHERE board_id = :id", id=board) == 0
+        )
+        with _connect(client, f"board={board}", alice) as late:
+            assert late.doc.get_update() == Doc().get_update()
+
+
+def test_presence_does_not_leak_to_other_boards(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    other = client.post("/api/boards", json={"title": "Other"}, headers=_cookie_header(alice))
+    other_board = other.json()["id"]
+    with (
+        _connect(client, f"board={other_board}", alice) as elsewhere,
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.send_awareness({"cursor": {"x": 3, "y": 3}})
+        owner.next_awareness()
+        elsewhere.flush()
+        assert elsewhere.awareness == []
+        assert _names(elsewhere.next_presence()) == ["Alice"]
+        assert elsewhere.presence == []
+
+
+def test_participant_closed_by_link_reset_leaves_presence(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        owner.next_presence()  # пока один
+        assert _names(owner.next_presence()) == ["Alice", "Kate"]
+        client.post(f"/api/boards/{board}/share/reset", headers=_cookie_header(alice))
+        assert _closed_with(guest) == ACCESS_REVOKED
+        assert _names(owner.next_presence()) == ["Alice"]

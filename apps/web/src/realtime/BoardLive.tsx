@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { BoardWorkspace } from "../collab/BoardWorkspace";
 import type { ConnectionStatus } from "./boardConnection";
 import { useBoardConnection, type BoardTarget } from "./useBoardConnection";
 
@@ -11,8 +12,9 @@ const STATUS_TEXT: Record<ConnectionStatus, string> = {
 };
 
 /**
- * Совместная работа на доске (COL-01): держит канал документа и показывает состояние связи.
- * Холст появится в T5.*.
+ * Совместная работа на доске: держит канал документа (COL-01), показывает состояние связи,
+ * холст с курсорами участников и список присутствующих (COL-02…COL-04, COL-09).
+ * Объекты на холсте появятся в T5.*.
  */
 export function BoardLive({
   target,
@@ -23,15 +25,18 @@ export function BoardLive({
   checkAccess: () => Promise<boolean>;
   onClosed?: () => void;
 }) {
-  const { status } = useBoardConnection(target, checkAccess);
+  const { presence, status } = useBoardConnection(target, checkAccess);
 
   useEffect(() => {
     if (status === "closed") onClosed?.();
   }, [status, onClosed]);
 
   return (
-    <p role="status" data-status={status}>
-      {STATUS_TEXT[status]}
-    </p>
+    <>
+      <p role="status" data-status={status}>
+        {STATUS_TEXT[status]}
+      </p>
+      {status !== "closed" && <BoardWorkspace presence={presence} />}
+    </>
   );
 }

@@ -1,4 +1,5 @@
-"""WebSocket `/api/ws` — канал документа доски (COL-01; канал для SHR-04).
+"""WebSocket `/api/ws` — канал документа доски (COL-01; канал для SHR-04) и присутствия
+(COL-02…COL-04, COL-09).
 
 Подключение: `/api/ws?board={id}` — владелец с сессией пользователя досок,
 `/api/ws?token={token}` — участник по ссылке с cookie этой доски. Без права на доску
@@ -14,7 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.realtime.access import AccessRequest, authorize
 from app.realtime.hub import ACCESS_REVOKED, Hub, hub_of
-from app.realtime.protocol import ProtocolError, SyncKind, SyncMessage, decode, encode_sync
+from app.realtime.protocol import (
+    AwarenessMessage,
+    ClientMessage,
+    ProtocolError,
+    SyncKind,
+    decode,
+    encode_sync,
+)
 from app.realtime.room import BoardRoom, Peer
 
 router = APIRouter(tags=["realtime"])
@@ -45,16 +53,18 @@ async def board_socket(
 
     await websocket.accept()
     hub = hub_of(websocket)
-    peer = Peer(websocket, guest=access.guest)
+    peer = Peer(websocket, name=access.name, guest=access.guest)
     room = await hub.join(access.board_id, peer)
-    watcher = asyncio.create_task(_watch_access(peer, request, factory))
+    watcher = asyncio.create_task(_watch_access(peer, room, request, factory))
     try:
         # Вектор версии сервера: клиент в ответ досылает правки, которых нет у сервера.
         await peer.send(encode_sync(SyncKind.STEP1, room.state_vector()))
+        await room.announce(peer)
         await _receive(websocket, peer, room, hub)
     finally:
         watcher.cancel()
         await hub.leave(room, peer)
+        await room.announce_leave()
 
 
 def _same_origin(websocket: WebSocket) -> bool:
@@ -82,15 +92,20 @@ async def _receive(websocket: WebSocket, peer: Peer, room: BoardRoom, hub: Hub) 
             return
 
 
-async def _handle(message: SyncMessage, peer: Peer, room: BoardRoom, hub: Hub) -> None:
-    if message.kind is SyncKind.STEP1:
+async def _handle(message: ClientMessage, peer: Peer, room: BoardRoom, hub: Hub) -> None:
+    if isinstance(message, AwarenessMessage):
+        await room.update_awareness(peer, message.state)
+    elif message.kind is SyncKind.STEP1:
         await peer.send(encode_sync(SyncKind.STEP2, room.missing_since(message.payload)))
     else:
         await room.apply(message.payload, peer, hub.persist)
 
 
 async def _watch_access(
-    peer: Peer, request: AccessRequest, factory: async_sessionmaker[AsyncSession]
+    peer: Peer,
+    room: BoardRoom,
+    request: AccessRequest,
+    factory: async_sessionmaker[AsyncSession],
 ) -> None:
     while True:
         await asyncio.sleep(ACCESS_CHECK_SECONDS)
@@ -101,4 +116,5 @@ async def _watch_access(
             continue  # база недоступна — это не отзыв доступа
         if not allowed:
             await peer.close(ACCESS_REVOKED)
+            await room.announce_leave()
             return

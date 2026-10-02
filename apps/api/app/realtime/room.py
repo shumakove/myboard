@@ -2,10 +2,14 @@
 
 Сервер не интерпретирует правки: он применяет обновление Yjs к своей копии (`pycrdt`),
 дописывает его в журнал и только потом рассылает остальным соединениям доски.
+
+Присутствие (COL-02…COL-04, COL-09) живёт только в памяти соединений: состояние
+awareness не попадает ни в документ, ни в журнал и пропадает вместе с соединением.
 """
 
 import asyncio
 import contextlib
+import secrets
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
@@ -13,7 +17,14 @@ from typing import Any
 from pycrdt import Doc
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from app.realtime.protocol import ProtocolError, SyncKind, encode_sync
+from app.realtime.protocol import (
+    PresencePeer,
+    ProtocolError,
+    SyncKind,
+    encode_awareness,
+    encode_presence,
+    encode_sync,
+)
 
 # Обновление без изменений (пустые структуры и набор удалений) — так отвечает клиент,
 # у которого нет ничего нового. В журнал и рассылку оно не попадает.
@@ -26,8 +37,13 @@ Persist = Callable[[uuid.UUID, int, bytes], Awaitable[None]]
 class Peer:
     """Одно соединение доски. Ошибки отправки не роняют рассылку другим."""
 
-    def __init__(self, websocket: WebSocket, *, guest: bool) -> None:
+    def __init__(self, websocket: WebSocket, *, name: str, guest: bool) -> None:
+        # Случайный id соединения для присутствия: не раскрывает ни сессию, ни учётку.
+        self.id = secrets.token_hex(8)
+        self.name = name
         self.guest = guest
+        # Последнее состояние awareness — его получает тот, кто подключится позже.
+        self.awareness: dict[str, Any] | None = None
         self._websocket = websocket
         self._closed = False
 
@@ -81,7 +97,38 @@ class BoardRoom:
                 raise ProtocolError("invalid update") from None
             self._seq += 1
             await persist(self.board_id, self._seq, update)
-            frame = encode_sync(SyncKind.UPDATE, update)
-            for peer in list(self.peers):
-                if peer is not sender:
-                    await peer.send(frame)
+            await self._broadcast(encode_sync(SyncKind.UPDATE, update), sender)
+
+    async def announce(self, newcomer: Peer) -> None:
+        """COL-02, COL-09: новичок получает присутствующих и их курсоры, остальные — новый
+        список присутствующих."""
+        async with self._lock:
+            for peer in self._listed():
+                if peer is not newcomer and peer.awareness is not None:
+                    await newcomer.send(encode_awareness(peer.id, peer.name, peer.awareness))
+            await self._send_presence()
+
+    async def announce_leave(self) -> None:
+        """Ушедшее соединение пропадает из списка, его курсор — у всех (COL-02, COL-09)."""
+        async with self._lock:
+            await self._send_presence()
+
+    async def update_awareness(self, sender: Peer, state: dict[str, Any]) -> None:
+        async with self._lock:
+            sender.awareness = state
+            await self._broadcast(encode_awareness(sender.id, sender.name, state), sender)
+
+    def _listed(self) -> list[Peer]:
+        # Порядок списка — по id: одинаковый у всех получателей.
+        return sorted((p for p in self.peers if not p.closed), key=lambda p: p.id)
+
+    async def _send_presence(self) -> None:
+        listed = self._listed()
+        roster = [PresencePeer(p.id, p.name) for p in listed]
+        for peer in listed:
+            await peer.send(encode_presence(peer.id, roster))
+
+    async def _broadcast(self, frame: bytes, sender: Peer) -> None:
+        for peer in list(self.peers):
+            if peer is not sender:
+                await peer.send(frame)
