@@ -37,6 +37,7 @@ sequenceDiagram
       S->>DB: COMMIT (одна транзакция)
       R->>H: close_participants(board.id)
       H-->>G: WS close(4403) каждому Peer с guest = true (канал владельца остаётся)
+      H-->>O: presence без участников — сразу, не дожидаясь их разрыва (announce_leave, T4.2)
       R-->>A: 200 ShareLink {token, url} — новый адрес
       D-->>O: Board link = новый url,<br/>New link created. The previous link no longer works.
     end
@@ -58,4 +59,4 @@ sequenceDiagram
 - Сессия владельца (`subject_type = user`) и гостевые сессии других досок не затрагиваются.
 - Открытая вкладка участника узнаёт о сбросе сразу: сервер закрывает её канал кодом `4403`, клиент перепроверяет ссылку и показывает отказ без перезагрузки (T4.1, [ws-protocol.md](../ws-protocol.md)).
 
-Актуально на: T4.1, 28e1b09. Требования: SHR-05, SHR-06.
+Актуально на: T4.2, 1e65608. Требования: SHR-05, SHR-06, COL-09 (участник уходит из списка присутствующих).
