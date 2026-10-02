@@ -162,8 +162,8 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile) | PASS |
 | COL-05 | T8.1 | — | не проверено |
 | COL-06 | T8.1 | — | не проверено |
-| COL-07 | T4.3 (основа), T8.2 | — | не проверено |
-| COL-08 | T4.3 (основа), T8.2 | — | не проверено |
+| COL-07 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col07_* (основа: снимки, сжатие журнала, поздний клиент, перезапуск `api`) | основа PASS (T4.3); требование — T8.2 |
+| COL-08 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col08_* (основа: перенос в `trash`, `board_events` с именем из сессии) | основа PASS (T4.3); требование — T8.2 |
 | COL-09 | T4.2 | acceptance/api/test_presence.py::test_col09_*, acceptance/e2e/presence.spec.ts (COL-09, desktop + mobile) | PASS |
 | BAK-01 | T10.1 | — | не проверено |
 | BAK-02 | T10.1 | — | не проверено |
@@ -199,4 +199,5 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-T31-01…04 (cookie участника `HttpOnly`/`SameSite=Lax`/без `Secure` на http, фрейм только для `/b/{token}/embed`, эндпоинты ссылки в OpenAPI, страницы ссылки — запросы только на адрес страницы, без горизонтальной прокрутки) | T3.1 | acceptance/api/test_sharing.py::test_arch_t31_*, acceptance/e2e/share.spec.ts (ARCH-T31-04) | PASS |
 | ARCH-T41-01…03 (канал `/api/ws` только для сессии владельца или cookie участника этой доски, неразличимый отказ, закрытие при выходе; адрес канала из адреса страницы без `localhost`; кадры `sync` STEP1/STEP2/UPDATE) | T4.1 | acceptance/api/test_realtime.py::test_arch_t41_*, acceptance/e2e/realtime.spec.ts (ARCH-T41-02) | PASS |
 | ARCH-T42-01 (кадры `awareness`/`presence` на `/api/ws`; повреждённый `awareness` и клиентский `presence` закрывают только отправителя `1007`) | T4.2 | acceptance/api/test_presence.py::test_arch_t42_01_* | PASS |
-| ARCH-T42-02 (присутствие не в документе: нет `sync UPDATE`, поздний клиент — пустой документ, `updated_at` не меняется; снимок — T4.3, ZIP — T10.1) | T4.2 | acceptance/api/test_presence.py::test_arch_t42_02_* | PASS (частично) |
+| ARCH-T42-02 (присутствие не в документе: нет `sync UPDATE`, поздний клиент — пустой документ, `updated_at` не меняется; нет в снимках и журнале; ZIP — T10.1) | T4.2, T4.3 | acceptance/api/test_presence.py::test_arch_t42_02_*, acceptance/api/test_history.py::test_arch_t42_02_* | PASS (ZIP — T10.1) |
+| ARCH-T43-ENV (`SNAPSHOT_INTERVAL_SECONDS` необязательна) | T4.3 | acceptance/api/test_history.py::test_arch_t43_env_* | PASS |
