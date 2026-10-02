@@ -27,7 +27,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BRD-07 | T2.2 | acceptance/api/test_folders.py::test_brd07_*, acceptance/e2e/folders.spec.ts (BRD-07) | PASS |
 | BRD-08 | T7.4 | — | не проверено |
 | BRD-09 | T2.2 | acceptance/api/test_folders.py::test_brd09_*, acceptance/e2e/folders.spec.ts (BRD-09) | PASS |
-| BRD-10 | T2.2 | acceptance/api/test_folders.py::test_brd10_*, acceptance/e2e/folders.spec.ts (BRD-10, desktop мышь + mobile касание) | PASS (BUG-001 minor) |
+| BRD-10 | T2.2 | acceptance/api/test_folders.py::test_brd10_*, acceptance/e2e/folders.spec.ts (BRD-10, desktop мышь + mobile касание) | PASS (BUG-001 исправлен в T4.2, acceptance/e2e/folders.spec.ts «BUG-001») |
 | BRD-11 | T2.2 | acceptance/e2e/folders.spec.ts (BRD-11) | PASS |
 | BRD-12 | T9.1 | — | не проверено |
 | BRD-13 | T9.1 | — | не проверено |
@@ -157,14 +157,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | NTE-02 | T6.12 | — | не проверено |
 | NTE-03 | T6.12 | — | не проверено |
 | COL-01 | T4.1 | acceptance/api/test_realtime.py::test_col01_*, acceptance/e2e/realtime.spec.ts (COL-01) | PASS |
-| COL-02 | T4.2 | — | не проверено |
-| COL-03 | T4.2 | — | не проверено |
-| COL-04 | T4.2 | — | не проверено |
+| COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
+| COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
+| COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile) | PASS |
 | COL-05 | T8.1 | — | не проверено |
 | COL-06 | T8.1 | — | не проверено |
 | COL-07 | T4.3 (основа), T8.2 | — | не проверено |
 | COL-08 | T4.3 (основа), T8.2 | — | не проверено |
-| COL-09 | T4.2 | — | не проверено |
+| COL-09 | T4.2 | acceptance/api/test_presence.py::test_col09_*, acceptance/e2e/presence.spec.ts (COL-09, desktop + mobile) | PASS |
 | BAK-01 | T10.1 | — | не проверено |
 | BAK-02 | T10.1 | — | не проверено |
 | BAK-03 | T10.2 | — | не проверено |
@@ -198,3 +198,5 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-T22-01…03 (`/` с папками и избранным — запросы только на адрес страницы, без горизонтальной прокрутки; эндпоинты папок и избранного в OpenAPI; запрет фрейма — регрессия) | T2.2 | acceptance/e2e/folders.spec.ts (ARCH-T22-01), acceptance/api/test_folders.py::test_arch_t22_*, acceptance/e2e/stack.spec.ts | PASS |
 | ARCH-T31-01…04 (cookie участника `HttpOnly`/`SameSite=Lax`/без `Secure` на http, фрейм только для `/b/{token}/embed`, эндпоинты ссылки в OpenAPI, страницы ссылки — запросы только на адрес страницы, без горизонтальной прокрутки) | T3.1 | acceptance/api/test_sharing.py::test_arch_t31_*, acceptance/e2e/share.spec.ts (ARCH-T31-04) | PASS |
 | ARCH-T41-01…03 (канал `/api/ws` только для сессии владельца или cookie участника этой доски, неразличимый отказ, закрытие при выходе; адрес канала из адреса страницы без `localhost`; кадры `sync` STEP1/STEP2/UPDATE) | T4.1 | acceptance/api/test_realtime.py::test_arch_t41_*, acceptance/e2e/realtime.spec.ts (ARCH-T41-02) | PASS |
+| ARCH-T42-01 (кадры `awareness`/`presence` на `/api/ws`; повреждённый `awareness` и клиентский `presence` закрывают только отправителя `1007`) | T4.2 | acceptance/api/test_presence.py::test_arch_t42_01_* | PASS |
+| ARCH-T42-02 (присутствие не в документе: нет `sync UPDATE`, поздний клиент — пустой документ, `updated_at` не меняется; снимок — T4.3, ZIP — T10.1) | T4.2 | acceptance/api/test_presence.py::test_arch_t42_02_* | PASS (частично) |
