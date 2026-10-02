@@ -613,3 +613,22 @@ test('BRD-10 a board at the end of a long list is dragged up to a folder at the 
   await expand(page, target.title);
   await expect(contentsOf(page, target.title).getByRole('link', { name: far.title, exact: true })).toBeVisible();
 });
+
+// ---------- BUG-001 ----------
+
+test('BUG-001 drag handles of folders and boards are at least 44x44 px', async ({ boardUserPage: page }) => {
+  const t = tag();
+  const folder = await apiFolder(page.request, `Handle ${t}`);
+  const board = await apiBoard(page.request, `Handle board ${t}`);
+  await openList(page);
+  for (const handle of [
+    folderRow(page, folder.title).getByRole('button', { name: `Drag ${folder.title}`, exact: true }),
+    allBoards(page).getByRole('button', { name: `Drag ${board.title}`, exact: true }),
+  ]) {
+    await handle.scrollIntoViewIfNeeded();
+    const box = await handle.boundingBox();
+    expect(box, 'ручка не видна').not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+});
