@@ -31,3 +31,45 @@ export function createBoardDocument(doc: Y.Doc = new Y.Doc()): BoardDocument {
     notes: doc.getXmlFragment("notes"),
   };
 }
+
+/** Запись корзины: удалённый объект, когда и кем удалён (ARCHITECTURE.md, раздел 6). */
+export interface TrashEntry {
+  object: unknown;
+  /** Момент удаления, ISO 8601. */
+  deletedAt: string;
+  /** Имя удалившего, как его видит клиент; лента действий берёт имя из сессии. */
+  deletedBy: string;
+}
+
+/**
+ * Удаление объектов (основа COL-08): каждый объект переносится из `objects` в `trash`
+ * одной транзакцией — у других участников объект не пропадёт, не попав в корзину.
+ * Сервер по новым ключам `trash` пишет запись в ленту действий. Неизвестные id
+ * пропускаются. Возвращает id перенесённых объектов.
+ */
+export function moveToTrash(
+  board: BoardDocument,
+  ids: Iterable<string>,
+  deletedBy: string,
+  now: Date = new Date(),
+): string[] {
+  const moved: string[] = [];
+  board.doc.transact(() => {
+    for (const id of ids) {
+      if (!board.objects.has(id)) continue;
+      const entry = new Y.Map<unknown>();
+      // Общий тип Yjs нельзя перенести в другое место документа — только копию.
+      entry.set("object", copyValue(board.objects.get(id)));
+      entry.set("deletedAt", now.toISOString());
+      entry.set("deletedBy", deletedBy);
+      board.trash.set(id, entry);
+      board.objects.delete(id);
+      moved.push(id);
+    }
+  });
+  return moved;
+}
+
+function copyValue(value: unknown): unknown {
+  return value instanceof Y.AbstractType ? value.clone() : value;
+}

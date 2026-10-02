@@ -37,6 +37,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:?MAX_UPLOAD_BYTES is required}
+      SNAPSHOT_INTERVAL_SECONDS: ${SNAPSHOT_INTERVAL_SECONDS:-300}
     volumes:
       - media:${MEDIA_ROOT:?MEDIA_ROOT is required}
     depends_on:

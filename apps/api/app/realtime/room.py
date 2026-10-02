@@ -4,17 +4,21 @@
 дописывает его в журнал и только потом рассылает остальным соединениям доски.
 
 Присутствие (COL-02…COL-04, COL-09) живёт только в памяти соединений: состояние
-awareness не попадает ни в документ, ни в журнал и пропадает вместе с соединением.
+awareness не попадает ни в документ, ни в журнал, ни в снимки и пропадает вместе
+с соединением.
+
+Сервер не разбирает жесты, но замечает, какие ключи появились в корне `trash`: это
+удалённые объекты, о которых пишется запись ленты действий (основа COL-08).
 """
 
 import asyncio
 import contextlib
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
-from pycrdt import Doc
+from pycrdt import Doc, Map, MapEvent
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.realtime.protocol import (
@@ -25,13 +29,19 @@ from app.realtime.protocol import (
     encode_presence,
     encode_sync,
 )
+from app.realtime.store import Journal, JournalEntry
 
 # Обновление без изменений (пустые структуры и набор удалений) — так отвечает клиент,
 # у которого нет ничего нового. В журнал и рассылку оно не попадает.
 EMPTY_UPDATE = b"\x00\x00"
 
-# Запись обновления в журнал: (доска, порядковый номер, обновление).
-Persist = Callable[[uuid.UUID, int, bytes], Awaitable[None]]
+# Корень документа с удалёнными объектами: id -> { object, deletedAt, deletedBy }.
+TRASH = "trash"
+
+# Запись принятого обновления в журнал (и ленту действий).
+Persist = Callable[[JournalEntry], Awaitable[None]]
+# Запись снимка: (доска, полное состояние, последний вошедший в него номер журнала).
+WriteSnapshot = Callable[[uuid.UUID, bytes, int], Awaitable[None]]
 
 
 class Peer:
@@ -65,15 +75,27 @@ class Peer:
 
 
 class BoardRoom:
-    def __init__(self, board_id: uuid.UUID, updates: Iterable[bytes], last_seq: int) -> None:
+    def __init__(self, board_id: uuid.UUID, journal: Journal) -> None:
         self.board_id = board_id
         self.peers: set[Peer] = set()
         self._doc: Doc[Any] = Doc()
-        for update in updates:
+        if journal.snapshot is not None:
+            self._doc.apply_update(journal.snapshot)
+        for update in journal.updates:
             self._doc.apply_update(update)
-        self._seq = last_seq
+        self._seq = journal.last_seq
+        # Номер журнала, до которого включительно всё уже лежит в снимке. Обновления,
+        # загруженные из журнала, в снимок ещё не вошли (их номера больше нуля).
+        self._compacted_seq = 0
         # Один порядок применения, записи и рассылки для всех соединений доски.
         self._lock = asyncio.Lock()
+        # Сжатия одной доски (периодическое и при выгрузке) не идут параллельно.
+        self._compaction_lock = asyncio.Lock()
+        # Подписка после загрузки: состояние из журнала — не новые удаления.
+        # Ссылки на корень и подписку держатся: иначе сборщик мусора снимет подписку.
+        self._trashed: list[str] = []
+        self._trash: Map[Any] = self._doc.get(TRASH, type=Map)
+        self._trash_subscription = self._trash.observe(self._on_trash_change)
 
     def state_vector(self) -> bytes:
         return self._doc.get_state()
@@ -91,13 +113,41 @@ class BoardRoom:
         if update == EMPTY_UPDATE:
             return
         async with self._lock:
+            self._trashed = []
             try:
                 self._doc.apply_update(update)
             except ValueError:
                 raise ProtocolError("invalid update") from None
             self._seq += 1
-            await persist(self.board_id, self._seq, update)
+            # Автор удаления — имя из сессии соединения, а не поле `deletedBy` документа.
+            entry = JournalEntry(
+                self.board_id, self._seq, update, sender.name, tuple(self._trashed)
+            )
+            await persist(entry)
             await self._broadcast(encode_sync(SyncKind.UPDATE, update), sender)
+
+    async def compact(self, write: WriteSnapshot) -> bool:
+        """Пишет снимок, если с прошлого сжатия были правки; `True` — снимок записан.
+
+        Состояние берётся под блокировкой комнаты: все принятые к этому моменту
+        обновления уже записаны в журнал и войдут в снимок.
+        """
+        async with self._compaction_lock:
+            async with self._lock:
+                if self._seq == self._compacted_seq:
+                    return False
+                seq, state = self._seq, self._doc.get_update()
+            await write(self.board_id, state, seq)
+            self._compacted_seq = seq
+            return True
+
+    def _on_trash_change(self, event: MapEvent) -> None:
+        # В pycrdt поле `keys` объявлено в `__slots__` без аннотации типа.
+        changes: dict[str, dict[str, Any]] = event.keys  # type: ignore[attr-defined]
+        # «add» — объект попал в корзину; «update» — повторное удаление того же id.
+        for key, change in changes.items():
+            if change["action"] in ("add", "update"):
+                self._trashed.append(key)
 
     async def announce(self, newcomer: Peer) -> None:
         """COL-02, COL-09: новичок получает присутствующих и их курсоры, остальные — новый
