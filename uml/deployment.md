@@ -46,6 +46,7 @@ flowchart LR
   env[".env (шаблон .env.example)"]
   env -->|"HTTP_PORT (необязательна, по умолчанию 80)"| caddy[caddy: ports]
   env -->|"PUBLIC_BASE_URL, SECRET_KEY, DATABASE_URL, MEDIA_ROOT,<br/>ADMIN_EMAIL, ADMIN_PASSWORD, MAX_UPLOAD_BYTES<br/>(обязательны: ${VAR:?...})"| api[api: environment]
+  env -->|"SNAPSHOT_INTERVAL_SECONDS<br/>(необязательна, по умолчанию 300, T4.3)"| api
   env -->|"POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD<br/>(обязательны)"| postgres[postgres: environment]
   env -->|"MEDIA_ROOT"| vol[точка монтирования тома media]
 ```
@@ -67,4 +68,4 @@ flowchart TB
 
 Заголовки ставятся на все ответы (статика и API), кроме `/b/{token}/embed` и `/b/{token}/embed/`.
 
-Актуально на: T0.3, 03e00fa. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).
+Актуально на: T0.3, 03e00fa; переменная `SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).

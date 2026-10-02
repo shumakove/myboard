@@ -1,6 +1,6 @@
 # Синхронизация документа
 
-Совместная правка доски (COL-01) по WebSocket `/api/ws`. Клиент — `BoardConnection` (`apps/web/src/realtime/boardConnection.ts`) внутри `useBoardConnection` / `BoardLive` на `/boards/:id` и `/b/:token`; сервер — `app.realtime.router.board_socket`, `Hub`, `BoardRoom`, `store`. Формат кадров — [ws-protocol.md](../ws-protocol.md).
+Совместная правка доски (COL-01) по WebSocket `/api/ws`. Клиент — `BoardConnection` (`apps/web/src/realtime/boardConnection.ts`) внутри `useBoardConnection` / `BoardLive` на `/boards/:id` и `/b/:token`; сервер — `app.realtime.router.board_socket`, `Hub`, `BoardRoom`, `store`, `app.history` (снимки и лента, T4.3). Формат кадров — [ws-protocol.md](../ws-protocol.md).
 
 ## Подключение и правка
 
@@ -15,6 +15,7 @@ sequenceDiagram
   participant M as BoardRoom (pycrdt.Doc)
   participant S as realtime.store
   participant L as library.service
+  participant HI as history (snapshots, events)
   participant DB as PostgreSQL
 
   A->>R: WS /api/ws?board={id} или ?token={token}
@@ -27,9 +28,12 @@ sequenceDiagram
     R->>R: accept, Peer(websocket, name, guest)
     R->>H: join(board_id, peer)
     opt доска не открыта в процессе
-      H->>S: load_updates(db, board_id), last_seq(db, board_id)
-      S->>DB: SELECT update FROM board_updates ORDER BY seq
-      H->>M: BoardRoom(board_id, updates, last_seq): apply_update каждого
+      H->>S: load_journal(db, board_id)
+      Note over S,DB: одна транзакция REPEATABLE READ
+      S->>HI: snapshots.latest_state(db, board_id)
+      HI->>DB: SELECT state FROM board_snapshots<br/>ORDER BY created_at DESC, id DESC LIMIT 1
+      S->>DB: SELECT seq, update FROM board_updates ORDER BY seq
+      H->>M: BoardRoom(board_id, Journal(snapshot, updates, last_seq)):<br/>apply_update снимка и каждого обновления,<br/>_compacted_seq = 0, затем observe(trash)
     end
     R->>R: create_task(_watch_access): authorize раз в 5 с
     R-->>A: sync STEP1(room.state_vector())
@@ -47,15 +51,20 @@ sequenceDiagram
   R->>M: apply(update, sender = A, hub.persist)
   activate M
   Note over M: asyncio.Lock: один порядок для всех соединений доски
-  M->>M: _doc.apply_update(update)
+  M->>M: _trashed = [], _doc.apply_update(update)
+  Note over M: _on_trash_change: ключи trash с action add/update → _trashed
   alt ValueError
     M-->>R: ProtocolError
     R-->>A: close(1007), документ и B не изменились
   else принято
     M->>M: _seq += 1
-    M->>H: persist(board_id, seq, update)
-    H->>S: append_update(db, board_id, seq, update)
+    M->>H: persist(JournalEntry(board_id, seq, update, sender.name, trashed))
+    H->>S: append(db, entry)
     S->>DB: INSERT board_updates (board_id, seq, update)
+    opt entry.trashed не пуст (удаление объектов, основа COL-08)
+      S->>HI: events.add_objects_deleted(db, board_id, actor_name, trashed)
+      HI->>DB: INSERT board_events (objects_deleted, {object_ids})
+    end
     S->>L: touch_board(db, board_id)
     L->>DB: UPDATE boards SET updated_at = now()
     S->>DB: COMMIT
@@ -63,6 +72,48 @@ sequenceDiagram
   end
   deactivate M
   B->>B: Y.applyUpdate(update, origin = connection) — обратно не отправляется
+```
+
+## Сжатие журнала (снимок)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant APP as app.main lifespan
+  participant R as realtime.router
+  participant H as Hub
+  participant M as BoardRoom
+  participant S as realtime.store
+  participant HI as history.snapshots
+  participant DB as PostgreSQL
+
+  APP->>H: create_task(run_compaction(SNAPSHOT_INTERVAL_SECONDS))
+  loop каждые SNAPSHOT_INTERVAL_SECONDS (по умолчанию 300 с)
+    H->>H: compact_all(): _compact(room) для каждой открытой доски
+  end
+  R->>H: leave(room, peer) в CancelScope(shield=True)
+  opt ушло последнее соединение
+    H->>H: под блокировкой Hub: удалить room из _rooms, _compact(room)
+  end
+  APP->>H: при остановке: cancel(run_compaction), compact_all()
+
+  Note over H,DB: _compact(room)
+  H->>M: compact(_write_snapshot)
+  Note over M: _compaction_lock, затем _lock
+  alt _seq == _compacted_seq (правок не было)
+    M-->>H: False, снимок не пишется
+  else были правки
+    M->>M: seq, state = _seq, _doc.get_update()
+    M->>H: _write_snapshot(board_id, state, seq)
+    H->>S: compact(db, board_id, state, upto_seq = seq)
+    S->>HI: add_snapshot(db, board_id, state)
+    HI->>DB: INSERT board_snapshots (board_id, state)
+    S->>DB: DELETE board_updates WHERE seq <= upto_seq
+    S->>DB: COMMIT
+    M->>M: _compacted_seq = seq
+    M-->>H: True
+  end
+  Note over H: SQLAlchemyError → logger.exception, журнал цел, повтор в следующий раз
 ```
 
 ## Разрыв и переподключение
@@ -92,9 +143,10 @@ sequenceDiagram
   end
 ```
 
-- Документ сервера выгружается из памяти, когда уходит последнее соединение доски; следующий клиент получает состояние, собранное из `board_updates` (переживает и перезапуск `api`).
-- Снимков (`board_snapshots`) и сжатия журнала пока нет (T4.3): серверная копия каждый раз собирается из всего журнала.
+- Документ сервера выгружается из памяти, когда уходит последнее соединение доски (и журнал сжимается); следующий клиент получает состояние, собранное из последнего снимка и хвоста `board_updates`, — в `STEP2` на пустой вектор это полное состояние (переживает и перезапуск `api`: при остановке процесса открытые доски сжимаются).
+- Блокировка `Hub` держится на время загрузки (`join`) и выгрузки со сжатием (`leave`): новое подключение к доске читает уже сжатый журнал.
+- Снимки не удаляются; их просмотр и восстановление — T8.2.
 - Вместе с `sync` по тому же каналу идут `awareness` и `presence` (T4.2): они не применяются к документу и не пишутся в журнал — сценарий [presence.md](presence.md).
 - Ошибка отправки одному соединению (`Peer.send`) не прерывает рассылку остальным; разрыв замечает цикл приёма этого соединения.
 
-Актуально на: T4.2, 1e65608. Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке).
+Актуально на: T4.3, 7477309. Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке), COL-07 и COL-08 (основа: снимки, лента удалений).
