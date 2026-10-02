@@ -23,8 +23,8 @@ sequenceDiagram
   Note over X: board → _owner: USER-сессия, active_user, get_board<br/>token → _participant: board_by_token, find_board_session
   alt нет доступа
     R-->>A: close(1008) до accept → 403
-  else BoardAccess(board_id, guest)
-    R->>R: accept, Peer(websocket, guest)
+  else BoardAccess(board_id, guest, name)
+    R->>R: accept, Peer(websocket, name, guest)
     R->>H: join(board_id, peer)
     opt доска не открыта в процессе
       H->>S: load_updates(db, board_id), last_seq(db, board_id)
@@ -33,6 +33,7 @@ sequenceDiagram
     end
     R->>R: create_task(_watch_access): authorize раз в 5 с
     R-->>A: sync STEP1(room.state_vector())
+    R->>M: announce(peer): awareness остальных и presence всем (T4.2)
     A->>R: sync STEP1(Y.encodeStateVector(doc))
     R->>M: missing_since(вектор A)
     R-->>A: sync STEP2(недостающее, на пустой вектор — полный снимок)
@@ -93,6 +94,7 @@ sequenceDiagram
 
 - Документ сервера выгружается из памяти, когда уходит последнее соединение доски; следующий клиент получает состояние, собранное из `board_updates` (переживает и перезапуск `api`).
 - Снимков (`board_snapshots`) и сжатия журнала пока нет (T4.3): серверная копия каждый раз собирается из всего журнала.
+- Вместе с `sync` по тому же каналу идут `awareness` и `presence` (T4.2): они не применяются к документу и не пишутся в журнал — сценарий [presence.md](presence.md).
 - Ошибка отправки одному соединению (`Peer.send`) не прерывает рассылку остальным; разрыв замечает цикл приёма этого соединения.
 
-Актуально на: T4.1, 28e1b09. Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке).
+Актуально на: T4.2, 1e65608. Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке).
