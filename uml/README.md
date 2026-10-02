@@ -34,7 +34,7 @@
 | T1.4 | `states/session.md`, `components.md` (клиент) |
 | T2.1, T2.2 | `data-model.md`, `components.md` |
 | T3.1 | `data-model.md`, `components.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
-| T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` (с T4.3 — корзина); T4.1 также `components.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` (закрытие канала при сбросе ссылки и отзыве доступа); T4.2 также `components.md`, `sequences/presence.md`, `sequences/link-reset.md` (присутствие и курсоры) |
+| T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` (с T4.3 — корзина); T4.1 также `components.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` (закрытие канала при сбросе ссылки и отзыве доступа); T4.2 также `components.md`, `sequences/presence.md`, `sequences/link-reset.md` (присутствие и курсоры); T4.3 также `components.md` (модуль `history`, сжатие в `Hub`), `deployment.md` (`SNAPSHOT_INTERVAL_SECONDS`) |
 | T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов) |
 | T7.* | `data-model.md`, `board-document.md`, `sequences/media-upload.md` |
 | T8.1 | `board-document.md` |
@@ -49,16 +49,17 @@
 
 | Схема | Актуально на |
 | --- | --- |
-| [deployment.md](deployment.md) | T0.3, 03e00fa |
-| [components.md](components.md) | T4.2, 1e65608 |
-| [data-model.md](data-model.md) | T4.1, 28e1b09 |
-| [board-document.md](board-document.md) | T4.2, 1e65608 |
-| [ws-protocol.md](ws-protocol.md) | T4.2, 1e65608 |
+| [deployment.md](deployment.md) | T0.3, 03e00fa (`SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309) |
+| [components.md](components.md) | T4.3, 7477309 |
+| [data-model.md](data-model.md) | T4.3, 7477309 |
+| [board-document.md](board-document.md) | T4.3, 7477309 |
+| [ws-protocol.md](ws-protocol.md) | T4.3, 7477309 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
 | [sequences/link-join.md](sequences/link-join.md) | T3.1, d4a2685 |
 | [sequences/link-reset.md](sequences/link-reset.md) | T4.2, 1e65608 |
-| [sequences/sync.md](sequences/sync.md) | T4.2, 1e65608 |
+| [sequences/sync.md](sequences/sync.md) | T4.3, 7477309 |
 | [sequences/presence.md](sequences/presence.md) | T4.2, 1e65608 |
 | [states/session.md](states/session.md) | сервер: T1.3, b53b509 (канал WebSocket — T4.1, 28e1b09); вкладка: T1.4, 6f59eaf; участник по ссылке: T4.1, 28e1b09 |
 | [states/share-link.md](states/share-link.md) | T4.1, 28e1b09 |
 | [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
+| [states/board-object.md](states/board-object.md) | T4.3, 7477309 |
