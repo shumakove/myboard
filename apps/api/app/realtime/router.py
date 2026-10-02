@@ -9,6 +9,7 @@
 import asyncio
 from urllib.parse import urlsplit
 
+import anyio
 from fastapi import APIRouter, WebSocket
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -63,8 +64,11 @@ async def board_socket(
         await _receive(websocket, peer, room, hub)
     finally:
         watcher.cancel()
-        await hub.leave(room, peer)
-        await room.announce_leave()
+        # Выход доводится до конца, даже если задачу соединения отменили: иначе доска
+        # не выгрузится и не сожмётся.
+        with anyio.CancelScope(shield=True):
+            await hub.leave(room, peer)
+            await room.announce_leave()
 
 
 def _same_origin(websocket: WebSocket) -> bool:

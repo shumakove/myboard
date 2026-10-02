@@ -13,7 +13,10 @@ NonEmpty = Annotated[str, Field(min_length=1)]
 
 
 class Settings(BaseSettings):
-    """Обязательные переменные окружения; имя поля в верхнем регистре — имя переменной."""
+    """Переменные окружения; имя поля в верхнем регистре — имя переменной.
+
+    Все обязательны, кроме полей со значением по умолчанию.
+    """
 
     model_config = SettingsConfigDict(case_sensitive=False, frozen=True, str_strip_whitespace=True)
 
@@ -24,6 +27,8 @@ class Settings(BaseSettings):
     admin_email: NonEmpty
     admin_password: NonEmpty
     max_upload_bytes: Annotated[int, Field(gt=0)]
+    # Как часто открытая доска с правками пишет снимок и сжимает журнал (T4.3).
+    snapshot_interval_seconds: Annotated[float, Field(gt=0)] = 300.0
 
     @field_validator("public_base_url")
     @classmethod

@@ -7,6 +7,7 @@ cookie каждого браузера передаются явно.
 """
 
 import json
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -27,7 +28,9 @@ from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.settings import Settings
+from app.main import create_app
 from app.realtime import router as realtime_router
+from app.realtime.hub import Hub
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 ALICE = {"name": "Alice", "email": "alice@example.com", "password": "alice-pw"}
@@ -292,10 +295,9 @@ def test_col01_state_survives_when_everyone_leaves(
         owner.edit(_add_sticker)
         owner.flush()
         expected = _snapshot(owner.doc)
-    # Документ выгружен из памяти; новое подключение собирает его из журнала.
+    # Документ выгружен из памяти; новое подключение собирает его из снимка и журнала.
     with _connect(client, f"board={board}", alice) as again:
         assert _snapshot(again.doc) == expected
-    assert _sql(settings, "SELECT count(*) FROM board_updates WHERE board_id = :id", id=board) == 1
 
 
 def test_col01_offline_edits_are_delivered_on_reconnect(
@@ -631,3 +633,186 @@ def test_participant_closed_by_link_reset_leaves_presence(
         client.post(f"/api/boards/{board}/share/reset", headers=_cookie_header(alice))
         assert _closed_with(guest) == ACCESS_REVOKED
         assert _names(owner.next_presence()) == ["Alice"]
+
+
+# --- T4.3: снимки, сжатие журнала, корзина (основа COL-07, COL-08) -----------------------
+
+
+def _count(settings: Settings, table: str, board: str) -> int:
+    count: int = _sql(settings, f"SELECT count(*) FROM {table} WHERE board_id = :id", id=board)  # noqa: S608
+    return count
+
+
+def _eventually(check: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Ждёт условия: сервер закрывает соединение и сжимает журнал уже после ответа клиенту."""
+    deadline = time.monotonic() + timeout
+    while not check():
+        assert time.monotonic() < deadline, "condition was not met in time"
+        time.sleep(0.02)
+
+
+def _compact_now(client: TestClient) -> None:
+    """Один проход фоновой задачи сжатия — без ожидания интервала."""
+    hub: Hub = client.app.state.hub  # type: ignore[attr-defined]
+    assert client.portal is not None
+    client.portal.call(hub.compact_all)
+
+
+def _move_to_trash(object_id: str, deleted_by: str) -> Callable[[Doc[Any]], None]:
+    """Удаление, как его делает клиент: объект из `objects` в `trash` одной транзакцией."""
+
+    def change(doc: Doc[Any]) -> None:
+        objects = doc.get("objects", type=Map)
+        trash = doc.get("trash", type=Map)
+        with doc.transaction():
+            removed = objects[object_id].to_py()
+            del objects[object_id]
+            trash[object_id] = Map(
+                {"object": removed, "deletedAt": "2026-10-02T10:00:00Z", "deletedBy": deleted_by}
+            )
+
+    return change
+
+
+def test_compacted_journal_gives_new_client_full_state(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.edit(_add_sticker)
+        owner.flush()
+        _compact_now(client)
+        assert _count(settings, "board_updates", board) == 0
+        assert _count(settings, "board_snapshots", board) == 1
+
+        owner.edit(lambda doc: _sticker(doc).__setitem__("x", 7))
+        owner.flush()
+        assert _count(settings, "board_updates", board) == 1  # правка после снимка
+
+        # Процесс, не видевший правок (как после перезапуска), собирает доску из
+        # снимка и хвоста журнала.
+        with (
+            TestClient(create_app(settings)) as restarted,
+            _connect(restarted, f"token={link}", kate) as late,
+        ):
+            assert _snapshot(late.doc) == _snapshot(owner.doc)
+            assert _snapshot(late.doc)["s1"]["x"] == 7
+
+
+def test_compaction_skips_board_without_new_edits(
+    client: TestClient, alice: Cookies, board: str, settings: Settings
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        _compact_now(client)
+        assert _count(settings, "board_snapshots", board) == 0
+        owner.edit(_add_sticker)
+        owner.flush()
+        _compact_now(client)
+        _compact_now(client)
+        assert _count(settings, "board_snapshots", board) == 1
+
+
+def test_board_is_compacted_when_last_client_leaves(
+    client: TestClient, alice: Cookies, board: str, settings: Settings
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.edit(_add_sticker)
+        owner.flush()
+        expected = _snapshot(owner.doc)
+    _eventually(lambda: _count(settings, "board_snapshots", board) == 1)
+    assert _count(settings, "board_updates", board) == 0
+    with _connect(client, f"board={board}", alice) as again:
+        assert _snapshot(again.doc) == expected
+
+
+def test_background_task_compacts_open_board(
+    alice: Cookies, board: str, settings: Settings
+) -> None:
+    fast = settings.model_copy(update={"snapshot_interval_seconds": 0.05})
+    with TestClient(create_app(fast)) as client, _connect(client, f"board={board}", alice) as owner:
+        owner.edit(_add_sticker)
+        owner.flush()
+        # Доска открыта, клиент не уходил: снимок пишет фоновая задача.
+        _eventually(lambda: _count(settings, "board_snapshots", board) == 1)
+        _eventually(lambda: _count(settings, "board_updates", board) == 0)
+
+
+def test_api_restart_keeps_board_content(
+    alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    with TestClient(create_app(settings)) as before, _connect(before, f"board={board}", alice) as o:
+        o.edit(_add_sticker)
+        o.flush()
+        expected = _snapshot(o.doc)
+    with TestClient(create_app(settings)) as after, _connect(after, f"token={link}", kate) as g:
+        assert _snapshot(g.doc) == expected
+
+
+def test_deleted_object_moves_to_trash_and_is_logged(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        owner.edit(_add_sticker)
+        guest.receive_update()
+        # Поле документа `deletedBy` заполняет клиент; лента берёт имя из сессии.
+        guest.edit(_move_to_trash("s1", deleted_by="Mallory"))
+        owner.receive_update()
+
+        assert _snapshot(owner.doc) == {}
+        trash = owner.doc.get("trash", type=Map).to_py()
+        assert trash["s1"]["object"] == {"type": "sticker", "x": 0, "text": "Hello"}
+        assert trash["s1"]["deletedBy"] == "Mallory"
+
+    engine = create_engine(settings.database_url)
+    try:
+        with engine.connect() as connection:
+            events = connection.execute(
+                text(
+                    "SELECT actor_name, event_type, payload FROM board_events WHERE board_id = :id"
+                ),
+                {"id": board},
+            ).all()
+    finally:
+        engine.dispose()
+    assert [tuple(row) for row in events] == [("Kate", "objects_deleted", {"object_ids": ["s1"]})]
+
+
+def test_reloading_board_does_not_repeat_trash_events(
+    client: TestClient, alice: Cookies, board: str, settings: Settings
+) -> None:
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.edit(_add_sticker)
+        owner.edit(_move_to_trash("s1", deleted_by="Alice"))
+        owner.edit(lambda doc: doc.get("objects", type=Map).__setitem__("s2", Map({"x": 1})))
+        owner.flush()
+    _eventually(lambda: _count(settings, "board_snapshots", board) == 1)
+    # Загрузка из снимка и журнала не порождает новых записей ленты.
+    with _connect(client, f"board={board}", alice) as again:
+        again.edit(lambda doc: doc.get("objects", type=Map).__setitem__("s3", Map({"x": 2})))
+        again.flush()
+    assert _count(settings, "board_events", board) == 1
+
+
+def test_presence_stays_out_of_snapshots(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.send_awareness({"cursor": {"x": 12345, "y": 678}, "following": "watched-peer"})
+        owner.next_awareness()
+        owner.edit(_add_sticker)
+        owner.flush()
+        _compact_now(client)
+
+    state: bytes = _sql(
+        settings, "SELECT state FROM board_snapshots WHERE board_id = :id", id=board
+    )
+    restored: Doc[Any] = Doc()
+    restored.apply_update(state)
+    assert _snapshot(restored) == {"s1": {"type": "sticker", "x": 0, "text": "Hello"}}
+    for marker in (b"cursor", b"following", b"watched-peer", b"Kate", b"Alice"):
+        assert marker not in state

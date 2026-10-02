@@ -1,5 +1,7 @@
 """Сборка приложения FastAPI: модули, OpenAPI, жизненный цикл процесса."""
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -47,13 +49,21 @@ def create_app(settings: Settings) -> FastAPI:
         await anyio.to_thread.run_sync(upgrade_to_head, settings.database_url)
         engine = create_engine(settings.database_url)
         app.state.session_factory = create_session_factory(engine)
-        app.state.hub = Hub(app.state.session_factory)
+        hub = Hub(app.state.session_factory)
+        app.state.hub = hub
         await ensure_first_admin(
             app.state.session_factory, settings.admin_email, settings.admin_password
         )
+        # Фоновая задача процесса: снимки открытых досок и сжатие журнала (T4.3).
+        compaction = asyncio.create_task(hub.run_compaction(settings.snapshot_interval_seconds))
         try:
             yield
         finally:
+            compaction.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await compaction
+            # При остановке процесса незаписанных в снимок правок не остаётся.
+            await hub.compact_all()
             await engine.dispose()
 
     app = FastAPI(
