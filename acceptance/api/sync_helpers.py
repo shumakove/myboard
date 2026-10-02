@@ -5,10 +5,15 @@
 `0 STEP1` (вектор версии), `1 STEP2` (недостающие обновления), `2 UPDATE`.
 Адрес канала: `/api/ws?board={id}` (сессия владельца) или `/api/ws?token={token}` (участник).
 Код из `apps/` не импортируется: кадры собираются здесь.
+
+T4.2: на том же канале идут кадры присутствия (ARCHITECTURE.md 10, handoff T4.2) —
+`varuint тип | varuint длина | JSON в UTF-8` без подтипа: `awareness = 1` (клиент и сервер),
+`presence = 2` (сервер клиентам). `SyncPeer` их принимает и запоминает.
 """
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -21,6 +26,8 @@ from websockets.sync.client import ClientConnection
 from stand import Client
 
 SYNC = 0
+AWARENESS = 1
+PRESENCE = 2
 STEP1, STEP2, UPDATE = 0, 1, 2
 DOC_ROOTS = ("objects", "trash", "comments", "timer", "votes")
 
@@ -50,6 +57,20 @@ def read_varuint(data: bytes, pos: int) -> tuple[int, int]:
 
 def frame(sub: int, payload: bytes, msg_type: int = SYNC) -> bytes:
     return varuint(msg_type) + varuint(sub) + varuint(len(payload)) + payload
+
+
+def json_frame(msg_type: int, body: Any) -> bytes:
+    """Кадр присутствия: `varuint тип | varuint длина | JSON`."""
+    payload = body if isinstance(body, bytes) else json.dumps(body).encode()
+    return varuint(msg_type) + varuint(len(payload)) + payload
+
+
+def parse_json_frame(data: bytes) -> tuple[int, Any]:
+    msg_type, pos = read_varuint(data, 0)
+    length, pos = read_varuint(data, pos)
+    payload = data[pos : pos + length]
+    assert len(payload) == length and pos + length == len(data), f"кадр сервера разобран не полностью: {data!r}"
+    return msg_type, json.loads(payload)
 
 
 def parse(data: bytes) -> tuple[int, int, bytes]:
@@ -92,6 +113,11 @@ class SyncPeer:
         self.ws = ws
         self.doc = doc if doc is not None else Doc()
         self.received: list[tuple[int, int, bytes]] = []
+        # присутствие (T4.2): последние кадры awareness по peer и последний presence
+        self.awareness: dict[str, dict[str, Any]] = {}
+        self.awareness_log: list[dict[str, Any]] = []
+        self.presence: dict[str, Any] | None = None
+        self.presence_log: list[dict[str, Any]] = []
 
     # --- документ ---------------------------------------------------------------
 
@@ -124,6 +150,16 @@ class SyncPeer:
     def _recv_one(self, timeout: float) -> int:
         data = self.ws.recv(timeout=timeout)
         assert isinstance(data, bytes), f"сервер прислал не двоичный кадр: {data!r}"
+        kind, _ = read_varuint(data, 0)
+        if kind in (AWARENESS, PRESENCE):
+            _, body = parse_json_frame(data)
+            if kind == AWARENESS:
+                self.awareness_log.append(body)
+                self.awareness[body["peer"]] = body
+            else:
+                self.presence_log.append(body)
+                self.presence = body
+            return -kind
         msg_type, sub, payload = parse(data)
         self.received.append((msg_type, sub, payload))
         assert msg_type == SYNC, f"неожиданный тип сообщения {msg_type}"
@@ -166,6 +202,30 @@ class SyncPeer:
         if send:
             self.ws.send(frame(UPDATE, update))
         return update
+
+    # --- присутствие (T4.2) ------------------------------------------------------
+
+    def send_awareness(self, state: Any) -> None:
+        self.ws.send(json_frame(AWARENESS, state))
+
+    def peers(self) -> list[dict[str, Any]]:
+        return list(self.presence["peers"]) if self.presence else []
+
+    def names(self) -> list[str]:
+        return sorted(p["name"] for p in self.peers())
+
+    def wait_presence(self, predicate: Callable[[SyncPeer], bool], timeout: float = 5.0) -> float:
+        """Принимать кадры, пока не выполнится условие; вернуть затраченное время."""
+        start = time.monotonic()
+        deadline = start + timeout
+        while not predicate(self):
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, f"не дождались присутствия: presence={self.presence}, awareness={self.awareness}"
+            try:
+                self._recv_one(remaining)
+            except TimeoutError:
+                pass
+        return time.monotonic() - start
 
     def close_code(self, timeout: float = 5.0) -> int | None:
         """Дождаться закрытия соединения сервером и вернуть код закрытия."""
