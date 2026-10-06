@@ -619,8 +619,15 @@ export interface components {
         /**
          * SharedBoard
          * @description Доска, открытая по ссылке; `participant` — `null`, пока имя не введено (SHR-02, SHR-03).
+         *
+         *     `id` — ключ, под которым браузер помнит вид камеры на этой доске (CVS-05).
          */
         SharedBoard: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Title */
             title: string;
             participant: components["schemas"]["Participant"] | null;

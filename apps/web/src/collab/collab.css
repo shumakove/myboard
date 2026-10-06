@@ -12,6 +12,10 @@
   }
 }
 
+.board-main {
+  min-width: 0;
+}
+
 .board-stage {
   position: relative;
   border-radius: 8px;

@@ -68,6 +68,7 @@ export function BoardPage() {
             </button>
           </p>
           <BoardLive
+            boardId={state.board.id}
             target={{ kind: "owner", boardId: state.board.id }}
             checkAccess={() => ownerHasAccess(state.board.id)}
           />

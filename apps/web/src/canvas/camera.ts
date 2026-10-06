@@ -1,17 +1,53 @@
 import type { CameraView, Point } from "../realtime/messages";
 
 /**
- * Камера холста: центр вида в координатах доски и масштаб. Экранные точки — относительно
- * левого верхнего угла области холста. Минимальная камера для присутствия (курсоры,
- * слежение — COL-02, COL-04); полное управление видом — T5.1.
+ * Камера холста (CVS-01…CVS-04, MOB-02): центр вида в координатах доски и масштаб.
+ * Экранные точки — относительно левого верхнего угла области холста. Плоскость без края:
+ * сдвиг не ограничен, ограничен только масштаб.
  */
 export const HOME: CameraView = { x: 0, y: 0, zoom: 1 };
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 8;
+/** Шаг масштаба кнопками и клавишами «+»/«−». */
+export const ZOOM_STEP = 1.25;
 
 export interface Size {
   width: number;
   height: number;
+}
+
+/** Прямоугольник в координатах доски. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+}
+
+/** Масштаб в `factor` раз относительно центра вида (кнопки, клавиши). */
+export function zoomBy(camera: CameraView, factor: number): CameraView {
+  return { x: camera.x, y: camera.y, zoom: clampZoom(camera.zoom * factor) };
+}
+
+/** Тот же масштаб, центр вида — в точке доски (переход по миникарте, CVS-04). */
+export function centerOn(camera: CameraView, point: Point): CameraView {
+  return { x: point.x, y: point.y, zoom: camera.zoom };
+}
+
+/** Видимая часть доски. */
+export function viewRect(camera: CameraView, size: Size): Rect {
+  const width = size.width / camera.zoom;
+  const height = size.height / camera.zoom;
+  return {
+    x: camera.x - width / 2,
+    y: camera.y - height / 2,
+    width,
+    height,
+  };
 }
 
 export function screenToBoard(
@@ -52,11 +88,35 @@ export function zoomAt(
   anchor: Point,
   size: Size,
 ): CameraView {
-  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, camera.zoom * factor));
-  const fixed = screenToBoard(anchor, camera, size);
+  return pinch(camera, [anchor, anchor], [anchor, anchor], size, factor);
+}
+
+/**
+ * MOB-02: щипок двумя пальцами. Масштаб меняется как расстояние между пальцами,
+ * точка доски под серединой пальцев остаётся под ней же — щипок и сдвиг одним жестом.
+ * `factor` задаётся явно, когда пальцы совпадают (масштаб колесом в точке).
+ */
+export function pinch(
+  camera: CameraView,
+  from: readonly [Point, Point],
+  to: readonly [Point, Point],
+  size: Size,
+  factor: number = distance(to) / distance(from),
+): CameraView {
+  const zoom = clampZoom(camera.zoom * (Number.isFinite(factor) ? factor : 1));
+  const fixed = screenToBoard(middle(from), camera, size);
+  const anchor = middle(to);
   return {
     x: fixed.x - (anchor.x - size.width / 2) / zoom,
     y: fixed.y - (anchor.y - size.height / 2) / zoom,
     zoom,
   };
+}
+
+function distance([a, b]: readonly [Point, Point]): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function middle([a, b]: readonly [Point, Point]): Point {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }

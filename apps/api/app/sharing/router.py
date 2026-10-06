@@ -75,7 +75,9 @@ async def open_shared_board(token: str, request: Request, db: SessionDep) -> Sha
     )
     name = session.display_name if session is not None else None
     return SharedBoard(
-        title=board.title, participant=Participant(name=name) if name is not None else None
+        id=board.id,
+        title=board.title,
+        participant=Participant(name=name) if name is not None else None,
     )
 
 
@@ -88,4 +90,4 @@ async def join_shared_board(
     cookie_name = service.board_cookie_name(board.id)
     session_token = await service.join(db, board, data.name, request.cookies.get(cookie_name))
     set_session_cookie(response, cookie_name, session_token, settings_of(request))
-    return SharedBoard(title=board.title, participant=Participant(name=data.name))
+    return SharedBoard(id=board.id, title=board.title, participant=Participant(name=data.name))
