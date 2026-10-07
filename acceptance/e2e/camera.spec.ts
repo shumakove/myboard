@@ -289,8 +289,10 @@ test('CVS-04 minimap shows the visible area; it follows pan and zoom; a click mo
   try {
     await expect(minimap(page)).toBeVisible();
     await expect(minimap(page)).toHaveAccessibleName('Minimap');
-    const A = { type: 'sticky', x: -2000, y: -1500, width: 400, height: 300 };
-    const B = { type: 'sticky', x: 3000, y: 2000, width: 400, height: 300 };
+    // Объекты не дальше ~2000 единиц: рамка вида на миникарте заметно больше её минимального размера
+    // (12×9 px — исправление BUG-003, T5.2), и уменьшение рамки при приближении наблюдаемо.
+    const A = { type: 'sticky', x: -800, y: -600, width: 400, height: 300 };
+    const B = { type: 'sticky', x: 1200, y: 800, width: 400, height: 300 };
     await putObject(page, `board=${boardId}`, 'qa-a', A);
     await putObject(page, `board=${boardId}`, 'qa-b', B);
     await expect(page.locator('[data-testid="minimap"] rect.minimap-object')).toHaveCount(2);
