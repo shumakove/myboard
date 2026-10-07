@@ -34,11 +34,16 @@ export interface ScenePointer {
   altKey: boolean;
 }
 
-/** Жест на холсте от нажатия до отпускания. */
+/**
+ * Жест на холсте от нажатия до отпускания. `move` и `end` приходят, только если указатель
+ * ушёл дальше допуска щелчка; отпускание на месте — `click`, а без него `cancel` (BUG-004).
+ */
 export interface Gesture {
   move(pointer: ScenePointer): void;
   end(pointer: ScenePointer): void;
   cancel(): void;
+  /** Отпускание без движения: щелчок, касание, долгое нажатие на месте. */
+  click?: () => void;
   /** CVS-13: у края холста вид прокручивается, пока жест идёт. */
   autoscroll?: boolean;
 }
@@ -68,6 +73,8 @@ export function moveGesture(
   gridStep: number,
 ): Gesture {
   const bounds = boundsOf(targets);
+  // Пишется только изменившийся сдвиг: одинаковые значения тоже дали бы кадр sync.
+  let written = { x: 0, y: 0 };
   const apply = (pointer: ScenePointer) => {
     if (bounds === null) return;
     let delta = { x: pointer.board.x - start.x, y: pointer.board.y - start.y };
@@ -85,6 +92,8 @@ export function moveGesture(
             : snap(bounds.y + delta.y, gridStep) - bounds.y,
       };
     }
+    if (delta.x === written.x && delta.y === written.y) return;
+    written = delta;
     writeFrames(objects, targets, (o) => ({
       x: o.x + delta.x,
       y: o.y + delta.y,

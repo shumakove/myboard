@@ -382,6 +382,54 @@ describe("CVS-12: перемещение", () => {
   });
 });
 
+describe("BUG-004: выделение не двигает объект и не пишет в документ", () => {
+  /** Объект вне сетки и счётчик обновлений документа после его создания. */
+  function offGridObject() {
+    const board = createBoardDocument();
+    const id = createObject(board.objects, "shape", { x: 77, y: 53 });
+    const updates = { count: 0 };
+    board.doc.on("update", () => {
+      updates.count += 1;
+    });
+    renderScene(board);
+    return { board, id, updates };
+  }
+
+  it("щелчок и дрожание в пределах щелчка выделяют, но не прилипляют к сетке", () => {
+    const { board, id, updates } = offGridObject();
+    click(element(id), [100, 80]);
+    expect(isSelected(id)).toBe(true);
+    click(canvas(), [-500, -500]);
+    drag(element(id), [100, 80], [[102, 81]]);
+    expect(isSelected(id)).toBe(true);
+    expect(object(board, id)).toMatchObject({ x: 77, y: 53 });
+    expect(updates.count).toBe(0);
+  });
+
+  it("долгое нажатие пальцем без движения выделяет, но не прилипляет к сетке", () => {
+    vi.useFakeTimers();
+    const { board, id, updates } = offGridObject();
+    const touch = { pointerId: 1, pointerType: "touch", clientX: 100, clientY: 80 };
+    fireEvent.pointerDown(element(id), { ...touch, button: 0 });
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS);
+    });
+    fireEvent.pointerUp(canvas(), touch);
+    expect(isSelected(id)).toBe(true);
+    expect(object(board, id)).toMatchObject({ x: 77, y: 53 });
+    expect(updates.count).toBe(0);
+  });
+
+  it("перетаскивание, вернувшее объект на место, не шлёт повторных одинаковых правок", () => {
+    const { board, id, updates } = offGridObject();
+    drag(element(id), [100, 80], [[130, 80], [131, 80], [100, 80]], {
+      altKey: true,
+    });
+    expect(object(board, id)).toMatchObject({ x: 77, y: 53 });
+    expect(updates.count).toBe(3);
+  });
+});
+
 describe("CVS-13: автопрокрутка у края", () => {
   it("пока объект держат у края холста, вид едет туда, а объект — вместе с указателем", async () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);

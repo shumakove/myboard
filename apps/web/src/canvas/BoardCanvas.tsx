@@ -299,8 +299,12 @@ export function BoardCanvas({
       return;
     }
     const press = pressOf(event.currentTarget, event, event.pointerType);
-    if (current.gesture) {
-      current.gesture.end(press);
+    const { gesture } = current;
+    if (gesture) {
+      // BUG-004: отпускание на месте документ не меняет — объект не прилипает к сетке.
+      if (current.moved) gesture.end(press);
+      else if (gesture.click) gesture.click();
+      else gesture.cancel();
     } else if (!current.moved) {
       gestures?.tap({ ...press, target: current.press.target });
     }

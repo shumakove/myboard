@@ -9,7 +9,6 @@ import {
   resizeGesture,
   rotateGesture,
   type AreaDraft,
-  type Gesture,
 } from "./gestures";
 import type { ObjectType } from "./objectTypes";
 import type { SceneObject } from "./sceneObjects";
@@ -32,22 +31,6 @@ export interface SceneControls {
     at: Point,
   ) => void;
   editText: (id: string) => void;
-}
-
-/** Жест перемещения; если указатель так и не сдвинулся, вместо него — `onClick`. */
-function withoutMove(move: Gesture, onClick: () => void): Gesture {
-  let moved = false;
-  return {
-    ...move,
-    move: (pointer) => {
-      moved = true;
-      move.move(pointer);
-    },
-    end: (pointer) => {
-      if (moved) move.end(pointer);
-      else onClick();
-    },
-  };
 }
 
 function hit(target: EventTarget | null): {
@@ -104,12 +87,12 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           c.setTool("select");
           if (created === null) return null;
           // Поставленный щелчком объект сразу открывается для ввода текста.
-          return withoutMove(
-            moveGesture(c.objects, [created], press.board, c.gridStep),
-            () => {
+          return {
+            ...moveGesture(c.objects, [created], press.board, c.gridStep),
+            click: () => {
               latest.current.editText(created.id);
             },
-          );
+          };
         }
         if (tool.kind === "lasso") return area("lasso", press);
 
@@ -140,10 +123,13 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           if (!(press.shiftKey && isSelected)) return move;
           // Shift+щелчок по выделенному убирает его из выделения, Shift+перетаскивание —
           // двигает выделенное по оси.
-          return withoutMove(move, () => {
-            const { selection, select } = latest.current;
-            select(selection.filter((id) => id !== objectId));
-          });
+          return {
+            ...move,
+            click: () => {
+              const { selection, select } = latest.current;
+              select(selection.filter((id) => id !== objectId));
+            },
+          };
         }
         if (press.shiftKey || longPress) return area("marquee", press);
         return null;
