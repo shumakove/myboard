@@ -6,6 +6,7 @@ import {
   frameInside,
   groupScale,
   lockAxis,
+  placeMenu,
   polygonContains,
   rectContains,
   resizeFrame,
@@ -137,5 +138,40 @@ describe("CVS-14: размер и поворот", () => {
     const moved = rotateFrame(box, { x: 0, y: 0 }, 180);
     expect(moved.x).toBeCloseTo(-200);
     expect(moved.rotation).toBeCloseTo(180);
+  });
+});
+
+// BUG-005: меню у края холста целиком остаётся в видимой области.
+describe("placeMenu", () => {
+  const menu = { width: 190, height: 154 };
+  const area = { x: 0, y: 0, width: 1200, height: 540 };
+
+  it("при достатке места открывается от точки вправо-вниз", () => {
+    expect(placeMenu({ x: 100, y: 100 }, menu, area)).toEqual({
+      x: 100,
+      y: 100,
+    });
+  });
+
+  it("у нижнего края открывается вверх, у правого — влево", () => {
+    expect(placeMenu({ x: 100, y: 532 }, menu, area)).toEqual({
+      x: 100,
+      y: 378,
+    });
+    expect(placeMenu({ x: 1190, y: 10 }, menu, area)).toEqual({
+      x: 1000,
+      y: 10,
+    });
+    const corner = placeMenu({ x: 1195, y: 535 }, menu, area);
+    expect(corner).toEqual({ x: 1005, y: 381 });
+  });
+
+  it("без места ни в одну сторону прижимается к краю видимой части", () => {
+    const visible = { x: 0, y: 200, width: 1200, height: 240 };
+    const placed = placeMenu({ x: 50, y: 300 }, menu, visible);
+    expect(placed.y).toBeGreaterThanOrEqual(visible.y);
+    expect(placed.y + menu.height).toBeLessThanOrEqual(
+      visible.y + visible.height,
+    );
   });
 });

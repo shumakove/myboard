@@ -208,13 +208,8 @@ export function BoardScene({
   function drop(type: ObjectType, client: Point) {
     const element = canvasRef.current;
     if (element === null) return;
+    if (!isOverCanvas(element, client)) return;
     const rect = element.getBoundingClientRect();
-    const inside =
-      client.x >= rect.left &&
-      client.x <= rect.right &&
-      client.y >= rect.top &&
-      client.y <= rect.bottom;
-    if (!inside) return;
     create(
       type,
       screenToBoard(
@@ -329,4 +324,21 @@ export function BoardScene({
       </div>
     </div>
   );
+}
+
+/**
+ * Точка окна над самим холстом, а не над панелями поверх него: на телефоне панель
+ * инструментов и миникарта лежат на холсте, и отпускание на них объект не ставит.
+ */
+function isOverCanvas(canvas: HTMLElement, client: Point): boolean {
+  const rect = canvas.getBoundingClientRect();
+  const inside =
+    client.x >= rect.left &&
+    client.x <= rect.right &&
+    client.y >= rect.top &&
+    client.y <= rect.bottom;
+  // jsdom не реализует elementFromPoint — там достаточно прямоугольника.
+  if (!inside || typeof document.elementFromPoint !== "function") return inside;
+  const below = document.elementFromPoint(client.x, client.y);
+  return below !== null && canvas.contains(below);
 }

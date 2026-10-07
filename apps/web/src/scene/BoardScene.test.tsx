@@ -199,6 +199,47 @@ describe("CVS-09: создание объектов", () => {
     expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("BUG-006: отпускание над панелью, лежащей поверх холста, объект не ставит", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return this.dataset.testid === "board-canvas"
+          ? new DOMRect(0, 0, 400, 500)
+          : new DOMRect(0, 0, 0, 0);
+      },
+    );
+    const { board } = renderScene();
+    const button = screen.getByRole("button", { name: "Shape" });
+    // На телефоне панель инструментов — полоса внизу холста (y > 440).
+    const elementFromPoint = vi.fn((_x: number, y: number) =>
+      y > 440 ? button : canvas(),
+    );
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: elementFromPoint,
+    });
+    try {
+      const dragTo = (x: number, y: number) => {
+        fireEvent.pointerDown(button, {
+          pointerId: 3,
+          button: 0,
+          clientX: 20,
+          clientY: 470,
+        });
+        fireEvent.pointerMove(button, { pointerId: 3, clientX: x, clientY: y });
+        fireEvent.pointerUp(button, { pointerId: 3, clientX: x, clientY: y });
+        fireEvent.click(button);
+      };
+      dragTo(120, 470);
+      expect(scene(board)).toEqual([]);
+      dragTo(200, 250);
+      expect(scene(board)).toEqual([
+        expect.objectContaining({ type: "shape" }),
+      ]);
+    } finally {
+      Reflect.deleteProperty(document, "elementFromPoint");
+    }
+  });
+
   it("вставка текста из буфера ставит текстовый объект", () => {
     const { board } = renderScene();
     const event = new Event("paste", { bubbles: true, cancelable: true });
@@ -409,7 +450,12 @@ describe("BUG-004: выделение не двигает объект и не �
   it("долгое нажатие пальцем без движения выделяет, но не прилипляет к сетке", () => {
     vi.useFakeTimers();
     const { board, id, updates } = offGridObject();
-    const touch = { pointerId: 1, pointerType: "touch", clientX: 100, clientY: 80 };
+    const touch = {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 80,
+    };
     fireEvent.pointerDown(element(id), { ...touch, button: 0 });
     act(() => {
       vi.advanceTimersByTime(LONG_PRESS_MS);
@@ -422,9 +468,18 @@ describe("BUG-004: выделение не двигает объект и не �
 
   it("перетаскивание, вернувшее объект на место, не шлёт повторных одинаковых правок", () => {
     const { board, id, updates } = offGridObject();
-    drag(element(id), [100, 80], [[130, 80], [131, 80], [100, 80]], {
-      altKey: true,
-    });
+    drag(
+      element(id),
+      [100, 80],
+      [
+        [130, 80],
+        [131, 80],
+        [100, 80],
+      ],
+      {
+        altKey: true,
+      },
+    );
     expect(object(board, id)).toMatchObject({ x: 77, y: 53 });
     expect(updates.count).toBe(3);
   });
@@ -458,7 +513,12 @@ describe("CVS-13: автопрокрутка у края", () => {
     await vi.waitFor(() => {
       expect(camera().x).toBeGreaterThan(30);
     });
-    fireEvent.pointerUp(canvas(), { pointerId: 1, clientX: 795, clientY: 300 });
+    fireEvent.pointerUp(canvas(), {
+      pointerId: 1,
+      clientX: 795,
+      clientY: 300,
+      altKey: true, // Alt держат до отпускания: конец жеста не прилипает к сетке
+    });
     const settled = camera().x;
     // Объект под указателем: его сдвиг = сдвиг указателя на экране + сдвиг вида.
     expect(object(board, id).x).toBeGreaterThan(-100 + 395 + 30);

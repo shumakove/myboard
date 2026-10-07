@@ -246,3 +246,19 @@ export function edgeVelocity(point: Point, size: Size): Point {
 function speed(depth: number): number {
   return (Math.min(depth, EDGE_ZONE) / EDGE_ZONE) * EDGE_SPEED;
 }
+
+/**
+ * BUG-005: меню открывается от точки вправо-вниз, а если там не хватает места в видимой
+ * области `bounds` — влево и/или вверх; в крайнем случае прижимается к её краю.
+ */
+export function placeMenu(at: Point, menu: Size, bounds: Rect): Point {
+  const axis = (from: number, size: number, start: number, length: number) => {
+    const end = start + length;
+    const placed = from + size <= end ? from : from - size;
+    return Math.max(start, Math.min(placed, end - size));
+  };
+  return {
+    x: axis(at.x, menu.width, bounds.x, bounds.width),
+    y: axis(at.y, menu.height, bounds.y, bounds.height),
+  };
+}

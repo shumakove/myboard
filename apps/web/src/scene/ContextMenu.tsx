@@ -1,9 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Rect } from "../canvas/camera";
 import type { Point } from "../realtime/messages";
+import { placeMenu } from "./geometry";
 
 export interface MenuItem {
   label: string;
   action: () => void;
+}
+
+/** Видимая в окне часть элемента — в его собственных координатах. */
+function visiblePart(element: Element): Rect {
+  const box = element.getBoundingClientRect();
+  const x = Math.max(0, -box.left);
+  const y = Math.max(0, -box.top);
+  return {
+    x,
+    y,
+    width: Math.min(box.width, window.innerWidth - box.left) - x,
+    height: Math.min(box.height, window.innerHeight - box.top) - y,
+  };
 }
 
 /**
@@ -23,6 +38,20 @@ export function ContextMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState(at);
+  // До отрисовки: меню не мелькает за краем окна.
+  useLayoutEffect(() => {
+    const menu = ref.current;
+    const area = menu?.offsetParent;
+    if (!menu || !area) return;
+    setPosition(
+      placeMenu(
+        at,
+        { width: menu.offsetWidth, height: menu.offsetHeight },
+        visiblePart(area),
+      ),
+    );
+  }, [at]);
   useEffect(() => {
     ref.current?.querySelector("button")?.focus();
     function outside(event: PointerEvent) {
@@ -50,7 +79,7 @@ export function ContextMenu({
       className="context-menu"
       role="menu"
       aria-label={label}
-      style={{ left: at.x, top: at.y }}
+      style={{ left: position.x, top: position.y }}
     >
       {items.map((item) => (
         <button
