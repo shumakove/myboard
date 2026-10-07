@@ -40,11 +40,11 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | SHR-05 | T3.1 | acceptance/api/test_sharing.py::test_shr05_*, acceptance/e2e/share.spec.ts (SHR-05) | PASS |
 | SHR-06 | T3.1, T4.1 (WebSocket) | acceptance/api/test_sharing.py::test_shr06_*, acceptance/api/test_realtime.py::test_shr06_*, acceptance/e2e/share.spec.ts, realtime.spec.ts (SHR-06) | PASS |
 | SHR-07 | T5.5 | — | не проверено |
-| CVS-01 | T5.1 | — | не проверено |
-| CVS-02 | T5.1 | — | не проверено |
-| CVS-03 | T5.1 | — | не проверено |
-| CVS-04 | T5.1 | — | не проверено |
-| CVS-05 | T5.1 | — | не проверено |
+| CVS-01 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-01, desktop + mobile; объекты на холсте — перепроверить в T5.2) | PASS |
+| CVS-02 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-02, desktop + mobile) | PASS |
+| CVS-03 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-03, desktop) | PASS |
+| CVS-04 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-04, desktop + mobile); BUG-003 (minor) | PASS |
+| CVS-05 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-05, desktop + mobile) | PASS |
 | CVS-06 | T5.2 | — | не проверено |
 | CVS-07 | T5.4 | — | не проверено |
 | CVS-08 | T5.5 | — | не проверено |
@@ -67,7 +67,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-25 | T5.4 | — | не проверено |
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
-| MOB-02 | T5.1 | — | не проверено |
+| MOB-02 | T5.1 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02; mobile) | PASS |
 | MOB-03 | T5.2 | — | не проверено |
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
@@ -159,7 +159,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | COL-01 | T4.1 | acceptance/api/test_realtime.py::test_col01_*, acceptance/e2e/realtime.spec.ts (COL-01) | PASS |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
-| COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile) | PASS |
+| COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS |
 | COL-05 | T8.1 | — | не проверено |
 | COL-06 | T8.1 | — | не проверено |
 | COL-07 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col07_* (основа: снимки, сжатие журнала, поздний клиент, перезапуск `api`) | основа PASS (T4.3); требование — T8.2 |
