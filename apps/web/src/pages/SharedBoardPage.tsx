@@ -90,6 +90,7 @@ export function SharedBoardPage() {
         <>
           <p>You joined as {board.participant.name}.</p>
           <BoardLive
+            boardId={board.id}
             target={{ kind: "participant", token }}
             checkAccess={() => participantHasAccess(token)}
             onClosed={recheck}

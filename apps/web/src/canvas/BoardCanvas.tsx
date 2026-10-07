@@ -5,7 +5,8 @@ import {
   type ReactNode,
 } from "react";
 import type { CameraView, Point } from "../realtime/messages";
-import { panBy, screenToBoard, zoomAt, type Size } from "./camera";
+import { panBy, pinch, screenToBoard, zoomAt, type Size } from "./camera";
+import { wheelAction, type WheelMode } from "./wheel";
 import "./canvas.css";
 
 /** Шаг точечного фона, px при масштабе 1: по нему видно движение вида. */
@@ -14,28 +15,39 @@ const DOT_STEP = 32;
 export type CameraUpdate = (camera: CameraView) => CameraView;
 
 /**
- * Область холста с камерой: перетаскивание сдвигает вид, колесо масштабирует.
- * Сообщает положение указателя в координатах доски (курсор для других — COL-02).
- * Дочерние элементы рисуются в координатах доски. Полная камера — T5.1.
+ * Область холста с камерой над бесконечной плоскостью (CVS-01). Дочерние элементы
+ * рисуются в координатах доски в слое с CSS-преобразованием камеры.
+ *
+ * - CVS-02, CVS-03: колесо масштабирует или сдвигает вид по выбранному режиму;
+ *   перетаскивание левой или средней кнопкой мыши сдвигает вид.
+ * - MOB-02: один палец двигает вид, два — щипок (масштаб и сдвиг одновременно).
+ * - COL-02: положение указателя уходит наверх в координатах доски; во время щипка
+ *   курсор не прыгает между пальцами.
  */
 export function BoardCanvas({
   camera,
+  wheelMode,
   onMove,
   onPointer,
+  onResize,
   children,
 }: {
   camera: CameraView;
+  wheelMode: WheelMode;
   /** Своё перемещение вида (сдвиг, масштаб). */
   onMove: (update: CameraUpdate) => void;
   /** Указатель над холстом в координатах доски; `null` — ушёл с холста. */
   onPointer: (point: Point | null) => void;
+  /** Размер области холста — для миникарты. */
+  onResize?: (size: Size) => void;
   children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
-  const onMoveRef = useRef(onMove);
+  /** Зажатые указатели (пальцы, кнопка мыши): id → точка в области холста. */
+  const pressed = useRef(new Map<number, Point>());
+  const latest = useRef({ onMove, wheelMode, onResize });
   useEffect(() => {
-    onMoveRef.current = onMove;
+    latest.current = { onMove, wheelMode, onResize };
   });
 
   // React вешает wheel пассивным — без preventDefault колесо прокручивало бы страницу.
@@ -46,8 +58,12 @@ export function BoardCanvas({
       event.preventDefault();
       if (element === null) return;
       const { point, size } = locate(element, event);
-      const factor = Math.exp(-event.deltaY * 0.002);
-      onMoveRef.current((current) => zoomAt(current, factor, point, size));
+      const action = wheelAction(event, latest.current.wheelMode);
+      latest.current.onMove((current) =>
+        action.kind === "zoom"
+          ? zoomAt(current, action.factor, point, size)
+          : panBy(current, action.dx, action.dy),
+      );
     }
     element.addEventListener("wheel", wheel, { passive: false });
     return () => {
@@ -55,33 +71,61 @@ export function BoardCanvas({
     };
   }, []);
 
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    const report = () => {
+      latest.current.onResize?.({
+        width: element.clientWidth,
+        height: element.clientHeight,
+      });
+    };
+    report(); // наблюдатель в фоновой вкладке молчит до первой отрисовки
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(report);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
+    // Левая или средняя кнопка мыши; касание и перо приходят как левая.
+    if (event.button !== 0 && event.button !== 1) return;
+    if (event.button === 1) event.preventDefault(); // без автопрокрутки браузера
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       // Указатель уже отпущен — сдвиг продолжится без захвата.
     }
-    drag.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-    };
+    pressed.current.set(
+      event.pointerId,
+      locate(event.currentTarget, event).point,
+    );
   }
 
   function pointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const { point, size } = locate(event.currentTarget, event);
-    onPointer(screenToBoard(point, camera, size));
-    const active = drag.current;
-    if (active?.pointerId !== event.pointerId) return;
-    const dx = event.clientX - active.x;
-    const dy = event.clientY - active.y;
-    drag.current = { ...active, x: event.clientX, y: event.clientY };
-    onMove((current) => panBy(current, dx, dy));
+    const fingers = pressed.current;
+    if (fingers.size <= 1) onPointer(screenToBoard(point, camera, size));
+
+    const previous = fingers.get(event.pointerId);
+    if (previous === undefined) return;
+    const before = firstPair(fingers);
+    fingers.set(event.pointerId, point);
+    const after = firstPair(fingers);
+    if (before !== null && after !== null) {
+      onMove((current) => pinch(current, before, after, size));
+    } else {
+      onMove((current) =>
+        panBy(current, point.x - previous.x, point.y - previous.y),
+      );
+    }
   }
 
   function pointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
-    if (drag.current?.pointerId === event.pointerId) drag.current = null;
+    // Оставшийся палец продолжает сдвиг со своего места, без скачка вида.
+    pressed.current.delete(event.pointerId);
   }
 
   const step = DOT_STEP * camera.zoom;
@@ -112,6 +156,12 @@ export function BoardCanvas({
       </div>
     </div>
   );
+}
+
+/** Два первых зажатых указателя — пальцы щипка; `null`, если зажат один. */
+function firstPair(pressed: Map<number, Point>): [Point, Point] | null {
+  const [a, b] = pressed.values();
+  return a !== undefined && b !== undefined ? [a, b] : null;
 }
 
 /** Точка события относительно области холста и размер области. */

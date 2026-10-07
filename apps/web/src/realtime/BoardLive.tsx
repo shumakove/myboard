@@ -13,19 +13,22 @@ const STATUS_TEXT: Record<ConnectionStatus, string> = {
 
 /**
  * Совместная работа на доске: держит канал документа (COL-01), показывает состояние связи,
- * холст с курсорами участников и список присутствующих (COL-02…COL-04, COL-09).
- * Объекты на холсте появятся в T5.*.
+ * холст с камерой (CVS-01…CVS-05), курсоры участников и список присутствующих
+ * (COL-02…COL-04, COL-09). Объекты на холсте появятся в T5.2.
  */
 export function BoardLive({
+  boardId,
   target,
   checkAccess,
   onClosed,
 }: {
+  /** Id доски — ключ запомненного вида камеры (CVS-05). */
+  boardId: string;
   target: BoardTarget;
   checkAccess: () => Promise<boolean>;
   onClosed?: () => void;
 }) {
-  const { presence, status } = useBoardConnection(target, checkAccess);
+  const { board, presence, status } = useBoardConnection(target, checkAccess);
 
   useEffect(() => {
     if (status === "closed") onClosed?.();
@@ -36,7 +39,14 @@ export function BoardLive({
       <p role="status" data-status={status}>
         {STATUS_TEXT[status]}
       </p>
-      {status !== "closed" && <BoardWorkspace presence={presence} />}
+      {status !== "closed" && (
+        <BoardWorkspace
+          key={boardId}
+          boardId={boardId}
+          objects={board.objects}
+          presence={presence}
+        />
+      )}
     </>
   );
 }

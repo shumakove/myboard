@@ -55,7 +55,11 @@ export function installFakeSharingServer(
     const board = library.boards.find((b) => server.links[b.id] === token);
     if (!board) return undefined;
     const name = server.participants[token];
-    return { title: board.title, participant: name ? { name } : null };
+    return {
+      id: board.id,
+      title: board.title,
+      participant: name ? { name } : null,
+    };
   }
 
   function route(method: string, url: URL, body: unknown) {

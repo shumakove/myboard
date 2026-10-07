@@ -21,3 +21,54 @@
   height: 0;
   transform-origin: 0 0;
 }
+
+/* Панель вида над холстом; на узком экране переносится на две строки. */
+.camera-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.camera-controls button {
+  min-width: 36px;
+  min-height: 36px;
+  font-size: 18px;
+}
+
+.camera-zoom {
+  min-width: 3.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.camera-wheel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+/* Миникарта поверх правого нижнего угла холста. */
+.minimap {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 90%);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.minimap-object {
+  fill: #9aa4b2;
+}
+
+.minimap-view {
+  fill: rgb(37 99 235 / 12%);
+  stroke: #2563eb;
+  stroke-width: 1.5;
+}

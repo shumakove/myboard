@@ -159,7 +159,7 @@ def test_shr03_link_asks_for_name_before_entry(
     response = guest.get(f"/api/share/{token}")
 
     assert response.status_code == 200
-    assert response.json() == {"title": "Roadmap", "participant": None}
+    assert response.json() == {"id": board["id"], "title": "Roadmap", "participant": None}
 
 
 def test_shr02_join_sets_board_session_cookie(
@@ -170,7 +170,11 @@ def test_shr02_join_sets_board_session_cookie(
     response = _join(guest, token, "  Kate  ")
 
     assert response.status_code == 200
-    assert response.json() == {"title": "Roadmap", "participant": {"name": "Kate"}}
+    assert response.json() == {
+        "id": board["id"],
+        "title": "Roadmap",
+        "participant": {"name": "Kate"},
+    }
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{_board_cookie(board['id'])}=")
     assert "HttpOnly" in cookie
