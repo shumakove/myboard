@@ -18,6 +18,8 @@ import "./canvas.css";
 export const LONG_PRESS_MS = 500;
 /** Сдвиг указателя, после которого нажатие уже не щелчок и не долгое нажатие, px. */
 const TAP_TOLERANCE = { mouse: 4, other: 10 };
+/** CVS-13: шаг автопрокрутки, мс (~60 раз в секунду). */
+const AUTOSCROLL_TICK_MS = 16;
 /** Точки сетки не рисуются чаще, чем через столько экранных px. */
 const MIN_DOT_SPACING = 8;
 
@@ -181,23 +183,25 @@ export function BoardCanvas({
 
   /** CVS-13: вид едет к краю, пока жест с автопрокруткой идёт и указатель у края. */
   function autoscroll(element: HTMLElement, gesture: Gesture) {
-    const frame = () => {
+    // Таймер, а не requestAnimationFrame: кадры не приходят в перекрытом окне,
+    // а тянуть объект к краю можно и там. Останавливается вместе с жестом.
+    const timer = setInterval(() => {
       const current = session.current;
-      if (current?.gesture !== gesture) return;
+      if (current?.gesture !== gesture) {
+        clearInterval(timer);
+        return;
+      }
       const size = { width: element.clientWidth, height: element.clientHeight };
       const v = edgeVelocity(current.last, size);
-      if (v.x !== 0 || v.y !== 0) {
-        const view = panBy(latest.current.camera, -v.x, -v.y);
-        latest.current.camera = view;
-        latest.current.onMove(() => view);
-        gesture.move({
-          board: screenToBoard(current.last, view, size),
-          ...current.modifiers,
-        });
-      }
-      requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
+      if (!current.moved || (v.x === 0 && v.y === 0)) return;
+      const view = panBy(latest.current.camera, -v.x, -v.y);
+      latest.current.camera = view;
+      latest.current.onMove(() => view);
+      gesture.move({
+        board: screenToBoard(current.last, view, size),
+        ...current.modifiers,
+      });
+    }, AUTOSCROLL_TICK_MS);
   }
 
   function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
