@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`. T5.1 сделал полную камеру холста в клиенте `canvas`: масштаб кнопками, клавишами, колесом и щипком, сдвиг мышью, пальцем и стрелками, выбор поведения колеса, миникарта по объектам документа и запоминание вида в `localStorage`; на сервере в `SharedBoard` добавлено поле `id` (ключ запомненного вида участника).
 
 ## Сервер `apps/api`
 
@@ -40,7 +40,7 @@ flowchart TB
   end
   subgraph sharingMod [app.sharing]
     srouter["router (тег sharing)<br/>GET /boards/{board_id}/share,<br/>POST /boards/{board_id}/share/reset (UserDep);<br/>GET /share/{token}, POST /share/{token}/join;<br/>LINK_UNAVAILABLE = Link is not available"]
-    sschemas["schemas<br/>ShareLink {token, url}, SharedBoard {title, participant},<br/>Participant {name}, JoinRequest {name: Name}"]
+    sschemas["schemas<br/>ShareLink {token, url}, SharedBoard {id, title, participant},<br/>Participant {name}, JoinRequest {name: Name}"]
     sservice["service<br/>new_token (token_urlsafe(32)), board_cookie_name,<br/>current_token, reset_token, board_by_token,<br/>participant, join; TOKEN_MAX_LENGTH = 64"]
   end
   subgraph realtimeApi [app.realtime]
@@ -139,7 +139,7 @@ flowchart TB
 - Все маршруты под префиксом `/api`: `GET /api/health` (`{"status":"ok"}`), `GET /api/openapi.json` (OpenAPI 3.1), `GET /api/docs` (Swagger UI). Неизвестный путь `/api/*` — `404` JSON.
 - Маршруты панели (тег `admin`): `POST /api/admin/login` → `204` / `401` / `429`, `POST /api/admin/logout` → `204`, `GET /api/admin/session` → `200 AdminSession`, `GET /api/admin/users` → `200 [UserOut]`, `POST /api/admin/users` → `201` / `409`, `PATCH /api/admin/users/{user_id}` → `200` / `404` / `409`. Маршруты `/users*` требуют сессию администратора (`require_admin`, иначе `401`).
 - Маршруты пользователя досок (тег `account`): `POST /api/login` → `204` + cookie `myboard_session` / `401 Invalid email or password` / `429`, `POST /api/logout` → `204`, `GET /api/session` → `200 AccountSession` (без сессии — `authenticated: false`; живую сессию продлевает). `require_user` (`401 Sign in`) защищает маршруты досок. Сценарии — [sequences/login.md](sequences/login.md), таблицы — [data-model.md](data-model.md).
-- Ссылка на доску (тег `sharing`, T3.1): `GET /api/boards/{board_id}/share` → `200 ShareLink {token, url}` (токен выдаётся при первом запросе, `url` = `{PUBLIC_BASE_URL}/b/{token}`, SHR-01), `POST /api/boards/{board_id}/share/reset` → `200 ShareLink` с новым токеном (SHR-06) — оба только для владельца (`401` без сессии пользователя, `404 Board not found` для чужой доски). `GET /api/share/{token}` → `200 SharedBoard {title, participant}` (`participant: null` без сессии этой доски), `POST /api/share/{token}/join {name}` → `200 SharedBoard` + cookie `myboard_board_{board_id.hex}` (SHR-02, SHR-03); недействующий токен — `404 Link is not available` (SHR-05). Сценарии — [sequences/link-join.md](sequences/link-join.md), [sequences/link-reset.md](sequences/link-reset.md), состояния — [states/share-link.md](states/share-link.md).
+- Ссылка на доску (тег `sharing`, T3.1): `GET /api/boards/{board_id}/share` → `200 ShareLink {token, url}` (токен выдаётся при первом запросе, `url` = `{PUBLIC_BASE_URL}/b/{token}`, SHR-01), `POST /api/boards/{board_id}/share/reset` → `200 ShareLink` с новым токеном (SHR-06) — оба только для владельца (`401` без сессии пользователя, `404 Board not found` для чужой доски). `GET /api/share/{token}` → `200 SharedBoard {id, title, participant}` (`participant: null` без сессии этой доски; `id` — uuid доски, ключ запомненного вида камеры участника, CVS-05, T5.1), `POST /api/share/{token}/join {name}` → `200 SharedBoard` + cookie `myboard_board_{board_id.hex}` (SHR-02, SHR-03); недействующий токен — `404 Link is not available` (SHR-05). Сценарии — [sequences/link-join.md](sequences/link-join.md), [sequences/link-reset.md](sequences/link-reset.md), состояния — [states/share-link.md](states/share-link.md).
 - Маршруты досок (тег `library`, только для пользователя досок, иначе `401`): `GET /api/boards?q=&sort=updated|created|title&modified_since=` → `200 [BoardOut]` (ACC-04, BRD-04…BRD-06), `GET /api/boards/recent` → `200 [BoardOut]` (8 последних изменённых, BRD-04), `POST /api/boards` → `201 BoardOut` (без названия — Untitled board, BRD-01), `GET /api/boards/{board_id}` → `200` / `404`, `PATCH /api/boards/{board_id}` → `200` / `404` / `422` (BRD-02), `DELETE /api/boards/{board_id}` → `204` / `404` (BRD-03). Чужая, удалённая и несуществующая доска — одинаковый `404 Board not found`; название — 1…200 символов после обрезки пробелов, лишние поля тела — `422`. Таблицы — [data-model.md](data-model.md).
 - Папки и избранное (тег `library`, T2.2): `GET /api/folders?q=` → `200 [FolderOut]` — все папки пользователя по `position` (дерево строит клиент; `q` — поиск по части названия, BRD-06), `POST /api/folders {title, parent_id?}` → `201 FolderOut` (последней среди соседей, BRD-09) / `404 Folder not found`, `PUT /api/folders/{folder_id}/position {parent_id, position}` → `200` / `404` / `409 A folder cannot be moved into itself or its subfolder` (BRD-10), `PUT /api/boards/{board_id}/folder {folder_id}` → `200 BoardOut` / `404` (BRD-10, `updated_at` не меняется), `PUT|DELETE /api/boards/{board_id}/favorite` и `PUT|DELETE /api/folders/{folder_id}/favorite` → `204` / `404` (BRD-07, повтор ничего не меняет). В `BoardOut` — `folder_id`, `favorite`; `FolderOut` — `id, parent_id, title, position, favorite, created_at`. Чужая и несуществующая папка неразличимы (`404`).
 - `create_folder` и `move_folder` блокируют все папки владельца (`SELECT … FOR UPDATE`): создания и переносы одного владельца идут по очереди. `move_folder` отвергает вложение в себя или потомка (`_is_within`) до изменений, вставляет папку на индекс `position` (больше числа соседей — в конец) и перенумеровывает соседей нового родителя с 0.
@@ -151,7 +151,7 @@ flowchart TB
 - Снимки и лента (T4.3): модуль `history` хранит таблицы и функции записи, а пишет в них `realtime.store` — он держит открытые документы. `Hub` сжимает журнал открытой доски раз в `SNAPSHOT_INTERVAL_SECONDS`, при уходе последнего соединения (`router` доводит `leave` до конца в `anyio.CancelScope(shield=True)`) и при остановке процесса; сценарий — [sequences/sync.md](sequences/sync.md), таблицы — [data-model.md](data-model.md). Лента пишется только для удаления объектов (`objects_deleted`) — [states/board-object.md](states/board-object.md).
 - Присутствие (T4.2): `authorize` возвращает имя соединения (`BoardAccess.name`: имя учётки владельца или `display_name` участника); `Peer` хранит случайный `id` и последнее состояние `awareness` только в памяти. Сообщения и порядок — [ws-protocol.md](ws-protocol.md), сценарий — [sequences/presence.md](sequences/presence.md).
 
-Актуально на: T4.3, 7477309. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (модуль `library`), SHR-01…SHR-03, SHR-05, SHR-06 (модуль `sharing`), COL-01, COL-02, COL-04, COL-09, SHR-04 (канал и присутствие, модуль `realtime`), COL-07 и COL-08 (основа: снимки и лента, модуль `history`); каркас — ARCHITECTURE.md, разделы 3, 5, 6, 7, 10, 11.
+Актуально на: T5.1, 34125f1. Требования: ADM-01…ADM-07, ACC-01…ACC-03 (модуль `identity`), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (модуль `library`), SHR-01…SHR-03, SHR-05, SHR-06, CVS-05 (`SharedBoard.id`) (модуль `sharing`), COL-01, COL-02, COL-04, COL-09, SHR-04 (канал и присутствие, модуль `realtime`), COL-07 и COL-08 (основа: снимки и лента, модуль `history`); каркас — ARCHITECTURE.md, разделы 3, 5, 6, 7, 10, 11.
 
 ## Клиент `apps/web`
 
@@ -216,7 +216,7 @@ flowchart TB
   end
   subgraph realtimeMod [realtime]
     sock["socketUrl.ts<br/>socketUrl(page = window.location):<br/>https: → wss:, иначе ws:; host страницы + /api/ws"]
-    live["BoardLive({target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace"]
+    live["BoardLive({boardId, target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace key = boardId"]
     useConn["useBoardConnection(target, checkAccess)<br/>{board, presence, status}; boardSocketUrl(target):<br/>?board={id} | ?token={token}"]
     conn["BoardConnection({doc, url, presence, onStatus, checkAccess})<br/>connecting | online | offline | closed;<br/>retryDelays 500…8000 мс, destroy();<br/>onopen → presence.attach, onclose → detach"]
     bpres["BoardPresence<br/>setLocal, attach, detach, receive,<br/>subscribe / getSnapshot → {peers: PeerPresence[]};<br/>AWARENESS_INTERVAL_MS = 50"]
@@ -225,14 +225,23 @@ flowchart TB
     msgs["messages.ts<br/>MessageType Sync/Awareness/Presence, SyncKind,<br/>CloseCode, Point, CameraView, AwarenessState,<br/>PresencePeer, ServerMessage,<br/>encodeSync, encodeAwareness, decodeMessage (lib0)"]
   end
   subgraph collabMod [collab]
-    workspace["BoardWorkspace({presence})<br/>camera, following, cursorsShown;<br/>Following … / Stop following, рамка цвета участника<br/>(COL-02…COL-04)"]
+    workspace["BoardWorkspace({boardId, objects, presence})<br/>camera (usePersistentCamera), viewport, wheelMode,<br/>rects (useSceneRects), following, cursorsShown;<br/>move(): following = null + своя камера;<br/>Following … / Stop following, рамка цвета участника<br/>(CVS-01…CVS-05, MOB-02, COL-02…COL-04)"]
     ppanel["PresencePanel<br/>aside People on this board: On this board (N),<br/>… (you), · following …, Follow …,<br/>Hide cursors / Show cursors (COL-03, COL-04, COL-09)"]
     rcursors["RemoteCursors({peers, zoom})<br/>стрелка и имя, aria-label …'s cursor;<br/>свой не рисуется (COL-02)"]
     pcolor["peerColor(peer)<br/>hsl по id соединения"]
   end
   subgraph canvasMod [canvas]
-    bcanvas["BoardCanvas({camera, onMove, onPointer})<br/>data-testid board-canvas, board-world (CSS transform),<br/>перетаскивание → panBy, колесо → zoomAt,<br/>pointermove → onPointer(screenToBoard), уход мыши → null"]
-    camera["camera.ts<br/>HOME, MIN_ZOOM = 0.1, MAX_ZOOM = 8,<br/>screenToBoard, boardToScreen, panBy, zoomAt"]
+    bcanvas["BoardCanvas({camera, wheelMode, onMove, onPointer, onResize})<br/>data-testid board-canvas, board-world: scale(zoom) translate(-x, -y),<br/>точечный фон DOT_STEP = 32; pressed: зажатые указатели;<br/>левая/средняя кнопка или один палец → panBy,<br/>два пальца → pinch (MOB-02), колесо (passive: false) → wheelAction;<br/>pointermove → onPointer(screenToBoard), во время щипка — нет;<br/>ResizeObserver → onResize"]
+    camera["camera.ts<br/>HOME, MIN_ZOOM = 0.1, MAX_ZOOM = 8, ZOOM_STEP = 1.25,<br/>Size, Rect, clampZoom, zoomBy, centerOn, viewRect,<br/>screenToBoard, boardToScreen, panBy, zoomAt, pinch"]
+    controls["CameraControls({zoom, onZoomIn, onZoomOut, wheelMode, onWheelMode})<br/>toolbar View: Zoom out, Zoom level (N%), Zoom in;<br/>Mouse wheel: Zooms / Scrolls (Ctrl/⌘ + wheel zooms)<br/>(CVS-02, CVS-03)"]
+    minimap["Minimap({camera, viewport, rects, onNavigate})<br/>svg role=img Minimap 160×110: rect.minimap-object,<br/>minimap-view (рамка вида); щелчок / перетаскивание →<br/>onNavigate(toBoard), fit заморожен, пока зажато (CVS-04)"]
+    mfit["minimapFit.ts<br/>minimapWorld (объекты + вид + начало координат,<br/>поле MARGIN = 0.1), MinimapFit, fitWorld,<br/>toMinimap, toBoard"]
+    scene["sceneBounds.ts<br/>sceneRects(objects): верхний уровень (без parent)<br/>с числовыми x, y, width, height; JSON или Y.Map;<br/>useSceneRects: observeDeep"]
+    wheel["wheel.ts<br/>WheelMode zoom | scroll, DEFAULT_WHEEL_MODE = zoom,<br/>wheelAction → zoom(factor) | pan(dx, dy);<br/>loadWheelMode, saveWheelMode:<br/>localStorage myboard.wheelMode (CVS-03)"]
+    keys["keyboard.ts<br/>cameraKeyAction: + = → zoomBy, - _ − → zoomBy,<br/>стрелки → panBy ARROW_STEP = 100;<br/>Ctrl/⌘/Alt → null; isTypingTarget"]
+    ukeys["useCameraKeys(onMove)<br/>keydown на window, кроме полей ввода (CVS-02)"]
+    upcam["usePersistentCamera(boardId)<br/>loadCamera ?? HOME, saveCamera при каждом изменении"]
+    cstore["cameraStorage.ts<br/>loadCamera, saveCamera:<br/>localStorage myboard.camera.{boardId} → {x, y, zoom} (CVS-05)"]
   end
   yjs["yjs, lib0"]
   oas["openapi.json<br/>pnpm api:fetch ← $PUBLIC_BASE_URL/api/openapi.json"]
@@ -282,16 +291,30 @@ flowchart TB
   board & shared --> live
   shared -->|"onClosed → recheck: openSharedBoard"| sApi
   live --> useConn
-  live -->|"presence"| workspace
+  live -->|"boardId, board.objects, presence"| workspace
   useConn --> conn & bdoc & bpres
   conn -->|"attach, detach, receive"| bpres
   bpres -->|"types"| msgs
   workspace -->|"setLocal, subscribe"| bpres
   workspace --> usePres
   usePres --> bpres
-  workspace --> bcanvas & ppanel & rcursors
-  workspace -->|"HOME"| camera
-  bcanvas --> camera
+  workspace --> bcanvas & ppanel & rcursors & controls & minimap
+  workspace -->|"zoomBy(ZOOM_STEP), centerOn"| camera
+  workspace -->|"usePersistentCamera(boardId)"| upcam
+  workspace -->|"useCameraKeys(move)"| ukeys
+  workspace -->|"useSceneRects(objects)"| scene
+  workspace -->|"loadWheelMode, saveWheelMode"| wheel
+  bcanvas -->|"panBy, pinch, zoomAt, screenToBoard"| camera
+  bcanvas -->|"wheelAction"| wheel
+  controls -->|"MIN_ZOOM, MAX_ZOOM"| camera
+  minimap -->|"viewRect"| camera
+  minimap -->|"minimapWorld, fitWorld, toMinimap, toBoard"| mfit
+  ukeys -->|"cameraKeyAction, isTypingTarget"| keys
+  keys -->|"zoomBy, panBy"| camera
+  upcam -->|"loadCamera, saveCamera"| cstore
+  upcam -->|"HOME"| camera
+  cstore -->|"MIN_ZOOM, MAX_ZOOM"| camera
+  scene -->|"Y.Map objects, observeDeep"| yjs
   ppanel & rcursors & workspace --> pcolor
   useConn -->|"socketUrl"| sock
   conn --> msgs
@@ -335,10 +358,13 @@ flowchart TB
 - `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
 - Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`; `/`, `/boards/:id`, `/templates` обёрнуты в `RequireAccount`: без сессии и после её отзыва — `Redirect /login` (replace). Отзыв замечается опросом `GET /api/session` раз в 2 с у видимой вкладки, сразу при возврате на вкладку и по любому ответу `401`, кроме `POST /api/login` и `/api/admin/*` (ACC-05, состояния — [states/session.md](states/session.md)); `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
 - `/boards/:id` за `RequireAccount` показывает название своей доски, строку состояния связи `BoardLive` и холст с присутствием (объектов пока нет, T5.*); до ответа `GET /api/session` страницы под `RequireAccount` не монтируются и своих запросов не шлют (BUG-002); чужая, удалённая и несуществующая — Board unavailable / Board not found. `/templates` — заглушка за `RequireAccount`; `/t/:token`, `/b/:token/embed` — заглушки без проверки входа. `/b/:token` без `RequireAccount`: сессию участника хранит cookie этой доски, страница узнаёт имя из `GET /api/share/{token}`, затем открывает `BoardLive` по токену; закрытый без доступа канал (сброс ссылки) ведёт к повторному `GET /api/share/{token}` и Board unavailable без перезагрузки. Холст с присутствием — как у владельца.
-- Присутствие (T4.2): `useBoardConnection` создаёт вместе с документом `BoardPresence`, `BoardConnection` передаёт ему кадры `awareness`/`presence` и шлёт своё состояние; `BoardWorkspace` рисует холст `BoardCanvas` с чужими курсорами, плашку слежения и `PresencePanel`. Камера минимальная (сдвиг перетаскиванием, масштаб колесом, точечный фон) — полная в T5.1; объектов на холсте пока нет. Сценарий — [sequences/presence.md](sequences/presence.md).
+- Присутствие (T4.2): `useBoardConnection` создаёт вместе с документом `BoardPresence`, `BoardConnection` передаёт ему кадры `awareness`/`presence` и шлёт своё состояние; `BoardWorkspace` рисует холст `BoardCanvas` с чужими курсорами, плашку слежения и `PresencePanel`. Объектов на холсте пока нет (T5.2). Сценарий — [sequences/presence.md](sequences/presence.md).
+- Камера (T5.1): вид — центр `{x, y}` в координатах доски и `zoom` (10 %…800 %), сдвиг не ограничен (CVS-01). Все свои движения вида идут через `BoardWorkspace.move` — он снимает слежение (COL-04) и меняет камеру: кнопки и клавиши `+`/`=`, `-` — `zoomBy` ×1,25 вокруг центра, стрелки — `panBy` на 100 px экрана (клавиши слушаются на всей странице, кроме полей ввода, без Ctrl/⌘/Alt; CVS-02); колесо по `WheelMode`: `zoom` — масштаб вокруг указателя, `scroll` — сдвиг (Shift — по горизонтали), масштаб с Ctrl/⌘ (CVS-03); перетаскивание левой или средней кнопкой и один палец — сдвиг, два пальца — `pinch`, точка между пальцами идёт за ними (MOB-02, `touch-action: none` на холсте и миникарте); миникарта — `centerOn` в выбранную точку (CVS-04). Камера уходит в `awareness` как раньше (`setLocal({camera})`).
+- Запоминание (CVS-05): `localStorage` `myboard.camera.{boardId}` — вид каждой доски, `myboard.wheelMode` — режим колеса для всех досок этого браузера. `boardId` владельцу даёт `BoardPage` (`board.id`), участнику — `SharedBoardPage` (`SharedBoard.id`); `BoardLive` пересоздаёт `BoardWorkspace` (`key = boardId`) при смене доски. Недоступное хранилище или испорченная запись — начальный вид `HOME` (0; 0; 100 %).
+- Миникарта (CVS-04) читает объекты верхнего уровня из `objects` документа (`useSceneRects`, пересчёт на любую правку) и показывает их, рамку вида и начало координат; поле вписывания замораживается, пока указатель зажат.
 - Модуль `realtime` (T4.1): `moveToTrash` (T4.3) — перенос объектов в корзину документа, интерфейсом пока не вызывается (T5.*). Один `Y.Doc` на открытую доску (`useBoardConnection`), `BoardConnection` — провайдер документа поверх `/api/ws` (сценарий — [sequences/sync.md](sequences/sync.md), кадры — [ws-protocol.md](ws-protocol.md)). Внешние библиотеки — `yjs`, `lib0`. Двойник сокета в тестах — `realtime/fakeSocket.ts`.
 - Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts`, `account/fakeAccountServer.ts` и `library/fakeLibraryServer.ts` (подключается к двойнику входа через `extraRoute`).
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T4.3, 7477309. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.
+Актуально на: T5.1, 34125f1. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`), CVS-01…CVS-05, MOB-02 (камера и миникарта); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.

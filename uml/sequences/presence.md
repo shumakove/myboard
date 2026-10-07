@@ -68,7 +68,7 @@ sequenceDiagram
   R-->>PA: awareness B → у A в списке «B · following <имя A>»
   WB-->>U: плашка Following <имя A> + Stop following, рамка цвета A,<br/>кнопка Following (disabled)
 
-  WA->>WA: перетаскивание (panBy) / колесо (zoomAt)
+  WA->>WA: move(): мышь, палец (panBy), щипок (pinch),<br/>колесо (zoomAt / panBy), кнопки и клавиши (zoomBy, panBy),<br/>миникарта (centerOn)
   WA->>PA: setLocal({camera})
   PA->>R: awareness {camera: {x, y, zoom}}
   R-->>PB: awareness A
@@ -76,7 +76,7 @@ sequenceDiagram
 
   alt Stop following
     U->>WB: following = null
-  else свой сдвиг или масштаб (BoardCanvas.onMove)
+  else свой сдвиг или масштаб (BoardCanvas.onMove, CameraControls,<br/>useCameraKeys, Minimap.onNavigate)
     U->>WB: move(): following = null, camera = свой вид
   else A ушёл
     PB-->>WB: A нет в peers → following = null
@@ -87,7 +87,7 @@ sequenceDiagram
 
 - Скрытие курсоров (COL-03) — кнопка `Hide cursors` / `Show cursors` в `PresencePanel`: локальный флаг `cursorsShown` вкладки, `RemoteCursors` не рисуется; в канал ничего не уходит.
 - Свой курсор не рисуется (`self`); две вкладки одного человека — два соединения и две строки списка.
-- Камера минимальная (`canvas/camera.ts`: `HOME`, `screenToBoard`, `boardToScreen`, `panBy`, `zoomAt`, масштаб `MIN_ZOOM = 0.1`…`MAX_ZOOM = 8`); курсор касанием передаётся, пока палец движется, и при отрыве не убирается (`null` — только для мыши).
+- Камера (T5.1, `canvas/camera.ts`, масштаб `MIN_ZOOM = 0.1`…`MAX_ZOOM = 8`): любое своё движение вида — мышь, колесо, клавиши, кнопки, касание, щипок, миникарта — идёт через `BoardWorkspace.move` и выключает слежение. Вид ведущего, полученный по `awareness`, повторяется и у наблюдателя запоминается в `localStorage` как его собственный (CVS-05). Курсор касанием передаётся, пока движется один палец; во время щипка (два зажатых указателя) курсор не шлётся, при отрыве не убирается (`null` — только для мыши).
 - Присутствие не попадает в документ и `board_updates`; при сбросе ссылки (`Hub.close_participants`) и отзыве доступа (`_watch_access`) соединение закрывается `4403` и сразу пропадает из `presence` у остальных.
 
-Актуально на: T4.2, 1e65608. Требования: COL-02, COL-03, COL-04, COL-09.
+Актуально на: T5.1, 34125f1. Требования: COL-02, COL-03, COL-04 (в том числе на жестах телефона, MOB-02), COL-09.

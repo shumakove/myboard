@@ -66,10 +66,10 @@ sequenceDiagram
     S->>SS: find_board_session(cookie, board.id)
     SS->>DB: SELECT sessions WHERE id = sha256(cookie)<br/>AND subject_type = guest AND board_id = …
     alt сессия этой доски есть
-      R-->>A: 200 SharedBoard {title, participant: {name}}
+      R-->>A: 200 SharedBoard {id, title, participant: {name}}
       P-->>G: You joined as {name}. (имя не спрашивается повторно)
     else сессии нет
-      R-->>A: 200 SharedBoard {title, participant: null}
+      R-->>A: 200 SharedBoard {id, title, participant: null}
       P-->>G: Enter your name to join the board. (SHR-03)
       G->>P: Your name, Join board
       P->>A: joinSharedBoard(token, name)
@@ -86,7 +86,7 @@ sequenceDiagram
         end
         S->>SS: create_session(db, GUEST, uuid4(), board_id, display_name = name)
         SS->>DB: INSERT sessions (id = sha256(token), subject_type = guest, board_id, display_name)
-        R-->>A: 200 SharedBoard {title, participant: {name}},<br/>Set-Cookie myboard_board_{board.id.hex} (HttpOnly, SameSite=Lax, Path=/, Secure при https://, без Max-Age)
+        R-->>A: 200 SharedBoard {id, title, participant: {name}},<br/>Set-Cookie myboard_board_{board.id.hex} (HttpOnly, SameSite=Lax, Path=/, Secure при https://, без Max-Age)
         P-->>G: You joined as {name}. (SHR-02)
       end
     end
@@ -95,6 +95,6 @@ sequenceDiagram
 
 - Учётная запись не создаётся: строка `users` не появляется, в `GET /api/admin/users` участника нет. Гостевая cookie не открывает `/api/boards*`, `/api/folders*` (`401`) и другие доски.
 - Отказ по ссылке один для всех недействующих токенов и не говорит, существует ли доска.
-- Холста на `/b/:token` пока нет (T4.1, T5.*): после входа страница показывает название доски и имя участника.
+- После входа страница показывает имя участника и открывает `BoardLive` по токену (канал — [sync.md](sync.md), присутствие — [presence.md](presence.md)). `SharedBoard.id` (uuid доски, T5.1) — ключ запомненного вида камеры участника в `localStorage` (CVS-05); доступа он не даёт: канал и файлы участник открывает только по токену и cookie доски.
 
-Актуально на: T3.1, d4a2685. Требования: SHR-01, SHR-02, SHR-03, SHR-05.
+Актуально на: T5.1, 34125f1. Требования: SHR-01, SHR-02, SHR-03, SHR-05; CVS-05 (поле `id`).
