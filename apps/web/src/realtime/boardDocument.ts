@@ -18,6 +18,8 @@ export interface BoardDocument {
   votes: Y.Map<unknown>;
   /** Заметка доски (T6.12). */
   notes: Y.XmlFragment;
+  /** Фон и шаг сетки доски (CVS-06, T5.2). */
+  settings: Y.Map<unknown>;
 }
 
 export function createBoardDocument(doc: Y.Doc = new Y.Doc()): BoardDocument {
@@ -29,6 +31,7 @@ export function createBoardDocument(doc: Y.Doc = new Y.Doc()): BoardDocument {
     timer: doc.getMap("timer"),
     votes: doc.getMap("votes"),
     notes: doc.getXmlFragment("notes"),
+    settings: doc.getMap("settings"),
   };
 }
 

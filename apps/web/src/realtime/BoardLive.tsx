@@ -14,7 +14,7 @@ const STATUS_TEXT: Record<ConnectionStatus, string> = {
 /**
  * Совместная работа на доске: держит канал документа (COL-01), показывает состояние связи,
  * холст с камерой (CVS-01…CVS-05), курсоры участников и список присутствующих
- * (COL-02…COL-04, COL-09). Объекты на холсте появятся в T5.2.
+ * (COL-02…COL-04, COL-09) и сцену с объектами (T5.2).
  */
 export function BoardLive({
   boardId,
@@ -43,7 +43,7 @@ export function BoardLive({
         <BoardWorkspace
           key={boardId}
           boardId={boardId}
-          objects={board.objects}
+          board={board}
           presence={presence}
         />
       )}

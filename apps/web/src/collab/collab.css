@@ -16,6 +16,20 @@
   min-width: 0;
 }
 
+/* Панель вида и настройки доски над холстом. */
+.board-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.board-bar .camera-controls {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+
 .board-stage {
   position: relative;
   border-radius: 8px;
