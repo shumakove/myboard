@@ -1,9 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AppRoutes } from "./routes";
+// Тема и компоненты — раньше модульных стилей экранов: экраны уточняют их, а не наоборот.
 import "./ui/theme.css";
 import "./ui/ui.css";
 import "./ui/layout.css";
+import { AppRoutes } from "./routes";
 
 const container = document.getElementById("root");
 if (!container) {
