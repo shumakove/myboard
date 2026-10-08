@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`. T5.1 сделал полную камеру холста в клиенте `canvas`: масштаб кнопками, клавишами, колесом и щипком, сдвиг мышью, пальцем и стрелками, выбор поведения колеса, миникарта по объектам документа и запоминание вида в `localStorage`; на сервере в `SharedBoard` добавлено поле `id` (ключ запомненного вида участника). T5.2 добавил в клиент модуль `scene`: объекты документа на холсте (стикер, фигура, текст), панель инструментов, выделение щелчком, рамкой и лассо, панель выделения с фильтром по типу и массовыми свойствами, перемещение с прилипанием и автопрокруткой, размер и поворот, удаление в корзину, контекстные меню, долгое нажатие пальцем и общий для доски фон и шаг сетки (корень документа `settings`); сервер не менялся.
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`. T5.1 сделал полную камеру холста в клиенте `canvas`: масштаб кнопками, клавишами, колесом и щипком, сдвиг мышью, пальцем и стрелками, выбор поведения колеса, миникарта по объектам документа и запоминание вида в `localStorage`; на сервере в `SharedBoard` добавлено поле `id` (ключ запомненного вида участника). T5.2 добавил в клиент модуль `scene`: объекты документа на холсте (стикер, фигура, текст), панель инструментов, выделение щелчком, рамкой и лассо, панель выделения с фильтром по типу и массовыми свойствами, перемещение с прилипанием и автопрокруткой, размер и поворот, удаление в корзину, контекстные меню, долгое нажатие пальцем и общий для доски фон и шаг сетки (корень документа `settings`); сервер не менялся. T5.3 добавил в `scene` операции над объектами: выравнивание и распределение (меню Arrange и маркеры промежутка), направляющие к соседям при перемещении, группы, порядок слоёв, блокировку и Unlock all, копирование/вырезание/вставку/дублирование (в том числе между досками браузера) и автора и даты изменения у объекта; имя автора страницы передают в `BoardLive` → `BoardWorkspace` (`userName`); сервер не менялся.
 
 ## Сервер `apps/api`
 
@@ -164,12 +164,12 @@ flowchart TB
     placeholder["PagePlaceholder({title})<br/>h1 + This page is not available yet."]
     login["LoginPage<br/>/login: Sign in (ACC-01, ACC-02)"]
     boards["BoardsPage<br/>/: Boards, имя, Sign out (ACC-03);<br/>version: перезагрузка списков и дерева после правок;<br/>reveal(folderId), moved(move): раскрыть путь"]
-    board["BoardPage<br/>/boards/:id: название доски или Board unavailable;<br/>кнопка Share → ShareDialog; BoardLive (owner),<br/>ownerHasAccess: getBoard, 401/404 → false"]
+    board["BoardPage<br/>/boards/:id: название доски или Board unavailable;<br/>кнопка Share → ShareDialog; BoardLive (owner,<br/>userName = имя учётки из useCurrentAccount),<br/>ownerHasAccess: getBoard, 401/404 → false"]
     templates["TemplatesPage<br/>/templates"]
     tcopy["TemplateCopyPage<br/>/t/:token"]
     alogin["AdminLoginPage<br/>/admin/login: Admin sign in"]
     ausers["AdminUsersPage<br/>/admin/users: Users, Sign out"]
-    shared["SharedBoardPage + NameForm<br/>/b/:token: Your name, Join board (SHR-03) →<br/>You joined as …, BoardLive (participant);<br/>Board unavailable (SHR-05); participantHasAccess, recheck"]
+    shared["SharedBoardPage + NameForm<br/>/b/:token: Your name, Join board (SHR-03) →<br/>You joined as …, BoardLive (participant,<br/>userName = participant.name);<br/>Board unavailable (SHR-05); participantHasAccess, recheck"]
     embed["EmbeddedBoardPage<br/>/b/:token/embed"]
     nf["NotFoundPage<br/>любой другой путь: Page not found"]
   end
@@ -216,7 +216,7 @@ flowchart TB
   end
   subgraph realtimeMod [realtime]
     sock["socketUrl.ts<br/>socketUrl(page = window.location):<br/>https: → wss:, иначе ws:; host страницы + /api/ws"]
-    live["BoardLive({boardId, target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace key = boardId, board"]
+    live["BoardLive({boardId, target, checkAccess, onClosed, userName})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace key = boardId, board"]
     useConn["useBoardConnection(target, checkAccess)<br/>{board, presence, status}; boardSocketUrl(target):<br/>?board={id} | ?token={token}"]
     conn["BoardConnection({doc, url, presence, onStatus, checkAccess})<br/>connecting | online | offline | closed;<br/>retryDelays 500…8000 мс, destroy();<br/>onopen → presence.attach, onclose → detach"]
     bpres["BoardPresence<br/>setLocal, attach, detach, receive,<br/>subscribe / getSnapshot → {peers: PeerPresence[]};<br/>AWARENESS_INTERVAL_MS = 50"]
@@ -225,7 +225,7 @@ flowchart TB
     msgs["messages.ts<br/>MessageType Sync/Awareness/Presence, SyncKind,<br/>CloseCode, Point, CameraView, AwarenessState,<br/>PresencePeer, ServerMessage,<br/>encodeSync, encodeAwareness, decodeMessage (lib0)"]
   end
   subgraph collabMod [collab]
-    workspace["BoardWorkspace({boardId, board, presence})<br/>camera (usePersistentCamera), viewport, wheelMode,<br/>rects (useSceneRects(board.objects)), following, cursorsShown,<br/>selfName (имя своего peer); board-bar: CameraControls +<br/>BoardSettingsControls; BoardScene с worldOverlay (курсоры)<br/>и stageOverlay (Minimap, Following … / Stop following);<br/>move(): following = null + своя камера; рамка цвета участника<br/>(CVS-01…CVS-05, MOB-02, COL-02…COL-04)"]
+    workspace["BoardWorkspace({boardId, board, presence, userName})<br/>camera (usePersistentCamera), viewport, wheelMode,<br/>rects (useSceneRects(board.objects)), following, cursorsShown,<br/>selfName (имя своего peer, до присутствия — userName, CVS-22); board-bar: CameraControls +<br/>BoardSettingsControls; BoardScene с worldOverlay (курсоры)<br/>и stageOverlay (Minimap, Following … / Stop following);<br/>move(): following = null + своя камера; рамка цвета участника<br/>(CVS-01…CVS-05, MOB-02, COL-02…COL-04)"]
     ppanel["PresencePanel<br/>aside People on this board: On this board (N),<br/>… (you), · following …, Follow …,<br/>Hide cursors / Show cursors (COL-03, COL-04, COL-09)"]
     rcursors["RemoteCursors({peers, zoom})<br/>стрелка и имя, aria-label …'s cursor;<br/>свой не рисуется (COL-02)"]
     pcolor["peerColor(peer)<br/>hsl по id соединения"]
@@ -236,7 +236,7 @@ flowchart TB
     controls["CameraControls({zoom, onZoomIn, onZoomOut, wheelMode, onWheelMode})<br/>toolbar View: Zoom out, Zoom level (N%), Zoom in;<br/>Mouse wheel: Zooms / Scrolls (Ctrl/⌘ + wheel zooms)<br/>(CVS-02, CVS-03)"]
     minimap["Minimap({camera, viewport, rects, onNavigate})<br/>svg role=img Minimap 160×110: rect.minimap-object,<br/>minimap-view (рамка вида поверх объектов, BUG-003); щелчок / перетаскивание →<br/>onNavigate(toBoard), fit заморожен, пока зажато (CVS-04)"]
     mfit["minimapFit.ts<br/>minimapWorld (объекты + вид + начало координат,<br/>поле MARGIN = 0.1), MinimapFit, fitWorld,<br/>toMinimap, toBoard; visibleFrame:<br/>рамка вида не меньше MIN_VIEW_FRAME 12×9 px (BUG-003)"]
-    scene["sceneBounds.ts<br/>sceneRects(objects): верхний уровень (без parent)<br/>с числовыми x, y, width, height; JSON или Y.Map;<br/>useSceneRects: observeDeep"]
+    scene["sceneBounds.ts<br/>sceneRects(objects) = readScene → верхний уровень<br/>(рамка группы — по её объектам); useSceneRects: observeDeep"]
     wheel["wheel.ts<br/>WheelMode zoom | scroll, DEFAULT_WHEEL_MODE = zoom,<br/>wheelAction → zoom(factor) | pan(dx, dy);<br/>loadWheelMode, saveWheelMode:<br/>localStorage myboard.wheelMode (CVS-03)"]
     keys["keyboard.ts<br/>cameraKeyAction: + = → zoomBy, - _ − → zoomBy,<br/>стрелки → panBy ARROW_STEP = 100;<br/>Ctrl/⌘/Alt → null; isTypingTarget"]
     ukeys["useCameraKeys(onMove)<br/>keydown на window, кроме полей ввода (CVS-02)"]
@@ -244,19 +244,28 @@ flowchart TB
     cstore["cameraStorage.ts<br/>loadCamera, saveCamera:<br/>localStorage myboard.camera.{boardId} → {x, y, zoom} (CVS-05)"]
   end
   subgraph sceneMod [scene]
-    bscene["BoardScene({board, camera, wheelMode, userName, stageStyle,<br/>stageAttributes, onMove, onPointer, onResize, worldOverlay, stageOverlay})<br/>состояние вкладки: tool, selection, draft, menu, editing;<br/>create, remove → moveToTrash(board, ids, userName) (CVS-21);<br/>window keydown: Delete/Backspace — удалить, Escape — снять выделение;<br/>window paste: текст → объект text под указателем или в центре вида (CVS-09);<br/>drop(type, client): кнопку отпустили над холстом, не над панелью;<br/>menuItems: Object menu — Edit text, Delete / Delete N objects;<br/>Board menu — Add … here, Select all (CVS-23)"]
-    tpanel["ToolPanel({tool, onTool, onDrop})<br/>toolbar Tools: Select, Lasso, Sticky note, Shape, Text<br/>(aria-pressed); перетаскивание кнопки дальше<br/>DRAG_THRESHOLD = 6 px → onDrop (CVS-09, CVS-10)"]
+    bscene["BoardScene({board, camera, wheelMode, userName, stageStyle,<br/>stageAttributes, onMove, onPointer, onResize, worldOverlay, stageOverlay})<br/>состояние вкладки: tool, selection, draft, guides, menu, editing;<br/>actor = userName (автор правок, CVS-22); create (createObject с actor);<br/>commands = useSceneCommands, useSceneShortcuts(commands, Escape);<br/>pastePoint: указатель или центр вида; drop(type, client);<br/>menu: Object menu, Arrange menu, Board menu (clip = loadClip)<br/>из sceneMenus (CVS-23); Board actions в ToolPanel: Paste, Unlock all;<br/>editText — не для заблокированных (CVS-19)"]
+    tpanel["ToolPanel({tool, onTool, onDrop, children})<br/>toolbar Tools: Select, Lasso, Sticky note, Shape, Text<br/>(aria-pressed); перетаскивание кнопки дальше<br/>DRAG_THRESHOLD = 6 px → onDrop (CVS-09, CVS-10);<br/>children — группа Board actions"]
+    cmds["useSceneCommands(CommandContext) → SceneCommands<br/>units (topmost), editable (не locked); команды или null:<br/>remove (removalSet → moveToTrash), copy, cut, paste, pasteText,<br/>duplicate (CVS-20), align (2+), distribute (3+) (CVS-15),<br/>layer (CVS-18), group, ungroup (CVS-17), lock, unlock,<br/>unlockAll (CVS-19), setStyle; actor во всех правках (CVS-22)"]
+    skeys["useSceneShortcuts(commands, onEscape)<br/>window keydown вне полей ввода: Ctrl/⌘+C, X, V, D,<br/>Delete/Backspace, Escape; события copy/cut/paste:<br/>CLIPBOARD_MIME + text/plain, текст → объект text (CVS-09);<br/>без события буфера — копия из localStorage;<br/>copyToClipboard(commands, cut): execCommand(copy) (CVS-20, CVS-21)"]
+    smenus["sceneMenus.ts<br/>arrangeMenu: Align left…bottom, Distribute horizontally/vertically,<br/>Bring to front, Bring forward, Send backward, Send to back;<br/>objectMenu: Edit text, Copy, Cut, Duplicate, Group, Ungroup,<br/>Lock, Unlock, слои, Delete / Delete N objects;<br/>boardMenu: Paste here, Add … here, Select all, Unlock all"]
+    arrange["arrange.ts<br/>AlignOp, Axis, Placed; alignDeltas, distributeDeltas<br/>(крайние на месте), spacingDeltas, gapFor (CVS-15)"]
+    guides["guides.ts<br/>Guide {axis, value, from, to}, GUIDE_SNAP_PX = 6;<br/>snapToNeighbors (край/центр к соседу), guidesFor (CVS-16)"]
+    groups["groups.ts<br/>ancestors, withDescendants, topmost, selectionTarget,<br/>enterGroup, canGroup, groupObjects, ungroupObjects,<br/>removalSet (CVS-17, CVS-19, CVS-21)"]
+    layers["layers.ts<br/>LayerOp front | forward | backward | back,<br/>reorder (среди соседей), renumber (CVS-17, CVS-18)"]
+    lock["lock.ts<br/>setLocked, unlockAll, lockedIds (CVS-19)"]
+    clip["clipboard.ts<br/>Clip, CLIPBOARD_MIME, DUPLICATE_OFFSET = 20,<br/>copyObjects, pasteObjects (новые id, поверх, автор — вставивший),<br/>parseClip, clipText, loadClip, saveClip:<br/>localStorage myboard.clipboard (CVS-20)"]
     tools["tools.ts<br/>Tool: select | lasso | create, TOOLS, ToolId,<br/>toolById, placement (центр в точке, угол на сетку)"]
-    otypes["objectTypes.ts<br/>ObjectType sticky | shape | text, ObjectTypeSpec,<br/>OBJECT_TYPES (размер, rotatable, стиль), typeSpec,<br/>StyleKey fill | stroke | color | fontSize,<br/>STYLE_KEYS (Fill, Border, Text color, Font size), styleKeysOf"]
-    sobj["sceneObjects.ts<br/>SceneObject, ObjectPatch, newObjectId, readScene,<br/>createObject, objectMap, objectText, patchObjects"]
+    otypes["objectTypes.ts<br/>ObjectType sticky | shape | text, ObjectTypeSpec,<br/>OBJECT_TYPES (размер, rotatable, стиль), typeSpec,<br/>GROUP_TYPE = group, typeName,<br/>StyleKey fill | stroke | color | fontSize,<br/>STYLE_KEYS (Fill, Border, Text color, Font size), styleKeysOf"]
+    sobj["sceneObjects.ts<br/>SceneObject (offset, locked, meta), ObjectMeta, ObjectPatch,<br/>newObjectId, readScene (группа перед своими объектами),<br/>createObject, objectMap, objectText, patchObjects, writeFields,<br/>transact, topZ, creationMeta, touch (CVS-22)"]
     usobj["useSceneObjects(objects)<br/>readScene на любую правку (observeDeep)"]
-    ugest["useSceneGestures(controls: SceneControls)<br/>→ CanvasGestures: start (create, lasso, маркеры,<br/>объект, Shift / долгое нажатие → рамка), tap,<br/>contextMenu, doubleClick → editText"]
-    gest["gestures.ts<br/>Gesture {move, end, cancel, click?, autoscroll?},<br/>ScenePointer, AreaDraft marquee | lasso;<br/>moveGesture (сетка, Shift — ось, Alt — без прилипания, CVS-12),<br/>resizeGesture, rotateGesture (Shift — 15°, CVS-14), areaGesture (CVS-10)"]
+    ugest["useSceneGestures(controls: SceneControls)<br/>→ CanvasGestures: start (create, lasso, маркеры размера,<br/>поворота и промежутка spacing-x/y, объект — selectionTarget,<br/>Shift / долгое нажатие → рамка), tap, contextMenu,<br/>doubleClick → enterGroup или editText; locked → still (CVS-19);<br/>neighborsOf, порог GUIDE_SNAP_PX / zoom (CVS-16)"]
+    gest["gestures.ts<br/>Gesture {move, end, cancel, click?, autoscroll?},<br/>ScenePointer, AreaDraft marquee | lasso;<br/>moveGesture (сосед важнее сетки, onGuides; Shift — ось,<br/>Alt — без прилипания, CVS-12, CVS-16), resizeGesture,<br/>rotateGesture (Shift — 15°, CVS-14), spacingGesture (CVS-15),<br/>areaGesture (CVS-10); правки с actor (CVS-22)"]
     geom["geometry.ts<br/>Frame, Corner, MIN_SIZE = 10, ROTATION_STEP = 15,<br/>boundsOf, rectContains, polygonContains, frameInside,<br/>snap, lockAxis, resizeFrame, groupScale, scaleFrame,<br/>rotateFrame, EDGE_ZONE = 40, EDGE_SPEED = 18,<br/>edgeVelocity (CVS-13), placeMenu (BUG-005)"]
-    layer["SceneLayer({objects, selected, editing})<br/>data-object-id, data-type, aria-label, aria-selected;<br/>AreaOverlay: selection-marquee, selection-lasso"]
+    layer["SceneLayer({objects, selected, editing})<br/>data-object-id, data-type, aria-label (typeName), aria-selected,<br/>data-locked + lock-badge (CVS-19), группа — невидимая;<br/>AreaOverlay: selection-marquee, selection-lasso;<br/>GuidesOverlay: alignment-guide data-axis, data-value (CVS-16)"]
     ostyle["objectStyle.ts<br/>frameStyle (left, top, rotate), objectStyle"]
-    soverlay["SelectionOverlay({selected})<br/>selection-frame, Resize nw|ne|sw|se,<br/>Rotate — если rotatable у всех (CVS-14)"]
-    sbar["SelectionBar({selected, onFilter, onStyle, onEditText, onDelete})<br/>toolbar Selection: N selected, Keep only → Only … (n),<br/>общие свойства, Mixed; Edit text, Delete (CVS-11, CVS-21)"]
+    soverlay["SelectionOverlay({selected})<br/>selection-frame (data-locked), Resize nw|ne|sw|se,<br/>Rotate — если rotatable у всех (CVS-14);<br/>от 2 объектов — spacing-x, spacing-y (CVS-15);<br/>у заблокированного маркеров нет"]
+    sbar["SelectionBar({selected, onFilter, onStyle, onEditText, onDelete,<br/>onLock, onUnlock, onGroup, onUngroup, onArrange, onMore})<br/>toolbar Selection: N selected, Keep only → Only … (n),<br/>общие свойства, Mixed; Arrange, Group, Ungroup, Lock, Unlock,<br/>Edit text, Delete, More — если доступно (CVS-11, CVS-15…CVS-19, CVS-21);<br/>ObjectInfo — Object info: object-created, object-modified (CVS-22)"]
     cmenu["ContextMenu({label, at, items, onClose})<br/>role=menu, позиция placeMenu до отрисовки;<br/>Escape, нажатие вне меню (CVS-23)"]
     teditor["TextEditor({object, text: Y.Text, onDone})<br/>textarea Object text поверх объекта;<br/>Escape, уход фокуса → onDone (COL-01)"]
     tbind["textBinding.ts<br/>applyTextChange (общие префикс и суффикс),<br/>shiftIndex (курсор при чужой правке)"]
@@ -324,14 +333,39 @@ flowchart TB
   bscene -->|"gestures, background, gridStep, canvasRef"| bcanvas
   bscene --> tpanel & layer & soverlay & sbar & cmenu & teditor
   bscene -->|"useSceneObjects, useBoardSettings"| usobj & bsettings
-  bscene -->|"createObject, objectText, patchObjects, readScene"| sobj
-  bscene -->|"moveToTrash"| bdoc
+  bscene -->|"createObject, objectMap, objectText, readScene, touch"| sobj
+  bscene -->|"useSceneCommands"| cmds
+  bscene -->|"useSceneShortcuts, copyToClipboard"| skeys
+  bscene -->|"arrangeMenu, objectMenu, boardMenu"| smenus
+  bscene -->|"loadClip"| clip
+  bscene -->|"topmost"| groups
+  skeys -->|"commands"| cmds
+  skeys -->|"CLIPBOARD_MIME, parseClip, clipText, loadClip"| clip
+  skeys -->|"isTypingTarget"| keys
+  smenus -->|"OBJECT_TYPES"| otypes
+  cmds -->|"moveToTrash"| bdoc
+  cmds -->|"alignDeltas, distributeDeltas"| arrange
+  cmds -->|"copyObjects, pasteObjects, saveClip"| clip
+  cmds -->|"canGroup, groupObjects, ungroupObjects,<br/>removalSet, topmost"| groups
+  cmds -->|"reorder, renumber"| layers
+  cmds -->|"setLocked, unlockAll"| lock
+  cmds -->|"createObject, patchObjects, readScene, writeFields"| sobj
+  cmds -->|"placement"| tools
+  groups -->|"renumber"| layers
+  groups & clip -->|"creationMeta, newObjectId, objectMap,<br/>touch, transact, topZ"| sobj
+  groups & clip -->|"boundsOf"| geom
+  lock -->|"writeFields"| sobj
+  clip -->|"Y.Map, Y.Text"| yjs
   bscene -->|"placement"| tools
   bscene -->|"useSceneGestures"| ugest
   bscene -->|"screenToBoard"| camera
   bscene -->|"isTypingTarget"| keys
   ugest -->|"areaGesture, moveGesture,<br/>resizeGesture, rotateGesture"| gest
   ugest -->|"toolById"| tools
+  ugest -->|"ancestors, withDescendants, topmost,<br/>selectionTarget, enterGroup"| groups
+  ugest -->|"GUIDE_SNAP_PX"| guides
+  gest -->|"snapToNeighbors, guidesFor"| guides
+  gest -->|"spacingDeltas, gapFor"| arrange
   gest --> geom
   gest -->|"patchObjects"| sobj
   usobj --> sobj
@@ -340,7 +374,7 @@ flowchart TB
   tools --> otypes
   tools -->|"snap"| geom
   tpanel -->|"TOOLS"| tools
-  layer & sbar & soverlay -->|"typeSpec, styleKeysOf, STYLE_KEYS"| otypes
+  layer & sbar & soverlay -->|"typeSpec, typeName, styleKeysOf, STYLE_KEYS"| otypes
   layer & soverlay & teditor --> ostyle
   soverlay -->|"boundsOf"| geom
   cmenu -->|"placeMenu"| geom
@@ -365,6 +399,7 @@ flowchart TB
   upcam -->|"HOME"| camera
   cstore -->|"MIN_ZOOM, MAX_ZOOM"| camera
   scene -->|"Y.Map objects, observeDeep"| yjs
+  scene -->|"readScene"| sobj
   ppanel & rcursors & workspace --> pcolor
   useConn -->|"socketUrl"| sock
   conn --> msgs
@@ -416,7 +451,10 @@ flowchart TB
 - Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts`, `account/fakeAccountServer.ts` и `library/fakeLibraryServer.ts` (подключается к двойнику входа через `extraRoute`).
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
 - Сцена (T5.2): `BoardScene` держит своё для вкладки (инструмент, выделение, черновик области, меню, редактируемый текст) и пишет в документ только объекты, `settings` и корзину. Холст не знает об инструментах: жесты ему отдаёт `useSceneGestures` через `CanvasGestures`; нажатие, не ставшее жестом (`start` → `null`), двигает вид, как в T5.1. Инструмент создания: щелчок ставит объект центром в точку (угол — на сетку), выделяет его, открывает `TextEditor` и возвращает Select; та же кнопка, перетащенная на холст, ставит объект в точке отпускания. Выделение: щелчок, Shift+щелчок, Shift+перетаскивание пустого места — рамка, Lasso — область; попадает объект, все углы которого внутри (CVS-10). Перемещение пишет только изменившийся сдвиг; общая рамка прилипает углом к сетке `gridStep` (CVS-12). У края холста (`EDGE_ZONE` 40 px) жест с `autoscroll` сдвигает вид, объект идёт за указателем (CVS-13). MOB-03: короткое движение пальцем по невыделенному объекту двигает вид, касание выделяет, долгое нажатие (500 мс, сдвиг ≤ 10 px) выделяет и тянет объект или начинает рамку; выделенный объект палец тянет сразу.
+- Операции над объектами (T5.3): `BoardScene` собирает команды `useSceneCommands` над выделенным (`units` — без вложенных в выделенную группу, `editable` — без заблокированных) и раздаёт их панели «Selection», меню (`sceneMenus`) и клавишам (`useSceneShortcuts`); недоступная команда — `null`, её кнопка и пункт не показываются. Выравнивание — 2+ незаблокированных, распределение — 3+, крайние на месте; маркеры `spacing-x`/`spacing-y` ставят объекты с равным шагом, который следует за указателем (CVS-15). При перемещении край или центр общей рамки прилипает к краю или центру соседа ближе 6 экранных px, сосед важнее сетки, Alt отключает оба; `GuidesOverlay` рисует линии только во время жеста (CVS-16). Щелчок по объекту группы выделяет группу, двойной «входит» на уровень ниже (CVS-17). Заблокированное выделяется и копируется, но жест его не двигает (`still`), маркеров нет, команды его не меняют (CVS-19).
+- Буфер обмена (CVS-20): Ctrl/⌘+C/X/V и пункты `Copy`/`Cut` пишут копию в событие `copy`/`cut` (тип `application/x-myboard-objects` + текст) и в `localStorage` `myboard.clipboard`; `Paste here` и кнопка `Paste` берут её из `localStorage` (без HTTPS браузер не даёт читать буфер по кнопке). Вставка на другой доске того же браузера — новые id, поверх, центром под указателем. `Duplicate`/Ctrl/⌘+D — копия со сдвигом 20 в той же группе.
+- Автор (CVS-22): имя для правок — `selfName` (имя своего `Peer` от сервера: имя учётки или введённое участником), до первого `presence` — `userName` страницы. Поля пишет клиент; `ObjectInfo` показывает Created/Modified с `<time datetime>`.
 - Раскладка (BUG-006): на ширине ≤ 640 px панель инструментов — одна строка над холстом (`scene/scene.css`), холст высотой `calc(60vh - 80px)` — целиком в первом экране телефона.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T5.2, b5342f6. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`), CVS-01…CVS-05, MOB-02 (камера и миникарта), CVS-06, CVS-09…CVS-14, CVS-21, CVS-23, MOB-03 (сцена, создание и выделение); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.
+Актуально на: T5.3, 1c15594. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`), CVS-01…CVS-05, MOB-02 (камера и миникарта), CVS-06, CVS-09…CVS-14, CVS-21, CVS-23, MOB-03 (сцена, создание и выделение), CVS-15…CVS-20, CVS-22 (операции над объектами); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.
