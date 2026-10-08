@@ -21,7 +21,7 @@ export const viewBar = (page: Page) => page.getByRole('toolbar', { name: 'View' 
 export const zoomLevel = (page: Page) => page.getByLabel('Zoom level');
 export const wheelSelect = (page: Page) => page.getByLabel('Mouse wheel');
 
-function readVaruint(data: Buffer, start: number): [number, number] {
+export function readVaruint(data: Buffer, start: number): [number, number] {
   let pos = start;
   let result = 0;
   let shift = 0;
@@ -33,7 +33,7 @@ function readVaruint(data: Buffer, start: number): [number, number] {
   }
 }
 
-function varuint(value: number): number[] {
+export function varuint(value: number): number[] {
   const out: number[] = [];
   for (;;) {
     const byte = value & 0x7f;
@@ -249,8 +249,8 @@ export async function putObject(page: Page, query: string, id: string, obj: Reco
   );
 }
 
-/** Объекты документа, которые видит новый клиент (свой контекст страницы). */
-export async function objectsSeenByLateClient(page: Page, query: string): Promise<Record<string, unknown>> {
+/** Документ доски целиком, как его получает новый клиент (свой канал в контексте страницы). */
+export async function docSeenByLateClient(page: Page, query: string): Promise<Y.Doc> {
   const frames: number[][] = await page.evaluate(async (query) => {
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`;
     const ws = new WebSocket(url);
@@ -279,5 +279,10 @@ export async function objectsSeenByLateClient(page: Page, query: string): Promis
     const [len, p3] = readVaruint(data, p2);
     Y.applyUpdate(doc, new Uint8Array(data.subarray(p3, p3 + len)));
   }
-  return doc.getMap('objects').toJSON() as Record<string, unknown>;
+  return doc;
+}
+
+/** Объекты документа, которые видит новый клиент (свой контекст страницы). */
+export async function objectsSeenByLateClient(page: Page, query: string): Promise<Record<string, unknown>> {
+  return (await docSeenByLateClient(page, query)).getMap('objects').toJSON() as Record<string, unknown>;
 }
