@@ -21,12 +21,15 @@ export function BoardLive({
   target,
   checkAccess,
   onClosed,
+  userName,
 }: {
   /** Id доски — ключ запомненного вида камеры (CVS-05). */
   boardId: string;
   target: BoardTarget;
   checkAccess: () => Promise<boolean>;
   onClosed?: () => void;
+  /** Имя из сессии: владельцу — имя учётки, участнику — введённое имя (CVS-22). */
+  userName?: string;
 }) {
   const { board, presence, status } = useBoardConnection(target, checkAccess);
 
@@ -45,6 +48,7 @@ export function BoardLive({
           boardId={boardId}
           board={board}
           presence={presence}
+          userName={userName}
         />
       )}
     </>

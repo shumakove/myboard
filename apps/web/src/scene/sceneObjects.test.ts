@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import {
   createObject,
@@ -7,6 +7,7 @@ import {
   readScene,
   type SceneObject,
 } from "./sceneObjects";
+import { unlockAll } from "./lock";
 import { linkedDocs } from "./testDocs";
 
 function only(objects: Y.Map<unknown>): SceneObject {
@@ -108,5 +109,73 @@ describe("объект сцены в документе", () => {
         style: { fill: "#81d4fa" },
       });
     }
+  });
+});
+
+describe("CVS-22: автор и даты объекта", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("новый объект хранит автора и время; правка — кто и когда изменил последним", () => {
+    const objects = new Y.Doc().getMap<unknown>("objects");
+    vi.useFakeTimers({
+      now: new Date("2026-10-08T10:00:00Z"),
+      toFake: ["Date"],
+    });
+    const id = createObject(objects, "sticky", { x: 0, y: 0 }, "", "Alice");
+    expect(only(objects).meta).toEqual({
+      createdBy: "Alice",
+      createdAt: "2026-10-08T10:00:00.000Z",
+      updatedBy: "Alice",
+      updatedAt: "2026-10-08T10:00:00.000Z",
+    });
+
+    vi.setSystemTime(new Date("2026-10-08T11:30:00Z"));
+    patchObjects(objects, new Map([[only(objects), { x: 40 }]]), "Kate");
+    expect(only(objects).meta).toEqual({
+      createdBy: "Alice",
+      createdAt: "2026-10-08T10:00:00.000Z",
+      updatedBy: "Kate",
+      updatedAt: "2026-10-08T11:30:00.000Z",
+    });
+    expect(objects.get(id)).toBeInstanceOf(Y.Map);
+  });
+});
+
+describe("CVS-19: блокировка в сцене", () => {
+  it("объект заблокированной группы тоже заблокирован; разблокировать всё снимает всё", () => {
+    const objects = new Y.Doc().getMap<unknown>("objects");
+    objects.set("g", {
+      type: "group",
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      locked: true,
+    });
+    objects.set("child", {
+      type: "sticky",
+      parent: "g",
+      x: 10,
+      y: 10,
+      width: 50,
+      height: 50,
+    });
+    objects.set("free", {
+      type: "sticky",
+      x: 0,
+      y: 0,
+      width: 5,
+      height: 5,
+      locked: true,
+    });
+    expect(readScene(objects).map((o) => [o.id, o.locked])).toEqual([
+      ["free", true],
+      ["g", true],
+      ["child", true],
+    ]);
+    unlockAll(objects, "Bob");
+    expect(readScene(objects).every((o) => !o.locked)).toBe(true);
   });
 });

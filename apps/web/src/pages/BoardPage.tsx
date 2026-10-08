@@ -6,6 +6,7 @@ import {
   LibraryApiError,
   type Board,
 } from "../library/libraryApi";
+import { useCurrentAccount } from "../account/accountContext";
 import { BoardLive } from "../realtime/BoardLive";
 import { ShareDialog } from "../sharing/ShareDialog";
 import "../account/account.css";
@@ -25,6 +26,7 @@ export function BoardPage() {
   const { id } = useParams<{ id: string }>();
   const [state, setState] = useState<BoardState>({ status: "loading" });
   const [sharing, setSharing] = useState(false);
+  const account = useCurrentAccount();
 
   useEffect(() => {
     let active = true;
@@ -71,6 +73,7 @@ export function BoardPage() {
             boardId={state.board.id}
             target={{ kind: "owner", boardId: state.board.id }}
             checkAccess={() => ownerHasAccess(state.board.id)}
+            userName={account.status === "signedIn" ? account.name : undefined}
           />
           {sharing && (
             <ShareDialog

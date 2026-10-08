@@ -1,134 +1,29 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { LONG_PRESS_MS } from "../canvas/BoardCanvas";
 import { HOME } from "../canvas/camera";
-import {
-  createBoardDocument,
-  type BoardDocument,
-} from "../realtime/boardDocument";
-import type { CameraView } from "../realtime/messages";
-import { BoardScene } from "./BoardScene";
-import { BoardSettingsControls } from "./BoardSettingsControls";
-import { createObject, readScene, type SceneObject } from "./sceneObjects";
+import { createBoardDocument } from "../realtime/boardDocument";
+import { createObject } from "./sceneObjects";
 import { linkedDocs } from "./testDocs";
-
-// jsdom не считает раскладку: область холста 0×0 в (0, 0), центр вида — в (0, 0), масштаб 1.
-// Поэтому координаты события в тестах — сразу координаты доски.
+import {
+  canvas,
+  click,
+  drag,
+  element,
+  handle,
+  isSelected,
+  object,
+  renderScene,
+  scene,
+  threeObjects,
+} from "./testScene";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-
-function renderScene(board: BoardDocument = createBoardDocument()) {
-  const cameras: CameraView[] = [];
-  function Harness() {
-    const [camera, setCamera] = useState(HOME);
-    cameras.push(camera);
-    return (
-      <>
-        <BoardSettingsControls settings={board.settings} />
-        <BoardScene
-          board={board}
-          camera={camera}
-          wheelMode="zoom"
-          userName="Alice"
-          onMove={setCamera}
-          onPointer={() => undefined}
-          onResize={() => undefined}
-        />
-      </>
-    );
-  }
-  render(<Harness />);
-  return { board, camera: () => cameras.at(-1) ?? HOME };
-}
-
-function canvas() {
-  return screen.getByTestId("board-canvas");
-}
-
-function element(id: string): HTMLElement {
-  const found = document.querySelector<HTMLElement>(`[data-object-id="${id}"]`);
-  if (found === null) throw new Error(`нет объекта ${id}`);
-  return found;
-}
-
-function handle(name: string): HTMLElement {
-  const found = document.querySelector<HTMLElement>(`[data-handle="${name}"]`);
-  if (found === null) throw new Error(`нет маркера ${name}`);
-  return found;
-}
-
-function scene(board: BoardDocument): SceneObject[] {
-  return readScene(board.objects);
-}
-
-function object(board: BoardDocument, id: string): SceneObject {
-  const found = scene(board).find((o) => o.id === id);
-  if (found === undefined) throw new Error(`нет объекта ${id}`);
-  return found;
-}
-
-function isSelected(id: string): boolean {
-  return element(id).getAttribute("aria-selected") === "true";
-}
-
-interface PointerOptions {
-  pointerType?: string;
-  shiftKey?: boolean;
-  altKey?: boolean;
-}
-
-/** Нажатие на `target` в точке `from`, движение по точкам `path`, отпускание. */
-function drag(
-  target: Element,
-  from: [number, number],
-  path: [number, number][],
-  { pointerType = "mouse", ...keys }: PointerOptions = {},
-) {
-  const base = { pointerId: 1, pointerType, ...keys };
-  fireEvent.pointerDown(target, {
-    ...base,
-    button: 0,
-    clientX: from[0],
-    clientY: from[1],
-  });
-  let last = from;
-  for (const point of path) {
-    fireEvent.pointerMove(canvas(), {
-      ...base,
-      clientX: point[0],
-      clientY: point[1],
-    });
-    last = point;
-  }
-  fireEvent.pointerUp(canvas(), {
-    ...base,
-    button: 0,
-    clientX: last[0],
-    clientY: last[1],
-  });
-}
-
-function click(
-  target: Element,
-  at: [number, number],
-  options?: PointerOptions,
-) {
-  drag(target, at, [], options);
-}
-
-/** Три объекта: стикеры A (0,0) и B (220,0), фигура C (600,0). */
-function threeObjects(board: BoardDocument) {
-  const a = createObject(board.objects, "sticky", { x: 0, y: 0 });
-  const b = createObject(board.objects, "sticky", { x: 220, y: 0 });
-  const c = createObject(board.objects, "shape", { x: 600, y: 0 });
-  return { a, b, c };
-}
 
 describe("CVS-09: создание объектов", () => {
   it("инструмент с панели и щелчок по холсту ставят объект; текст пишется в Y.Text", async () => {
@@ -412,7 +307,7 @@ describe("CVS-12: перемещение", () => {
     expect(object(board, a)).toMatchObject({ x: 93, y: 27 });
   });
 
-  it("выделенные объекты двигаются вместе; без сетки — без прилипания", async () => {
+  it("выделенные объекты двигаются вместе; без сетки — без прилипания к сетке", async () => {
     const user = userEvent.setup();
     const board = createBoardDocument();
     const { a, b } = threeObjects(board);
@@ -420,9 +315,10 @@ describe("CVS-12: перемещение", () => {
     await user.selectOptions(screen.getByLabelText("Grid"), "Off");
     click(element(a), [50, 50]);
     click(element(b), [250, 50], { shiftKey: true });
-    drag(element(b), [250, 50], [[257, 53]]);
-    expect(object(board, a)).toMatchObject({ x: 7, y: 3 });
-    expect(object(board, b)).toMatchObject({ x: 227, y: 3 });
+    // Сдвиг дальше расстояния прилипания к соседу C (CVS-16).
+    drag(element(b), [250, 50], [[257, 63]]);
+    expect(object(board, a)).toMatchObject({ x: 7, y: 13 });
+    expect(object(board, b)).toMatchObject({ x: 227, y: 13 });
   });
 });
 

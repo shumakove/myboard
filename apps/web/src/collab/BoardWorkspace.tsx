@@ -31,10 +31,13 @@ export function BoardWorkspace({
   boardId,
   board,
   presence,
+  userName = "",
 }: {
   boardId: string;
   board: BoardDocument;
   presence: BoardPresence;
+  /** Имя из сессии — пока сервер не прислал присутствие (автор правок, CVS-22). */
+  userName?: string;
 }) {
   const { peers } = usePresence(presence);
   const [camera, setCamera] = usePersistentCamera(boardId);
@@ -44,7 +47,8 @@ export function BoardWorkspace({
   const [following, setFollowing] = useState<string | null>(null);
   const [cursorsShown, setCursorsShown] = useState(true);
   const followed = peers.find((p) => p.peer === following && !p.self);
-  const selfName = peers.find((p) => p.self)?.name ?? "";
+  // Имя ставит сервер по сессии: владельцу — имя учётки, участнику — введённое имя.
+  const selfName = peers.find((p) => p.self)?.name ?? userName;
 
   // Свой вид и слежение видны остальным: за этой вкладкой тоже можно следить.
   useEffect(() => {

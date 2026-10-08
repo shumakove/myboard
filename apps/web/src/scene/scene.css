@@ -254,3 +254,92 @@
   align-items: center;
   gap: 4px;
 }
+
+/* CVS-17: группа — невидимая рамка своих объектов, нажатия проходят к объектам. */
+.scene-object.scene-group {
+  padding: 0;
+  pointer-events: none;
+}
+
+/* CVS-19: замок в углу заблокированного объекта, постоянного экранного размера. */
+.scene-lock {
+  position: absolute;
+  top: calc(4px * var(--inverse-zoom, 1));
+  right: calc(4px * var(--inverse-zoom, 1));
+  width: calc(14px * var(--inverse-zoom, 1));
+  height: calc(14px * var(--inverse-zoom, 1));
+  fill: #4b5563;
+  stroke: #4b5563;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.selection-frame.selection-locked {
+  outline-style: dashed;
+}
+
+/* CVS-15: маркеры промежутка — посередине правой и нижней стороны рамки. */
+.handle-spacing-x,
+.handle-spacing-y {
+  border-radius: calc(4px * var(--inverse-zoom, 1));
+  background: #2563eb;
+}
+
+.handle-spacing-x {
+  top: calc(50% - var(--size));
+  right: calc(var(--size) * -1.5);
+  width: calc(var(--size) / 2);
+  height: calc(var(--size) * 2);
+  cursor: ew-resize;
+}
+
+.handle-spacing-y {
+  left: calc(50% - var(--size));
+  bottom: calc(var(--size) * -1.5);
+  width: calc(var(--size) * 2);
+  height: calc(var(--size) / 2);
+  cursor: ns-resize;
+}
+
+/* CVS-16: направляющие выравнивания — тонкие линии постоянной экранной толщины. */
+.alignment-guide {
+  position: absolute;
+  background: #e11d48;
+  pointer-events: none;
+}
+
+.guide-x {
+  width: calc(1px * var(--inverse-zoom, 1));
+}
+
+.guide-y {
+  height: calc(1px * var(--inverse-zoom, 1));
+}
+
+.board-actions {
+  display: contents;
+}
+
+/* CVS-22: автор и даты одного выделенного объекта. */
+.object-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  width: 100%;
+  margin: 0;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.object-info div {
+  display: flex;
+  gap: 4px;
+}
+
+.object-info dt {
+  font-weight: 600;
+}
+
+.object-info dd {
+  margin: 0;
+}

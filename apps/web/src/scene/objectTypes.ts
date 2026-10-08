@@ -57,6 +57,17 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
   },
 };
 
+/** Тип объекта-группы (CVS-17): рамка группы — описанный прямоугольник её объектов. */
+export const GROUP_TYPE = "group";
+
+/** Название типа в интерфейсе: «Sticky note» / «sticky notes»; группа — «Group» / «groups». */
+export function typeName(type: string, plural = false): string {
+  if (type === GROUP_TYPE) return plural ? "groups" : "Group";
+  const spec = typeSpec(type);
+  if (spec === undefined) return plural ? "objects" : "Object";
+  return plural ? spec.plural : spec.label;
+}
+
 export function typeSpec(type: string): ObjectTypeSpec | undefined {
   return Object.hasOwn(OBJECT_TYPES, type)
     ? OBJECT_TYPES[type as ObjectType]

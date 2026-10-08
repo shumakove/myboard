@@ -12,10 +12,13 @@ import { applyTextChange, shiftIndex } from "./textBinding";
 export function TextEditor({
   object,
   text,
+  onEdit,
   onDone,
 }: {
   object: SceneObject;
   text: Y.Text;
+  /** Отметка «изменил» (CVS-22) — в той же транзакции, что и правка текста. */
+  onEdit?: () => void;
   onDone: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -50,7 +53,12 @@ export function TextEditor({
       style={objectStyle(object)}
       onInput={(event) => {
         const value = event.currentTarget.value;
-        applyTextChange(text, shown.current, value);
+        const write = () => {
+          applyTextChange(text, shown.current, value);
+          onEdit?.();
+        };
+        if (text.doc === null) write();
+        else text.doc.transact(write);
         shown.current = value;
       }}
       onKeyDown={(event) => {
