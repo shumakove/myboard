@@ -923,6 +923,33 @@ test('CVS-20 SHR-04 participant by link copies, pastes and duplicates on the boa
   }
 });
 
+test('CVS-20 BUG-008 copies of objects written as plain JSON values with z are pasted on top of them', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, opts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const { page, boardId } = owner;
+  try {
+    // сторонний клиент пишет объекты JSON-значениями (ARCHITECTURE.md, раздел 6), z 5 и 9
+    const A: Obj = { type: 'sticky', x: 40, y: 40, width: 120, height: 120, fill: '#81d4fa', z: 5 };
+    const B: Obj = { type: 'shape', x: 200, y: 60, width: 100, height: 60, z: 9 };
+    await seed(page, boardId, { 'qa-a': A, 'qa-b': B });
+    const s0 = (await docState(page, boardId)).objects;
+    await selectObjects(page, ['qa-a', 'qa-b']);
+    await page.keyboard.press('ControlOrMeta+C');
+    await page.keyboard.press('ControlOrMeta+V');
+    const s1 = await untilDoc(page, boardId, (d) => d.objects, (v) => expect(Object.keys(v).length).toBe(4));
+    const zs = Object.values(added(s1, s0)).map((c) => c.z as number);
+    expect(Math.min(...zs), `z копий ${zs.join(', ')}; максимум оригиналов 9`).toBeGreaterThan(9);
+    // копия, вставленная на место оригинала, видна поверх него
+    await selectObjects(page, ['qa-b']);
+    await page.keyboard.press('ControlOrMeta+D');
+    const s2 = await untilDoc(page, boardId, (d) => d.objects, (v) => expect(Object.keys(v).length).toBe(5));
+    const dup = Object.values(added(s2, s1))[0];
+    expect(dup.z as number, 'дубликат поверх всех').toBeGreaterThan(Math.max(...zs));
+  } finally {
+    await owner.close();
+  }
+});
+
 // ---------- CVS-22 ----------
 
 const within = (iso: string | null, fromMs: number, toMs: number) => {
