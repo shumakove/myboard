@@ -94,6 +94,7 @@ export function SharedBoardPage() {
             target={{ kind: "participant", token }}
             checkAccess={() => participantHasAccess(token)}
             onClosed={recheck}
+            userName={board.participant.name}
           />
         </>
       )}

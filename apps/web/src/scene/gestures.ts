@@ -1,6 +1,7 @@
 import type * as Y from "yjs";
 import type { Point } from "../realtime/messages";
 import type { Rect } from "../canvas/camera";
+import { gapFor, spacingDeltas, type Axis } from "./arrange";
 import {
   angleBetween,
   boundsOf,
@@ -21,7 +22,9 @@ import {
   type Corner,
   type Frame,
 } from "./geometry";
+import { guidesFor, snapToNeighbors, type Guide } from "./guides";
 import {
+  GROUP_TYPE,
   patchObjects,
   type ObjectPatch,
   type SceneObject,
@@ -56,72 +59,147 @@ function writeFrames(
   objects: Y.Map<unknown>,
   targets: readonly SceneObject[],
   frameOf: (object: SceneObject) => Partial<Frame>,
+  actor: string,
 ): void {
   const patches = new Map<SceneObject, ObjectPatch>();
   for (const object of targets) patches.set(object, frameOf(object));
-  patchObjects(objects, patches);
+  patchObjects(objects, patches, actor);
+}
+
+/** Что нужно перемещению кроме объектов: сетка, соседи для направляющих, автор правки. */
+export interface MoveOptions {
+  gridStep: number;
+  /** CVS-16: рамки соседей, к которым прилипает перемещаемое. */
+  neighbors: readonly Rect[];
+  /** Расстояние прилипания к соседу, единицы доски. */
+  threshold: number;
+  onGuides: (guides: Guide[]) => void;
+  actor: string;
 }
 
 /**
- * CVS-12: перемещение выделенных объектов. Общая рамка прилипает левым верхним углом
- * к сетке; Alt отключает прилипание, Shift оставляет сдвиг только по одной оси.
+ * CVS-12, CVS-16: перемещение выделенных объектов. Общая рамка прилипает краем или
+ * центром к соседям (направляющие видны, пока тянут), иначе левым верхним углом к сетке;
+ * Alt отключает прилипание, Shift оставляет сдвиг только по одной оси.
  */
 export function moveGesture(
   objects: Y.Map<unknown>,
   targets: readonly SceneObject[],
   start: Point,
-  gridStep: number,
+  options: MoveOptions,
 ): Gesture {
+  const { gridStep, neighbors, threshold, onGuides, actor } = options;
   const bounds = boundsOf(targets);
   // Пишется только изменившийся сдвиг: одинаковые значения тоже дали бы кадр sync.
   let written = { x: 0, y: 0 };
   const apply = (pointer: ScenePointer) => {
     if (bounds === null) return;
-    let delta = { x: pointer.board.x - start.x, y: pointer.board.y - start.y };
-    const locked = pointer.shiftKey;
-    if (locked) delta = lockAxis(delta);
-    if (!pointer.altKey && gridStep > 0) {
-      delta = {
-        x:
-          locked && delta.x === 0
-            ? 0
-            : snap(bounds.x + delta.x, gridStep) - bounds.x,
-        y:
-          locked && delta.y === 0
-            ? 0
-            : snap(bounds.y + delta.y, gridStep) - bounds.y,
-      };
-    }
+    let raw = { x: pointer.board.x - start.x, y: pointer.board.y - start.y };
+    const axisLocked = pointer.shiftKey;
+    if (axisLocked) raw = lockAxis(raw);
+    const snapping = !pointer.altKey;
+    const axisDelta = (axis: Axis): number => {
+      const value = raw[axis];
+      if (!snapping || (axisLocked && value === 0)) return value;
+      const moved = { ...bounds, [axis]: bounds[axis] + value };
+      const guide = snapToNeighbors(moved, neighbors, axis, threshold);
+      if (guide !== null) return value + guide;
+      return gridStep > 0
+        ? snap(bounds[axis] + value, gridStep) - bounds[axis]
+        : value;
+    };
+    const delta = { x: axisDelta("x"), y: axisDelta("y") };
+    const moved = { ...bounds, x: bounds.x + delta.x, y: bounds.y + delta.y };
+    onGuides(snapping ? guidesFor(moved, neighbors) : []);
     if (delta.x === written.x && delta.y === written.y) return;
     written = delta;
-    writeFrames(objects, targets, (o) => ({
-      x: o.x + delta.x,
-      y: o.y + delta.y,
-    }));
+    writeFrames(
+      objects,
+      targets,
+      (o) => ({ x: o.x + delta.x, y: o.y + delta.y }),
+      actor,
+    );
   };
-  return { move: apply, end: apply, cancel: () => undefined, autoscroll: true };
+  return {
+    move: apply,
+    end: (pointer) => {
+      apply(pointer);
+      onGuides([]);
+    },
+    cancel: () => {
+      onGuides([]);
+    },
+    autoscroll: true,
+  };
 }
 
 /**
  * CVS-14: изменение размера за угол рамки выделения. Один объект меняет ширину и высоту
- * в своей повёрнутой системе; несколько — масштабируются вместе от противоположного угла.
+ * в своей повёрнутой системе; несколько или группа — объекты `leaves` масштабируются
+ * вместе от противоположного угла общей рамки.
  */
 export function resizeGesture(
   objects: Y.Map<unknown>,
   targets: readonly SceneObject[],
+  leaves: readonly SceneObject[],
   corner: Corner,
+  actor: string,
 ): Gesture {
   const bounds = boundsOf(targets);
+  const [single] = targets;
   const apply = ({ board }: ScenePointer) => {
-    const [single] = targets;
-    if (targets.length === 1 && single !== undefined) {
-      writeFrames(objects, targets, (o) => resizeFrame(o, corner, board));
+    if (
+      targets.length === 1 &&
+      single !== undefined &&
+      single.type !== GROUP_TYPE
+    ) {
+      writeFrames(
+        objects,
+        targets,
+        (o) => resizeFrame(o, corner, board),
+        actor,
+      );
       return;
     }
     if (bounds === null) return;
     const scale = groupScale(bounds, corner, board);
     const origin = cornerPoint({ ...bounds, rotation: 0 }, opposite(corner));
-    writeFrames(objects, targets, (o) => scaleFrame(o, origin, scale));
+    writeFrames(objects, leaves, (o) => scaleFrame(o, origin, scale), actor);
+  };
+  return { move: apply, end: apply, cancel: () => undefined };
+}
+
+/**
+ * CVS-15: жест за маркер промежутка рамки выделения — объекты встают вдоль оси с равным
+ * промежутком, который растёт или уменьшается вслед за указателем (не меньше нуля).
+ */
+export function spacingGesture(
+  objects: Y.Map<unknown>,
+  targets: readonly SceneObject[],
+  axis: Axis,
+  start: Point,
+  actor: string,
+): Gesture {
+  const items = targets.flatMap((o) => {
+    const bounds = boundsOf([o]);
+    return bounds === null ? [] : [{ id: o.id, bounds }];
+  });
+  const bounds = boundsOf(targets);
+  const apply = ({ board }: ScenePointer) => {
+    if (bounds === null) return;
+    const length =
+      (axis === "x" ? bounds.width : bounds.height) + board[axis] - start[axis];
+    const gap = Math.max(0, gapFor(items, axis, length));
+    const deltas = spacingDeltas(items, axis, gap);
+    writeFrames(
+      objects,
+      targets,
+      (o) => {
+        const d = deltas.get(o.id) ?? { x: 0, y: 0 };
+        return { x: o.x + d.x, y: o.y + d.y };
+      },
+      actor,
+    );
   };
   return { move: apply, end: apply, cancel: () => undefined };
 }
@@ -131,6 +209,7 @@ export function rotateGesture(
   objects: Y.Map<unknown>,
   targets: readonly SceneObject[],
   start: Point,
+  actor: string,
 ): Gesture {
   const bounds = boundsOf(targets);
   const pivot = bounds === null ? start : center(bounds);
@@ -143,7 +222,7 @@ export function rotateGesture(
       const base = targets.length === 1 && single ? single.rotation : 0;
       delta = snap(base + delta, ROTATION_STEP) - base;
     }
-    writeFrames(objects, targets, (o) => rotateFrame(o, pivot, delta));
+    writeFrames(objects, targets, (o) => rotateFrame(o, pivot, delta), actor);
   };
   return { move: apply, end: apply, cancel: () => undefined };
 }

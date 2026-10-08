@@ -1,35 +1,32 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import type * as Y from "yjs";
 import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
 import { screenToBoard, type Size } from "../canvas/camera";
-import { isTypingTarget } from "../canvas/keyboard";
 import type { WheelMode } from "../canvas/wheel";
-import type * as Y from "yjs";
-import { moveToTrash, type BoardDocument } from "../realtime/boardDocument";
+import type { BoardDocument } from "../realtime/boardDocument";
 import type { CameraView, Point } from "../realtime/messages";
 import { isDark, useBoardSettings } from "./boardSettings";
+import { loadClip, type Clip } from "./clipboard";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import type { AreaDraft } from "./gestures";
-import {
-  OBJECT_TYPES,
-  typeSpec,
-  type ObjectType,
-  type StyleKey,
-} from "./objectTypes";
-import { AreaOverlay, SceneLayer } from "./SceneLayer";
+import { topmost } from "./groups";
+import type { Guide } from "./guides";
+import { typeSpec, type ObjectType } from "./objectTypes";
+import { AreaOverlay, GuidesOverlay, SceneLayer } from "./SceneLayer";
+import { arrangeMenu, boardMenu, objectMenu } from "./sceneMenus";
 import {
   createObject,
+  objectMap,
   objectText,
-  patchObjects,
   readScene,
-  type ObjectPatch,
+  touch,
   type SceneObject,
 } from "./sceneObjects";
 import { SelectionBar } from "./SelectionBar";
@@ -37,20 +34,32 @@ import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
 import { ToolPanel } from "./ToolPanel";
 import { placement, type ToolId } from "./tools";
+import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
+import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
 import "./scene.css";
 
 type Menu =
-  { kind: "object"; at: Point } | { kind: "canvas"; at: Point; board: Point };
+  | { kind: "object"; at: Point }
+  | { kind: "arrange"; at: Point }
+  | { kind: "canvas"; at: Point; board: Point; clip: Clip | null };
+
+const MENU_LABELS: Record<Menu["kind"], string> = {
+  object: "Object menu",
+  arrange: "Arrange menu",
+  canvas: "Board menu",
+};
 
 /**
- * Сцена доски: объекты документа на холсте, инструменты, выделение и правки (T5.2).
+ * Сцена доски: объекты документа на холсте, инструменты, выделение и правки (T5.2, T5.3).
  * Объекты общие — правку одного участника видят все (документ Yjs); инструмент,
  * выделение и меню — свои у каждой вкладки.
  *
  * CVS-06 фон и сетка, CVS-09 создание, CVS-10 выделение, CVS-11 фильтр и массовые свойства,
- * CVS-12 перемещение, CVS-13 автопрокрутка, CVS-14 размер и поворот, CVS-21 удаление,
+ * CVS-12 перемещение, CVS-13 автопрокрутка, CVS-14 размер и поворот, CVS-15 выравнивание
+ * и распределение, CVS-16 направляющие, CVS-17 группы, CVS-18 порядок слоёв, CVS-19
+ * блокировка, CVS-20 буфер обмена и дублирование, CVS-21 удаление, CVS-22 автор и даты,
  * CVS-23 контекстное меню, MOB-03 долгое нажатие.
  */
 export function BoardScene({
@@ -69,7 +78,7 @@ export function BoardScene({
   board: BoardDocument;
   camera: CameraView;
   wheelMode: WheelMode;
-  /** Имя удалившего для записи корзины. */
+  /** Имя участника: автор правок (CVS-22) и удаливший в корзине. */
   userName: string;
   stageStyle?: CSSProperties;
   stageAttributes?: Record<`data-${string}`, string | undefined>;
@@ -82,16 +91,19 @@ export function BoardScene({
   stageOverlay?: ReactNode;
 }) {
   const { objects } = board;
+  const actor = userName;
   const scene = useSceneObjects(objects);
   const settings = useBoardSettings(board.settings);
   const [tool, setTool] = useState<ToolId>("select");
   const [selection, setSelection] = useState<string[]>([]);
   const [draft, setDraft] = useState<AreaDraft | null>(null);
+  const [guides, setGuides] = useState<Guide[]>([]);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editing, setEditing] = useState<{ id: string; text: Y.Text } | null>(
     null,
   );
   const canvasRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
 
   // Объект, удалённый другим участником, пропадает из выделения сам.
@@ -99,14 +111,13 @@ export function BoardScene({
     () => scene.filter((o) => selection.includes(o.id)),
     [scene, selection],
   );
-  const selectedIds = useMemo(
-    () => new Set(selected.map((o) => o.id)),
-    [selected],
-  );
+  const selectedIds = useMemo(() => selected.map((o) => o.id), [selected]);
   const editedObject = scene.find((o) => o.id === editing?.id) ?? null;
 
   const editText = useCallback(
     (id: string) => {
+      // CVS-19: текст заблокированного объекта не меняется.
+      if (readScene(objects).find((o) => o.id === id)?.locked !== false) return;
       const text = objectText(objects, id);
       setEditing(text === null ? null : { id, text });
     },
@@ -115,6 +126,13 @@ export function BoardScene({
   const closeMenu = useCallback(() => {
     setMenu(null);
   }, []);
+  const stopEditing = useCallback(() => {
+    setEditing(null);
+  }, []);
+  const pastePoint = useCallback(
+    () => pointer.current ?? { x: camera.x, y: camera.y },
+    [camera.x, camera.y],
+  );
 
   const create = useCallback(
     (type: ObjectType, at: Point): SceneObject | null => {
@@ -122,21 +140,26 @@ export function BoardScene({
         objects,
         type,
         placement(type, at, settings.gridStep),
+        "",
+        actor,
       );
       setSelection([id]);
       return readScene(objects).find((o) => o.id === id) ?? null;
     },
-    [objects, settings.gridStep],
+    [objects, settings.gridStep, actor],
   );
 
-  const remove = useCallback(
-    (ids: readonly string[]) => {
-      moveToTrash(board, ids, userName);
-      setSelection([]);
-      setEditing(null);
-    },
-    [board, userName],
-  );
+  const commands = useSceneCommands({
+    board,
+    scene,
+    selection: selectedIds,
+    select: setSelection,
+    actor,
+    gridStep: settings.gridStep,
+    pastePoint,
+    onRemoved: stopEditing,
+  });
+  const { units, editable } = commands;
 
   const gestures = useSceneGestures({
     objects,
@@ -144,65 +167,30 @@ export function BoardScene({
     selection,
     tool,
     gridStep: settings.gridStep,
+    zoom: camera.zoom,
+    actor,
     select: setSelection,
     setTool,
     setDraft,
+    setGuides,
     create,
     openMenu: (next, at) => {
       setMenu(
-        next.kind === "object" ? { kind: "object", at } : { ...next, at },
+        next.kind === "object"
+          ? { kind: "object", at }
+          : { ...next, at, clip: loadClip() },
       );
     },
     editText,
   });
 
-  // CVS-21: Delete/Backspace удаляют выделенное; Escape снимает выделение.
-  useEffect(() => {
-    function keydown(event: KeyboardEvent) {
-      if (event.defaultPrevented || isTypingTarget(event.target)) return;
-      if (event.key === "Delete" || event.key === "Backspace") {
-        if (selected.length === 0) return;
-        event.preventDefault();
-        remove(selected.map((o) => o.id));
-      } else if (event.key === "Escape") {
-        setSelection([]);
-        setTool("select");
-      }
-    }
-    window.addEventListener("keydown", keydown);
-    return () => {
-      window.removeEventListener("keydown", keydown);
-    };
-  }, [selected, remove]);
-
-  // CVS-09: вставка текста из буфера ставит текстовый объект под указателем
-  // (или в центре вида, если указатель не над холстом).
-  useEffect(() => {
-    function paste(event: ClipboardEvent) {
-      if (isTypingTarget(event.target)) return;
-      const text = event.clipboardData?.getData("text/plain").trim() ?? "";
-      if (!text) return;
-      event.preventDefault();
-      const at = pointer.current ?? { x: camera.x, y: camera.y };
-      const id = createObject(
-        objects,
-        "text",
-        placement("text", at, settings.gridStep),
-        text,
-      );
-      setSelection([id]);
-    }
-    window.addEventListener("paste", paste);
-    return () => {
-      window.removeEventListener("paste", paste);
-    };
-  }, [objects, camera.x, camera.y, settings.gridStep]);
-
-  function setStyle(key: StyleKey, value: string | number) {
-    const patches = new Map<SceneObject, ObjectPatch>();
-    for (const object of selected) patches.set(object, { [key]: value });
-    patchObjects(objects, patches);
-  }
+  useSceneShortcuts(
+    commands,
+    useCallback(() => {
+      setSelection([]);
+      setTool("select");
+    }, []),
+  );
 
   /** CVS-09: инструмент отпустили над холстом — объект встаёт в эту точку. */
   function drop(type: ObjectType, client: Point) {
@@ -221,50 +209,90 @@ export function BoardScene({
     setTool("select");
   }
 
-  const single = selected.length === 1 ? selected[0] : undefined;
+  /** Меню у кнопки панели выделения — в координатах области холста. */
+  function openMenuAt(kind: "object" | "arrange", button: HTMLElement) {
+    const stage = stageRef.current?.getBoundingClientRect();
+    const rect = button.getBoundingClientRect();
+    setMenu({
+      kind,
+      at: {
+        x: rect.left - (stage?.left ?? 0),
+        y: rect.bottom - (stage?.top ?? 0),
+      },
+    });
+  }
+
+  const [single] = units;
   const editSelected =
-    single !== undefined && typeSpec(single.type) !== undefined
+    units.length === 1 &&
+    single !== undefined &&
+    !single.locked &&
+    typeSpec(single.type) !== undefined
       ? () => {
           editText(single.id);
         }
       : null;
 
   function menuItems(current: Menu): MenuItem[] {
-    if (current.kind === "object") {
-      const items: MenuItem[] = [];
-      if (editSelected)
-        items.push({ label: "Edit text", action: editSelected });
-      items.push({
-        label:
-          selected.length > 1
-            ? `Delete ${String(selected.length)} objects`
-            : "Delete",
-        action: () => {
-          remove(selected.map((o) => o.id));
-        },
-      });
-      return items;
+    switch (current.kind) {
+      case "arrange":
+        return arrangeMenu(commands);
+      case "object":
+        return objectMenu(commands, {
+          editText: editSelected,
+          copyToClipboard: (cut) => {
+            copyToClipboard(commands, cut);
+          },
+        });
+      case "canvas":
+        return boardMenu(commands, current.board, current.clip, {
+          create,
+          selectAll: () => {
+            setSelection(
+              topmost(
+                scene,
+                scene.map((o) => o.id),
+              ).map((o) => o.id),
+            );
+          },
+        });
     }
-    return [
-      ...Object.values(OBJECT_TYPES).map((spec) => ({
-        label: `Add ${spec.label.toLowerCase()} here`,
-        action: () => {
-          create(spec.type, current.board);
-        },
-      })),
-      {
-        label: "Select all",
-        action: () => {
-          setSelection(scene.map((o) => o.id));
-        },
-      },
-    ];
   }
 
   return (
     <div className="board-scene">
-      <ToolPanel tool={tool} onTool={setTool} onDrop={drop} />
-      <div className="board-stage" style={stageStyle} {...stageAttributes}>
+      <ToolPanel tool={tool} onTool={setTool} onDrop={drop}>
+        <span role="group" aria-label="Board actions" className="board-actions">
+          <button
+            type="button"
+            className="tool-button"
+            title="Paste the last copied objects in the center of the view."
+            onClick={() => {
+              const clip = loadClip();
+              if (clip !== null)
+                commands.paste(clip, { x: camera.x, y: camera.y });
+            }}
+          >
+            Paste
+          </button>
+          <button
+            type="button"
+            className="tool-button"
+            disabled={commands.unlockAll === null}
+            onClick={() => {
+              commands.unlockAll?.();
+            }}
+          >
+            Unlock all
+          </button>
+        </span>
+      </ToolPanel>
+      <div
+        ref={stageRef}
+        className="board-stage"
+        style={stageStyle}
+        {...stageAttributes}
+      >
         <BoardCanvas
           camera={camera}
           wheelMode={wheelMode}
@@ -282,7 +310,7 @@ export function BoardScene({
         >
           <SceneLayer
             objects={scene}
-            selected={selectedIds}
+            selected={new Set(selectedIds)}
             editing={editing?.id ?? null}
           />
           {editedObject && editing && (
@@ -290,32 +318,45 @@ export function BoardScene({
               key={editedObject.id}
               object={editedObject}
               text={editing.text}
-              onDone={() => {
-                setEditing(null);
+              onEdit={() => {
+                const map = objectMap(objects, editedObject.id);
+                if (map !== null) touch(map, actor);
               }}
+              onDone={stopEditing}
             />
           )}
-          <SelectionOverlay selected={selected} />
+          <SelectionOverlay selected={units} />
           <AreaOverlay draft={draft} />
+          <GuidesOverlay guides={guides} />
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
-          selected={selected}
+          selected={units}
           onFilter={(type) => {
-            setSelection(
-              selected.filter((o) => o.type === type).map((o) => o.id),
-            );
+            setSelection(units.filter((o) => o.type === type).map((o) => o.id));
           }}
-          onStyle={setStyle}
+          onStyle={commands.setStyle}
           onEditText={editSelected}
-          onDelete={() => {
-            remove(selected.map((o) => o.id));
+          onDelete={commands.remove}
+          onLock={commands.lock}
+          onUnlock={commands.unlock}
+          onGroup={commands.group}
+          onUngroup={commands.ungroup}
+          onArrange={
+            editable.length > 0
+              ? (button) => {
+                  openMenuAt("arrange", button);
+                }
+              : null
+          }
+          onMore={(button) => {
+            openMenuAt("object", button);
           }}
         />
         {stageOverlay}
         {menu && (
           <ContextMenu
-            label={menu.kind === "object" ? "Object menu" : "Board menu"}
+            label={MENU_LABELS[menu.kind]}
             at={menu.at}
             items={menuItems(menu)}
             onClose={closeMenu}

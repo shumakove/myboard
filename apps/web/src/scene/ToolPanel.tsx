@@ -2,6 +2,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import type { Point } from "../realtime/messages";
 import type { ObjectType } from "./objectTypes";
@@ -18,11 +19,14 @@ export function ToolPanel({
   tool,
   onTool,
   onDrop,
+  children,
 }: {
   tool: ToolId;
   onTool: (tool: ToolId) => void;
   /** Кнопку инструмента отпустили над точкой экрана (координаты окна). */
   onDrop: (type: ObjectType, client: Point) => void;
+  /** Действия доски после инструментов (в той же строке на телефоне). */
+  children?: ReactNode;
 }) {
   const [ghost, setGhost] = useState<{ label: string; at: Point } | null>(null);
   const drag = useRef<{
@@ -114,6 +118,7 @@ export function ToolPanel({
           {item.label}
         </button>
       ))}
+      {children}
       {ghost && (
         <div
           className="tool-ghost"
