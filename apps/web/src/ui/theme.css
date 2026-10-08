@@ -7,18 +7,18 @@
 :root {
   color-scheme: light;
 
-  /* Нейтральная серая шкала: фон, границы, текст. */
+  /* Нейтральная серая шкала: фон, границы, текст — чистые серые, R = G = B (UI-01). */
   --gray-0: #ffffff;
-  --gray-50: #f6f7f9;
-  --gray-100: #eef0f4;
-  --gray-200: #e1e4ea;
-  --gray-300: #c9cdd6;
-  --gray-400: #a3a8b5;
-  --gray-500: #7b8193;
-  --gray-600: #5b6173;
-  --gray-700: #424757;
-  --gray-800: #2b2f3b;
-  --gray-900: #1a1d27;
+  --gray-50: #f7f7f7;
+  --gray-100: #efefef;
+  --gray-200: #e3e3e3;
+  --gray-300: #cbcbcb;
+  --gray-400: #a6a6a6;
+  --gray-500: #7e7e7e;
+  --gray-600: #5e5e5e;
+  --gray-700: #454545;
+  --gray-800: #2e2e2e;
+  --gray-900: #1c1c1c;
 
   /* Один акцентный цвет — основные и активные действия, выделение, фокус. */
   --accent-50: #eef1ff;
@@ -57,15 +57,15 @@
   --color-danger-border: var(--red-200);
   --color-on-danger: var(--gray-0);
   --color-guide: var(--red-600);
-  --color-overlay: rgb(26 29 39 / 40%);
+  --color-overlay: rgb(28 28 28 / 40%);
   --color-inverse: var(--gray-900);
   --color-on-inverse: var(--gray-0);
   --color-highlight: #e8a400;
 
   /* Холст: фон по умолчанию и точки сетки (CVS-06). */
-  --color-canvas: #f9fafb;
-  --color-grid-dot: #c3c8d2;
-  --color-grid-dot-on-dark: #5f6b73;
+  --color-canvas: #f9f9f9;
+  --color-grid-dot: #c6c6c6;
+  --color-grid-dot-on-dark: #666666;
 
   --focus-ring: 0 0 0 3px rgb(67 89 236 / 35%);
 
@@ -100,13 +100,13 @@
   --radius-full: 999px;
 
   /* Тени: мягкие, для плавающих панелей поверх холста и страницы. */
-  --shadow-sm: 0 1px 2px rgb(26 29 39 / 6%), 0 1px 3px rgb(26 29 39 / 8%);
-  --shadow-md: 0 2px 4px rgb(26 29 39 / 6%), 0 6px 16px rgb(26 29 39 / 10%);
-  --shadow-lg: 0 4px 8px rgb(26 29 39 / 8%), 0 16px 40px rgb(26 29 39 / 16%);
+  --shadow-sm: 0 1px 2px rgb(28 28 28 / 6%), 0 1px 3px rgb(28 28 28 / 8%);
+  --shadow-md: 0 2px 4px rgb(28 28 28 / 6%), 0 6px 16px rgb(28 28 28 / 10%);
+  --shadow-lg: 0 4px 8px rgb(28 28 28 / 8%), 0 16px 40px rgb(28 28 28 / 16%);
 
   /* Высота элементов управления; на телефоне — область нажатия 44×44 (UI-04). */
+  /* BUG-009: одна высота у всех кнопок, в том числе в панели Selection. */
   --control-size: 36px;
-  --control-size-sm: 32px;
   --transition: 120ms ease;
 
   --layer-panel: 3;
@@ -119,7 +119,6 @@
 @media (max-width: 640px), (pointer: coarse) {
   :root {
     --control-size: 44px;
-    --control-size-sm: 44px;
   }
 }
 

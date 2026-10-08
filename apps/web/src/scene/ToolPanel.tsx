@@ -6,30 +6,39 @@ import {
 } from "react";
 import type { Point } from "../realtime/messages";
 import type { ObjectType } from "./objectTypes";
-import { TOOLS, type ToolId } from "./tools";
+import { ToolListDialog } from "./ToolListDialog";
+import { keyLabel, toolById, toolTitle, type ToolId } from "./tools";
 import { Button, FloatingPanel } from "../ui";
 
 /** Сдвиг указателя, после которого нажатие на кнопку — уже перетаскивание, px. */
 const DRAG_THRESHOLD = 6;
 
 /**
- * Левая панель инструментов (CVS-09, CVS-10). Инструмент создания выбирается нажатием
- * (затем щелчок по холсту ставит объект) или перетаскивается с панели прямо на холст.
+ * Левая панель инструментов (CVS-09, CVS-10, CVS-24). На панели — закреплённые
+ * инструменты в выбранном порядке, остальные — в полном списке (All tools). Инструмент
+ * создания выбирается нажатием (затем щелчок по холсту ставит объект) или
+ * перетаскивается с панели прямо на холст.
  */
 export function ToolPanel({
   tool,
+  pinned,
   onTool,
+  onPinned,
   onDrop,
   children,
 }: {
   tool: ToolId;
+  /** Закреплённые инструменты в порядке панели. */
+  pinned: readonly ToolId[];
   onTool: (tool: ToolId) => void;
+  onPinned: (change: (pinned: readonly ToolId[]) => ToolId[]) => void;
   /** Кнопку инструмента отпустили над точкой экрана (координаты окна). */
   onDrop: (type: ObjectType, client: Point) => void;
   /** Действия доски после инструментов (в той же строке на телефоне). */
   children?: ReactNode;
 }) {
   const [ghost, setGhost] = useState<{ label: string; at: Point } | null>(null);
+  const [listOpen, setListOpen] = useState(false);
   const drag = useRef<{
     pointerId: number;
     start: Point;
@@ -82,53 +91,80 @@ export function ToolPanel({
   }
 
   return (
-    <FloatingPanel
-      className="tool-panel"
-      role="toolbar"
-      aria-label="Tools"
-      aria-orientation="vertical"
-    >
-      {TOOLS.map((item) => (
+    <>
+      <FloatingPanel
+        className="tool-panel"
+        role="toolbar"
+        aria-label="Tools"
+        aria-orientation="vertical"
+      >
+        {pinned.map(toolById).map((item) => (
+          <Button
+            key={item.id}
+            variant="ghost"
+            className="tool-button"
+            aria-pressed={tool === item.id}
+            aria-keyshortcuts={keyLabel(item.key)}
+            title={toolTitle(item)}
+            onClick={() => {
+              if (suppressClick.current) {
+                suppressClick.current = false;
+                return;
+              }
+              onTool(item.id);
+            }}
+            {...(item.kind === "create" && {
+              onPointerDown: pointerDown,
+              onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => {
+                pointerMove(event, item.label);
+              },
+              onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => {
+                pointerUp(event, item.id);
+              },
+              onPointerCancel: () => {
+                drag.current = null;
+                setGhost(null);
+              },
+            })}
+          >
+            {item.label}
+          </Button>
+        ))}
         <Button
-          key={item.id}
           variant="ghost"
           className="tool-button"
-          aria-pressed={tool === item.id}
-          title={item.hint}
+          aria-haspopup="dialog"
+          aria-expanded={listOpen}
+          title="All tools: choose any tool, pin tools to this panel and change their order."
           onClick={() => {
-            if (suppressClick.current) {
-              suppressClick.current = false;
-              return;
-            }
-            onTool(item.id);
+            setListOpen(true);
           }}
-          {...(item.kind === "create" && {
-            onPointerDown: pointerDown,
-            onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => {
-              pointerMove(event, item.label);
-            },
-            onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => {
-              pointerUp(event, item.id);
-            },
-            onPointerCancel: () => {
-              drag.current = null;
-              setGhost(null);
-            },
-          })}
         >
-          {item.label}
+          All tools
         </Button>
-      ))}
-      {children}
-      {ghost && (
-        <div
-          className="tool-ghost"
-          aria-hidden="true"
-          style={{ left: ghost.at.x, top: ghost.at.y }}
-        >
-          {ghost.label}
-        </div>
+        {children}
+        {ghost && (
+          <div
+            className="tool-ghost"
+            aria-hidden="true"
+            style={{ left: ghost.at.x, top: ghost.at.y }}
+          >
+            {ghost.label}
+          </div>
+        )}
+      </FloatingPanel>
+      {/* Вне панели: в ней кнопки инструментов ищут по имени. */}
+      {listOpen && (
+        <ToolListDialog
+          tool={tool}
+          pinned={pinned}
+          onTool={onTool}
+          onPinned={onPinned}
+          onClose={() => {
+            setListOpen(false);
+          }}
+        />
       )}
-    </FloatingPanel>
+    </>
   );
 }

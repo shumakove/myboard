@@ -231,12 +231,7 @@
 }
 
 .selection-bar .ui-button {
-  min-height: var(--control-size-sm);
   padding: 0 var(--space-2);
-}
-
-.selection-bar .ui-select {
-  min-height: var(--control-size-sm);
 }
 
 .selection-count {
@@ -369,4 +364,33 @@
 
 .object-info dd {
   margin: 0;
+}
+
+/* CVS-24: полный список инструментов — строка: инструмент, закрепление, порядок. */
+.tool-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tool-list-name {
+  flex: 1;
+  justify-content: space-between;
+}
+
+.tool-key {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
 }
