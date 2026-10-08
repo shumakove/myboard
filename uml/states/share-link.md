@@ -5,10 +5,10 @@
 ```mermaid
 stateDiagram-v2
   [*] --> NotIssued: POST /api/boards → доска создана<br/>share_token = NULL
-  NotIssued --> Active: GET /api/boards/{board_id}/share (SHR-01)<br/>current_token: UPDATE … SET share_token = new_token()<br/>WHERE share_token IS NULL
-  NotIssued --> Active: POST /api/boards/{board_id}/share/reset<br/>reset_token: новый токен, share_token_revoked_at = now()
+  NotIssued --> Active: GET /api/boards/{board_id}/share (SHR-01)<br/>current_token#58; UPDATE … SET share_token = new_token()<br/>WHERE share_token IS NULL
+  NotIssued --> Active: POST /api/boards/{board_id}/share/reset<br/>reset_token#58; новый токен, share_token_revoked_at = now()
   Active --> Active: GET /api/boards/{board_id}/share<br/>тот же токен
-  Active --> Active: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>reset_token: share_token = new_token(),<br/>share_token_revoked_at = now(),<br/>delete_board_sessions(board_id)
+  Active --> Active: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>reset_token#58; share_token = new_token(),<br/>share_token_revoked_at = now(),<br/>delete_board_sessions(board_id)
   Active --> Unavailable: DELETE /api/boards/{board_id} (BRD-03)<br/>deleted_at = now(), board_by_token её не находит
   Unavailable --> [*]
 ```

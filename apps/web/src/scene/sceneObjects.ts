@@ -187,11 +187,19 @@ export function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-/** Следующий `z`: новый объект встаёт поверх остальных. */
+/**
+ * Следующий `z`: новый объект встаёт поверх остальных. Учитываются и объекты,
+ * записанные JSON-значением, а не `Y.Map` (BUG-008).
+ */
 export function topZ(objects: Y.Map<unknown>): number {
   let top = 0;
   for (const value of objects.values()) {
-    const z: unknown = value instanceof Y.Map ? value.get("z") : undefined;
+    const z: unknown =
+      value instanceof Y.Map
+        ? value.get("z")
+        : typeof value === "object" && value !== null
+          ? (value as Record<string, unknown>).z
+          : undefined;
     if (isNumber(z)) top = Math.max(top, Math.ceil(z));
   }
   return top + 1;

@@ -8,8 +8,8 @@ stateDiagram-v2
   note left of Active: почта занята → 409 Email is already in use,<br/>учётка не создаётся (ADM-07)
   Active --> Active: PATCH /api/admin/users/{id} {name?, email?} → 200 (ADM-04)<br/>сессии сохраняются
   Active --> Active: PATCH {password, name?, email?} → 200 (ADM-04)<br/>+ delete_subject_sessions(USER, id)
-  Active --> Disabled: PATCH {disabled: true} → 200 (ADM-05)<br/>+ delete_subject_sessions(USER, id)
-  Disabled --> Active: PATCH {disabled: false} → 200 (ADM-06)
+  Active --> Disabled: PATCH {disabled#58; true} → 200 (ADM-05)<br/>+ delete_subject_sessions(USER, id)
+  Disabled --> Active: PATCH {disabled#58; false} → 200 (ADM-06)
   Disabled --> Disabled: PATCH {name?, email?, password?} → 200<br/>(сессий уже нет)
 ```
 
