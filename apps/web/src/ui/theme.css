@@ -1,0 +1,202 @@
+/*
+ * UI-01, UI-02: единая светлая тема — палитра и шкалы всего интерфейса.
+ * Модульные CSS-файлы и встроенные стили берут цвета, шрифт, размеры, отступы,
+ * скругления и тени только отсюда. Тёмной темы нет: системная тёмная тема вид
+ * не меняет (`color-scheme: light`, отдельных правил для тёмной схемы нет).
+ */
+:root {
+  color-scheme: light;
+
+  /* Нейтральная серая шкала: фон, границы, текст. */
+  --gray-0: #ffffff;
+  --gray-50: #f6f7f9;
+  --gray-100: #eef0f4;
+  --gray-200: #e1e4ea;
+  --gray-300: #c9cdd6;
+  --gray-400: #a3a8b5;
+  --gray-500: #7b8193;
+  --gray-600: #5b6173;
+  --gray-700: #424757;
+  --gray-800: #2b2f3b;
+  --gray-900: #1a1d27;
+
+  /* Один акцентный цвет — основные и активные действия, выделение, фокус. */
+  --accent-50: #eef1ff;
+  --accent-100: #dfe4ff;
+  --accent-500: #4359ec;
+  --accent-600: #3346d4;
+  --accent-700: #2636b0;
+
+  --red-50: #fdeeee;
+  --red-200: #f3b4b0;
+  --red-600: #d1352b;
+  --red-700: #ab271f;
+
+  /* Назначение цветов. */
+  --color-bg: var(--gray-100);
+  --color-surface: var(--gray-0);
+  --color-surface-muted: var(--gray-50);
+  --color-surface-hover: var(--gray-100);
+  --color-surface-pressed: var(--gray-200);
+  --color-border: var(--gray-200);
+  --color-border-strong: var(--gray-300);
+  --color-text: var(--gray-900);
+  --color-text-muted: var(--gray-600);
+  --color-text-subtle: var(--gray-500);
+  --color-text-disabled: var(--gray-400);
+  --color-accent: var(--accent-500);
+  --color-accent-hover: var(--accent-600);
+  --color-accent-pressed: var(--accent-700);
+  --color-accent-soft: var(--accent-50);
+  --color-accent-soft-strong: var(--accent-100);
+  --color-on-accent: var(--gray-0);
+  --color-accent-wash: rgb(67 89 236 / 10%);
+  --color-danger: var(--red-600);
+  --color-danger-hover: var(--red-700);
+  --color-danger-soft: var(--red-50);
+  --color-danger-border: var(--red-200);
+  --color-on-danger: var(--gray-0);
+  --color-guide: var(--red-600);
+  --color-overlay: rgb(26 29 39 / 40%);
+  --color-inverse: var(--gray-900);
+  --color-on-inverse: var(--gray-0);
+  --color-highlight: #e8a400;
+
+  /* Холст: фон по умолчанию и точки сетки (CVS-06). */
+  --color-canvas: #f9fafb;
+  --color-grid-dot: #c3c8d2;
+  --color-grid-dot-on-dark: #5f6b73;
+
+  --focus-ring: 0 0 0 3px rgb(67 89 236 / 35%);
+
+  /* Шрифт и размеры текста. */
+  --font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
+  --line-height: 1.45;
+
+  /* Отступы. */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Скругления. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  /* Тени: мягкие, для плавающих панелей поверх холста и страницы. */
+  --shadow-sm: 0 1px 2px rgb(26 29 39 / 6%), 0 1px 3px rgb(26 29 39 / 8%);
+  --shadow-md: 0 2px 4px rgb(26 29 39 / 6%), 0 6px 16px rgb(26 29 39 / 10%);
+  --shadow-lg: 0 4px 8px rgb(26 29 39 / 8%), 0 16px 40px rgb(26 29 39 / 16%);
+
+  /* Высота элементов управления; на телефоне — область нажатия 44×44 (UI-04). */
+  --control-size: 36px;
+  --control-size-sm: 32px;
+  --transition: 120ms ease;
+
+  --layer-panel: 3;
+  --layer-menu: 5;
+  --layer-overlay: 10;
+  --layer-tooltip: 20;
+}
+
+/* UI-04: телефон — тот же стиль, крупнее область нажатия. */
+@media (max-width: 640px), (pointer: coarse) {
+  :root {
+    --control-size: 44px;
+    --control-size-sm: 44px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg);
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+}
+
+h2 {
+  font-size: var(--font-size-lg);
+}
+
+h3 {
+  font-size: var(--font-size-md);
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* UI-04: ссылки — тоже элементы управления: на телефоне область нажатия 44 px. */
+@media (max-width: 640px), (pointer: coarse) {
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-size);
+  }
+}

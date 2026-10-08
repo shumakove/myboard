@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import type { DragItem } from "./folderTree";
+import { IconButton } from "../ui";
 
 /** Данные перетаскиваемого элемента для LibraryDnd. */
 export interface DragData {
@@ -26,15 +27,14 @@ export function DragHandle({
     data,
   });
   return (
-    <button
+    <IconButton
       ref={setNodeRef}
-      type="button"
       className={isDragging ? "library-drag is-dragging" : "library-drag"}
       {...attributes}
       {...listeners}
-      aria-label={`Drag ${title}`}
+      label={`Drag ${title}`}
     >
       ⠿
-    </button>
+    </IconButton>
   );
 }

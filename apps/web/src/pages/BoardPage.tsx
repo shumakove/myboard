@@ -10,6 +10,7 @@ import { useCurrentAccount } from "../account/accountContext";
 import { BoardLive } from "../realtime/BoardLive";
 import { ShareDialog } from "../sharing/ShareDialog";
 import "../account/account.css";
+import { Button, buttonClass, FloatingPanel } from "../ui";
 
 type BoardState =
   | { status: "loading" }
@@ -50,25 +51,27 @@ export function BoardPage() {
         : "Board";
 
   return (
-    <main className="account">
-      <p>
-        <Link href="/">← All boards</Link>
-      </p>
-      <h1>{heading}</h1>
+    <main className="board-page">
+      <FloatingPanel className="board-header">
+        <Link href="/" className={buttonClass("ghost")}>
+          ← All boards
+        </Link>
+        <h1>{heading}</h1>
+        {state.status === "ready" && (
+          <Button
+            variant="primary"
+            onClick={() => {
+              setSharing(true);
+            }}
+          >
+            Share
+          </Button>
+        )}
+      </FloatingPanel>
       {state.status === "loading" && <p>Loading…</p>}
       {state.status === "failed" && <p role="alert">{state.message}</p>}
       {state.status === "ready" && (
         <>
-          <p>
-            <button
-              type="button"
-              onClick={() => {
-                setSharing(true);
-              }}
-            >
-              Share
-            </button>
-          </p>
           <BoardLive
             boardId={state.board.id}
             target={{ kind: "owner", boardId: state.board.id }}

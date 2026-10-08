@@ -31,7 +31,7 @@ export function RecentBoards({ version }: { version: number }) {
     <section aria-labelledby="recent-title">
       <h2 id="recent-title">Recent</h2>
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}

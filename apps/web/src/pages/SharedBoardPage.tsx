@@ -10,6 +10,7 @@ import {
 } from "../sharing/sharingApi";
 import { BoardLive } from "../realtime/BoardLive";
 import "../account/account.css";
+import { Button, FloatingPanel, TextField } from "../ui";
 
 type PageState =
   | { status: "loading" }
@@ -56,48 +57,60 @@ export function SharedBoardPage() {
 
   if (state.status === "loading") {
     return (
-      <main className="account">
-        <h1>Shared board</h1>
-        <p>Loading…</p>
+      <main className="auth-page">
+        <FloatingPanel className="auth-card">
+          <h1>Shared board</h1>
+          <p>Loading…</p>
+        </FloatingPanel>
       </main>
     );
   }
   if (state.status !== "ready") {
     return (
-      <main className="account">
-        <h1>Board unavailable</h1>
-        <p role="alert">
-          {state.status === "failed" ? state.message : LINK_UNAVAILABLE}
-        </p>
+      <main className="auth-page">
+        <FloatingPanel className="auth-card">
+          <h1>Board unavailable</h1>
+          <p role="alert">
+            {state.status === "failed" ? state.message : LINK_UNAVAILABLE}
+          </p>
+        </FloatingPanel>
       </main>
     );
   }
   const { board } = state;
-  return (
-    <main className="account">
-      <h1>{board.title}</h1>
-      {board.participant === null ? (
-        <NameForm
-          token={token}
-          onJoined={(joined) => {
-            setState({ status: "ready", board: joined });
-          }}
-          onUnavailable={() => {
-            setState({ status: "unavailable" });
-          }}
-        />
-      ) : (
-        <>
-          <p>You joined as {board.participant.name}.</p>
-          <BoardLive
-            boardId={board.id}
-            target={{ kind: "participant", token }}
-            checkAccess={() => participantHasAccess(token)}
-            onClosed={recheck}
-            userName={board.participant.name}
+  if (board.participant === null) {
+    return (
+      <main className="auth-page">
+        <FloatingPanel className="auth-card">
+          <h1>{board.title}</h1>
+          <NameForm
+            token={token}
+            onJoined={(joined) => {
+              setState({ status: "ready", board: joined });
+            }}
+            onUnavailable={() => {
+              setState({ status: "unavailable" });
+            }}
           />
-        </>
-      )}
+        </FloatingPanel>
+      </main>
+    );
+  }
+  return (
+    <main className="board-page">
+      <FloatingPanel className="board-header">
+        <h1>{board.title}</h1>
+        <p className="board-header-note">
+          You joined as {board.participant.name}.
+        </p>
+      </FloatingPanel>
+      <BoardLive
+        boardId={board.id}
+        target={{ kind: "participant", token }}
+        checkAccess={() => participantHasAccess(token)}
+        onClosed={recheck}
+        userName={board.participant.name}
+      />
     </main>
   );
 }
@@ -152,28 +165,26 @@ function NameForm({
   }
 
   return (
-    <form className="account-form" onSubmit={(event) => void submit(event)}>
+    <form className="ui-form" onSubmit={(event) => void submit(event)}>
       <p>Enter your name to join the board.</p>
-      <label>
-        Your name
-        <input
-          name="name"
-          autoComplete="nickname"
-          maxLength={200}
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-          }}
-        />
-      </label>
+      <TextField
+        label="Your name"
+        name="name"
+        autoComplete="nickname"
+        maxLength={200}
+        value={name}
+        onChange={(event) => {
+          setName(event.target.value);
+        }}
+      />
       {error && (
-        <p role="alert" className="account-error">
+        <p role="alert" className="ui-error">
           {error}
         </p>
       )}
-      <button type="submit" disabled={pending}>
+      <Button type="submit" variant="primary" disabled={pending}>
         Join board
-      </button>
+      </Button>
     </form>
   );
 }

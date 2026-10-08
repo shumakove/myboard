@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { errorMessage, setFavorite, type FavoriteKind } from "./libraryApi";
+import { IconButton } from "../ui";
 
 /** BRD-07: звезда — добавить доску или папку в избранное и убрать. */
 export function FavoriteButton({
@@ -30,16 +31,15 @@ export function FavoriteButton({
   }
 
   return (
-    <button
-      type="button"
+    <IconButton
       className="library-star"
-      aria-label="Favorite"
+      label="Favorite"
       aria-pressed={favorite}
       title={favorite ? "Remove from favorites" : "Add to favorites"}
       disabled={pending}
       onClick={() => void toggle()}
     >
       {favorite ? "★" : "☆"}
-    </button>
+    </IconButton>
   );
 }

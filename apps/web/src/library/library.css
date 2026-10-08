@@ -1,109 +1,9 @@
-/* Список досок (/): недавние карточками, полный список строками; узкий экран — в столбик. */
-.library-new {
-  margin: 16px 0;
-}
-
-.library-recent {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  padding: 0;
-  list-style: none;
-}
-
-.library-card {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  color: inherit;
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-.library-card:hover,
-.library-card:focus-visible {
-  border-color: #555;
-}
-
-.library-card-title {
-  font-weight: 600;
-}
-
-.library-meta {
-  color: #666;
-  font-size: 0.875rem;
-}
-
-.library-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.library-controls input,
-.library-controls select,
-.library-rename input {
-  padding: 6px 8px;
-  font: inherit;
-}
-
-.library-controls input {
-  flex: 1 1 200px;
-}
-
-.library-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.library-list {
-  padding: 0;
-  list-style: none;
-}
-
-.library-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.library-row-main {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.library-actions,
-.library-rename {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.library-row .account-error {
-  flex-basis: 100%;
-}
-
-/* T2.2: боковой список папок и избранного; на узком экране — над списком досок. */
-.library-page {
-  max-width: 1200px;
-}
-
+/* Список досок (/): боковая панель папок и панель досок; недавние — карточками,
+   полный список — строками; узкий экран — в столбик. */
 .library-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: var(--space-4);
   align-items: start;
 }
 
@@ -114,121 +14,270 @@
 }
 
 .library-content {
+  display: grid;
+  gap: var(--space-4);
   min-width: 0;
+  padding: var(--space-4);
 }
 
+.library-content h2 {
+  margin-bottom: var(--space-3);
+}
+
+.library-new {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.library-recent {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-card {
+  display: grid;
+  gap: var(--space-1);
+  height: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.library-card:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.library-card:active {
+  background: var(--color-surface-muted);
+}
+
+.library-card:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.library-card-title {
+  font-weight: var(--font-weight-bold);
+}
+
+.library-meta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.library-controls .ui-input {
+  flex: 1 1 200px;
+}
+
+.library-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.library-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.library-row:last-child {
+  border-bottom: 0;
+}
+
+.library-row-main {
+  display: grid;
+  gap: var(--space-0);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-row-main a {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.library-actions,
+.library-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.library-row .ui-error {
+  flex-basis: 100%;
+}
+
+/* T2.2: боковой список папок и избранного; на узком экране — над списком досок. */
 .library-sidebar {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
   min-width: 0;
+  padding: var(--space-3);
 }
 
 .library-sidebar h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--font-size-md);
 }
 
 .library-folders {
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--space-2);
+  padding: var(--space-2);
   border: 1px dashed transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .library-folders.is-drop-root {
-  border-color: #555;
-  background: #f4f4f4;
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .library-folders-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .library-tree {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .library-tree .library-tree {
-  padding-left: 20px;
+  padding-left: var(--space-4);
 }
 
 .library-folder-row,
 .library-tree-board {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
-  padding: 2px 0;
   border-top: 2px solid transparent;
   border-bottom: 2px solid transparent;
+  border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
 }
 
+.library-folder-row:hover,
+.library-tree-board:hover {
+  background: var(--color-surface-muted);
+}
+
 .library-folder-row.is-drop-before {
-  border-top-color: #1a73e8;
+  border-top-color: var(--color-accent);
 }
 
 .library-folder-row.is-drop-after {
-  border-bottom-color: #1a73e8;
+  border-bottom-color: var(--color-accent);
 }
 
 .library-folder-row.is-drop-inside {
-  background: #e8f0fe;
+  background: var(--color-accent-soft);
 }
 
 .library-folder.is-highlighted > .library-folder-row {
-  outline: 2px solid #1a73e8;
+  outline: 2px solid var(--color-accent);
 }
 
+.library-tree-board > a {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-1);
+  color: var(--color-text);
+}
+
+/* Название папки и ссылка-кнопка: строка дерева, а не кнопка в рамке. */
 .library-folder-name,
 .library-link-button {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 4px;
+  min-height: var(--control-size);
+  padding: var(--space-1);
   border: 0;
+  border-radius: var(--radius-sm);
   background: none;
-  font: inherit;
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
 }
 
 .library-link-button {
-  color: #0645ad;
-  text-decoration: underline;
+  color: var(--color-accent);
 }
 
-.library-star {
-  border: 0;
-  background: none;
-  font-size: 1.1rem;
-  cursor: pointer;
+.library-folder-name:hover,
+.library-link-button:hover {
+  background: var(--color-surface-hover);
 }
 
-.library-star[aria-pressed="true"] {
-  color: #d99a00;
+.library-folder-name:active,
+.library-link-button:active {
+  background: var(--color-surface-pressed);
 }
 
+.library-folder-name:focus-visible,
+.library-link-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.library-star[aria-pressed="true"],
+.library-star[aria-pressed="true"]:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-highlight);
+}
+
+/* BUG-001: сенсорная цель не меньше 44×44 px — пальцем попасть так же легко, как мышью. */
 .library-drag {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  /* BUG-001: сенсорная цель не меньше 44×44 px — пальцем попасть так же легко, как мышью */
   min-width: 44px;
   min-height: 44px;
   padding: 0;
-  border: 0;
-  background: none;
-  color: #888;
-  font-size: 1.25rem;
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-xl);
   cursor: grab;
   touch-action: none; /* BRD-10: палец тянет ручку, а не прокручивает страницу */
 }
@@ -238,12 +287,12 @@
 }
 
 .library-drag-overlay {
-  padding: 6px 10px;
-  border: 1px solid #555;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
-  font-family: system-ui, sans-serif;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-family);
   cursor: grabbing;
 }
 
@@ -251,25 +300,22 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
 }
 
-.library-folder-form input {
+.library-folder-form .ui-input {
   flex: 1 1 120px;
-  min-width: 0;
-  padding: 4px 6px;
-  font: inherit;
 }
 
 .library-tree-empty {
   margin: 0;
-  padding-left: 28px;
+  padding-left: var(--space-6);
 }
 
 .library-row-head {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
 }

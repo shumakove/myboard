@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Rect } from "../canvas/camera";
 import type { Point } from "../realtime/messages";
 import { placeMenu } from "./geometry";
+import { Menu, MenuItem } from "../ui";
 
 export interface MenuItem {
   label: string;
@@ -74,26 +75,23 @@ export function ContextMenu({
   }, [onClose]);
 
   return (
-    <div
+    <Menu
       ref={ref}
       className="context-menu"
-      role="menu"
-      aria-label={label}
+      label={label}
       style={{ left: position.x, top: position.y }}
     >
       {items.map((item) => (
-        <button
+        <MenuItem
           key={item.label}
-          type="button"
-          role="menuitem"
           onClick={() => {
             onClose();
             item.action();
           }}
         >
           {item.label}
-        </button>
+        </MenuItem>
       ))}
-    </div>
+    </Menu>
   );
 }

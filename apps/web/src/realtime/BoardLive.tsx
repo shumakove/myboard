@@ -39,7 +39,7 @@ export function BoardLive({
 
   return (
     <>
-      <p role="status" data-status={status}>
+      <p className="board-status" role="status" data-status={status}>
         {STATUS_TEXT[status]}
       </p>
       {status !== "closed" && (

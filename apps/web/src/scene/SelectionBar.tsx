@@ -5,6 +5,7 @@ import {
   type StyleKey,
 } from "./objectTypes";
 import type { ObjectMeta, SceneObject } from "./sceneObjects";
+import { Button, FloatingPanel, SelectField } from "../ui";
 
 /** Значение, которое показывает список, если у выделенных оно разное. */
 const MIXED = "";
@@ -65,7 +66,7 @@ export function SelectionBar({
   const [single] = selected;
 
   return (
-    <div
+    <FloatingPanel
       className="selection-bar"
       role="toolbar"
       aria-label="Selection"
@@ -77,15 +78,15 @@ export function SelectionBar({
       {types.length > 1 && (
         <span role="group" aria-label="Keep only" className="selection-filter">
           {types.map((type) => (
-            <button
+            <Button
               key={type}
-              type="button"
+              variant="ghost"
               onClick={() => {
                 onFilter(type);
               }}
             >
               Only {typeName(type, true)} ({counts.get(type)})
-            </button>
+            </Button>
           ))}
         </span>
       )}
@@ -96,68 +97,68 @@ export function SelectionBar({
           values.size === 1 && only !== undefined ? String(only) : MIXED;
         const { label, options } = STYLE_KEYS[key];
         return (
-          <label key={key} className="selection-style">
-            {label}
-            <select
-              value={current}
-              onChange={(event) => {
-                const option = options.find(
-                  (o) => String(o.value) === event.target.value,
-                );
-                if (option) onStyle(key, option.value);
-              }}
-            >
-              {current === MIXED && (
-                <option value={MIXED} disabled>
-                  Mixed
-                </option>
-              )}
-              {options.map((option) => (
-                <option key={String(option.value)} value={String(option.value)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            key={key}
+            label={label}
+            className="selection-style"
+            value={current}
+            onChange={(event) => {
+              const option = options.find(
+                (o) => String(o.value) === event.target.value,
+              );
+              if (option) onStyle(key, option.value);
+            }}
+          >
+            {current === MIXED && (
+              <option value={MIXED} disabled>
+                Mixed
+              </option>
+            )}
+            {options.map((option) => (
+              <option key={String(option.value)} value={String(option.value)}>
+                {option.label}
+              </option>
+            ))}
+          </SelectField>
         );
       })}
-      <Button label="Edit text" action={onEditText} />
+      <BarButton label="Edit text" action={onEditText} />
       {onArrange && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           aria-haspopup="menu"
           onClick={(event) => {
             onArrange(event.currentTarget);
           }}
         >
           Arrange
-        </button>
+        </Button>
       )}
-      <Button label="Group" action={onGroup} />
-      <Button label="Ungroup" action={onUngroup} />
-      <Button label="Lock" action={onLock} />
-      <Button label="Unlock" action={onUnlock} />
-      <Button label="Delete" action={onDelete} />
-      <button
-        type="button"
+      <BarButton label="Group" action={onGroup} />
+      <BarButton label="Ungroup" action={onUngroup} />
+      <BarButton label="Lock" action={onLock} />
+      <BarButton label="Unlock" action={onUnlock} />
+      <BarButton label="Delete" action={onDelete} />
+      <Button
+        variant="ghost"
         aria-haspopup="menu"
         onClick={(event) => {
           onMore(event.currentTarget);
         }}
       >
         More
-      </button>
+      </Button>
       {selected.length === 1 && single && <ObjectInfo meta={single.meta} />}
-    </div>
+    </FloatingPanel>
   );
 }
 
-function Button({ label, action }: { label: string; action: BarAction }) {
+function BarButton({ label, action }: { label: string; action: BarAction }) {
   if (action === null) return null;
   return (
-    <button type="button" onClick={action}>
+    <Button variant="ghost" onClick={action}>
       {label}
-    </button>
+    </Button>
   );
 }
 

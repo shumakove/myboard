@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Dialog, Input } from "../ui";
 import { copyText } from "./copyText";
 import {
   getShareLink,
@@ -47,16 +48,6 @@ export function ShareDialog({
     };
   }, [boardId]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-
   async function copy(url: string) {
     const copied = await copyText(url, field.current);
     setNotice(
@@ -84,89 +75,78 @@ export function ShareDialog({
   }
 
   return (
-    <div className="share-backdrop">
-      <div
-        className="share-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="share-title"
-      >
-        <h2 id="share-title">Share board</h2>
-        {state.status === "loading" && <p>Loading…</p>}
-        {state.status === "failed" && <p role="alert">{state.message}</p>}
-        {state.status === "ready" && (
-          <>
-            <p>Anyone with this link can open and edit the board.</p>
-            <div className="share-link">
-              <input
-                ref={field}
-                aria-label="Board link"
-                readOnly
-                value={state.link.url}
-                onFocus={(event) => {
-                  event.currentTarget.select();
-                }}
-              />
-              <button type="button" onClick={() => void copy(state.link.url)}>
-                Copy link
-              </button>
-            </div>
-            {confirming ? (
-              <div
-                className="share-confirm"
-                role="group"
-                aria-label="Confirm reset"
-              >
-                <p>
-                  Reset the link? The current link will stop working and people
-                  who joined by it will lose access.
-                </p>
-                <div className="share-actions">
-                  <button
-                    type="button"
-                    disabled={resetting}
-                    onClick={() => void reset()}
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    disabled={resetting}
-                    onClick={() => {
-                      setConfirming(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
+    <Dialog title="Share board" onClose={onClose}>
+      {state.status === "loading" && <p>Loading…</p>}
+      {state.status === "failed" && <p role="alert">{state.message}</p>}
+      {state.status === "ready" && (
+        <>
+          <p>Anyone with this link can open and edit the board.</p>
+          <div className="share-link">
+            <Input
+              ref={field}
+              aria-label="Board link"
+              readOnly
+              value={state.link.url}
+              onFocus={(event) => {
+                event.currentTarget.select();
+              }}
+            />
+            <Button variant="primary" onClick={() => void copy(state.link.url)}>
+              Copy link
+            </Button>
+          </div>
+          {confirming ? (
+            <div
+              className="share-confirm"
+              role="group"
+              aria-label="Confirm reset"
+            >
+              <p>
+                Reset the link? The current link will stop working and people
+                who joined by it will lose access.
+              </p>
+              <div className="share-actions">
+                <Button
+                  variant="danger"
+                  disabled={resetting}
+                  onClick={() => void reset()}
+                >
+                  Reset
+                </Button>
+                <Button
+                  disabled={resetting}
+                  onClick={() => {
+                    setConfirming(false);
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setNotice(null);
-                  setConfirming(true);
-                }}
-              >
-                Reset link
-              </button>
-            )}
-          </>
-        )}
-        {notice && (
-          <p
-            role={notice.kind === "error" ? "alert" : "status"}
-            className={notice.kind === "error" ? "share-error" : undefined}
-          >
-            {notice.text}
-          </p>
-        )}
-        <div className="share-actions share-footer">
-          <button type="button" onClick={onClose}>
-            Close
-          </button>
-        </div>
+            </div>
+          ) : (
+            <Button
+              className="share-reset"
+              onClick={() => {
+                setNotice(null);
+                setConfirming(true);
+              }}
+            >
+              Reset link
+            </Button>
+          )}
+        </>
+      )}
+      {notice && (
+        <p
+          role={notice.kind === "error" ? "alert" : "status"}
+          className={notice.kind === "error" ? "ui-error" : "ui-muted"}
+        >
+          {notice.text}
+        </p>
+      )}
+      <div className="share-actions share-footer">
+        <Button onClick={onClose}>Close</Button>
       </div>
-    </div>
+    </Dialog>
   );
 }

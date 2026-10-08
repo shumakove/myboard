@@ -7,6 +7,7 @@ import {
 import type { Point } from "../realtime/messages";
 import type { ObjectType } from "./objectTypes";
 import { TOOLS, type ToolId } from "./tools";
+import { Button, FloatingPanel } from "../ui";
 
 /** Сдвиг указателя, после которого нажатие на кнопку — уже перетаскивание, px. */
 const DRAG_THRESHOLD = 6;
@@ -81,16 +82,16 @@ export function ToolPanel({
   }
 
   return (
-    <div
+    <FloatingPanel
       className="tool-panel"
       role="toolbar"
       aria-label="Tools"
       aria-orientation="vertical"
     >
       {TOOLS.map((item) => (
-        <button
+        <Button
           key={item.id}
-          type="button"
+          variant="ghost"
           className="tool-button"
           aria-pressed={tool === item.id}
           title={item.hint}
@@ -116,7 +117,7 @@ export function ToolPanel({
           })}
         >
           {item.label}
-        </button>
+        </Button>
       ))}
       {children}
       {ghost && (
@@ -128,6 +129,6 @@ export function ToolPanel({
           {ghost.label}
         </div>
       )}
-    </div>
+    </FloatingPanel>
   );
 }

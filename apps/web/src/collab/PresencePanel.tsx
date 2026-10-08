@@ -1,5 +1,6 @@
 import type { PeerPresence } from "../realtime/boardPresence";
 import { peerColor } from "./peerColor";
+import { Button } from "../ui";
 
 /**
  * COL-09: кто сейчас на доске. Отсюда же — слежение за участником (COL-04) и скрытие
@@ -20,7 +21,7 @@ export function PresencePanel({
 }) {
   const nameOf = (peer: string) => peers.find((p) => p.peer === peer)?.name;
   return (
-    <aside className="presence" aria-label="People on this board">
+    <aside className="presence ui-panel" aria-label="People on this board">
       <h2>On this board ({peers.length})</h2>
       <ul>
         {peers.map(({ peer, name, self, state }) => {
@@ -42,8 +43,8 @@ export function PresencePanel({
                 )}
               </span>
               {!self && (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   disabled={following === peer}
                   aria-label={
                     following === peer ? `Following ${name}` : `Follow ${name}`
@@ -53,15 +54,15 @@ export function PresencePanel({
                   }}
                 >
                   {following === peer ? "Following" : "Follow"}
-                </button>
+                </Button>
               )}
             </li>
           );
         })}
       </ul>
-      <button type="button" onClick={onToggleCursors}>
+      <Button onClick={onToggleCursors}>
         {cursorsShown ? "Hide cursors" : "Show cursors"}
-      </button>
+      </Button>
     </aside>
   );
 }

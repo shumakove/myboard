@@ -2,7 +2,7 @@ import { useState, type SubmitEvent } from "react";
 import { Redirect, useLocation } from "wouter";
 import { errorMessage, signIn } from "../account/accountApi";
 import { useAccountSession } from "../account/useAccountSession";
-import "../account/account.css";
+import { Button, FloatingPanel, TextField } from "../ui";
 
 /** `/login` — вход пользователя досок по почте и паролю (ACC-01, ACC-02). */
 export function LoginPage() {
@@ -32,12 +32,12 @@ export function LoginPage() {
   }
 
   return (
-    <main className="account">
-      <h1>Sign in</h1>
-      <form className="account-form" onSubmit={(e) => void submit(e)}>
-        <label>
-          Email
-          <input
+    <main className="auth-page">
+      <FloatingPanel className="auth-card">
+        <h1>Sign in</h1>
+        <form className="ui-form" onSubmit={(e) => void submit(e)}>
+          <TextField
+            label="Email"
             type="email"
             name="email"
             autoComplete="username"
@@ -47,10 +47,8 @@ export function LoginPage() {
               setEmail(e.target.value);
             }}
           />
-        </label>
-        <label>
-          Password
-          <input
+          <TextField
+            label="Password"
             type="password"
             name="password"
             autoComplete="current-password"
@@ -60,16 +58,16 @@ export function LoginPage() {
               setPassword(e.target.value);
             }}
           />
-        </label>
-        {error && (
-          <p className="account-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={pending}>
-          Sign in
-        </button>
-      </form>
+          {error && (
+            <p className="ui-error" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" variant="primary" disabled={pending}>
+            Sign in
+          </Button>
+        </form>
+      </FloatingPanel>
     </main>
   );
 }

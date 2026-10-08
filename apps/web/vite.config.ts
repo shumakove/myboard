@@ -9,5 +9,7 @@ export default defineConfig({
     // Страница тестов открыта по IP в LAN, как в разработке (без localhost).
     environmentOptions: { jsdom: { url: "http://192.168.1.20:8080/" } },
     setupFiles: ["./src/test-setup.ts"],
+    // Тест темы читает таблицы стилей как текст (`?raw`).
+    css: true,
   },
 });

@@ -1,13 +1,13 @@
 /* Холст: точечный фон двигается вместе с видом, слой доски — от центра области. */
 .board-canvas {
   position: relative;
-  height: 60vh;
+  height: calc(100vh - 190px);
   min-height: 320px;
   overflow: hidden;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #fafafa;
-  background-image: radial-gradient(circle, #c8c8c8 1px, transparent 1.5px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-canvas);
+  box-shadow: var(--shadow-sm);
   cursor: grab;
   touch-action: none; /* палец двигает вид, а не страницу */
   user-select: none;
@@ -22,53 +22,46 @@
   transform-origin: 0 0;
 }
 
-/* Панель вида над холстом; на узком экране переносится на две строки. */
+/* Панель вида: масштаб и колесо мыши. */
 .camera-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.camera-controls button {
-  min-width: 36px;
-  min-height: 36px;
-  font-size: 18px;
+  gap: var(--space-1);
 }
 
 .camera-zoom {
   min-width: 3.5em;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
 .camera-wheel {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   margin-left: auto;
-  font-size: 14px;
 }
 
-/* Миникарта поверх правого нижнего угла холста. */
+/* Миникарта — плавающая панель поверх правого нижнего угла холста. */
 .minimap {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  border: 1px solid #bbb;
-  border-radius: 6px;
-  background: rgb(255 255 255 / 90%);
+  right: var(--space-2);
+  bottom: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
   cursor: pointer;
   touch-action: none;
 }
 
 .minimap-object {
-  fill: #9aa4b2;
+  fill: var(--color-text-subtle);
 }
 
 .minimap-view {
-  fill: rgb(37 99 235 / 12%);
-  stroke: #2563eb;
+  fill: var(--color-accent-wash);
+  stroke: var(--color-accent);
   stroke-width: 2;
 }

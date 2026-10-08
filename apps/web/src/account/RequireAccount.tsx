@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Redirect } from "wouter";
 import { AccountSessionContext } from "./accountContext";
 import { useAccountSession } from "./useAccountSession";
-import "./account.css";
 
 /**
  * Страница пользователя досок: одна проверка сессии на вкладку.
@@ -18,7 +17,7 @@ export function RequireAccount({ children }: { children: ReactNode }) {
   }
   if (session.status === "loading") {
     return (
-      <main className="account">
+      <main className="page">
         <p>Loading…</p>
       </main>
     );

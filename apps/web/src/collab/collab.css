@@ -1,8 +1,9 @@
-/* Холст и панель присутствия: на узком экране панель уходит под холст. */
+/* Рабочая область доски: панель вида, сцена и список присутствующих; на узком экране
+   список уходит под холст. */
 .board-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--space-3);
   align-items: start;
 }
 
@@ -21,18 +22,38 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  margin-bottom: 8px;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
 }
 
 .board-bar .camera-controls {
   flex: 1 1 auto;
-  margin-bottom: 0;
+}
+
+/*
+ * BUG-006, UI-04: на телефоне панель вида — одной строкой (лишнее прокручивается вбок),
+ * чтобы холст с миникартой оставался в первом экране при кнопках 44 px.
+ */
+@media (max-width: 640px) {
+  .board-bar,
+  .board-bar .camera-controls,
+  .board-bar .board-settings {
+    flex-wrap: nowrap;
+  }
+
+  .board-bar {
+    overflow-x: auto;
+  }
+
+  .board-bar .camera-controls {
+    flex: none;
+  }
 }
 
 .board-stage {
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .board-stage[data-following] {
@@ -41,17 +62,19 @@
 
 .follow-banner {
   position: absolute;
-  top: 8px;
+  top: var(--space-2);
   left: 50%;
+  z-index: var(--layer-panel);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0;
-  padding: 4px 6px 4px 12px;
-  border-radius: 6px;
-  background: #222;
-  color: #fff;
-  font-size: 14px;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-inverse);
+  box-shadow: var(--shadow-md);
+  color: var(--color-on-inverse);
+  font-size: var(--font-size-md);
   white-space: nowrap;
   transform: translateX(-50%);
 }
@@ -64,24 +87,33 @@
   transform-origin: 0 0;
 }
 
+.remote-cursor svg path {
+  stroke: var(--color-surface);
+}
+
 .remote-cursor-name {
-  margin: 14px 0 0 -4px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
+  margin: 14px 0 0 calc(var(--space-1) * -1);
+  padding: var(--space-0) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-accent);
+  font-size: var(--font-size-xs);
   white-space: nowrap;
 }
 
+/* COL-09: кто на доске — плавающая панель справа (на телефоне — под холстом). */
+.presence {
+  padding: var(--space-3);
+}
+
 .presence h2 {
-  margin: 0 0 8px;
-  font-size: 1rem;
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-md);
 }
 
 .presence ul {
   display: grid;
-  gap: 6px;
-  margin: 0 0 12px;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
   padding: 0;
   list-style: none;
 }
@@ -89,8 +121,8 @@
 .presence li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 32px;
+  gap: var(--space-2);
+  min-height: var(--control-size);
 }
 
 .presence-dot {
@@ -106,6 +138,6 @@
 }
 
 .presence-note {
-  color: #666;
-  font-size: 0.875em;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }

@@ -79,8 +79,8 @@ interface Session {
 export function BoardCanvas({
   camera,
   wheelMode,
-  background = "#fafafa",
-  dotColor = "#c8c8c8",
+  background = "var(--color-canvas)",
+  dotColor = "var(--color-grid-dot)",
   gridStep = 32,
   gestures,
   canvasRef,

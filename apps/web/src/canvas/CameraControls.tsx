@@ -1,3 +1,4 @@
+import { IconButton, SelectField } from "../ui";
 import { MAX_ZOOM, MIN_ZOOM } from "./camera";
 import type { WheelMode } from "./wheel";
 
@@ -20,38 +21,35 @@ export function CameraControls({
 }) {
   return (
     <div className="camera-controls" role="toolbar" aria-label="View">
-      <button
-        type="button"
-        aria-label="Zoom out"
+      <IconButton
+        label="Zoom out"
         disabled={zoom <= MIN_ZOOM}
         onClick={onZoomOut}
       >
         −
-      </button>
+      </IconButton>
       {/* Не <output>: его роль status уже занята состоянием связи на странице. */}
       <span className="camera-zoom" aria-label="Zoom level">
         {Math.round(zoom * 100)}%
       </span>
-      <button
-        type="button"
-        aria-label="Zoom in"
+      <IconButton
+        label="Zoom in"
         disabled={zoom >= MAX_ZOOM}
         onClick={onZoomIn}
       >
         +
-      </button>
-      <label className="camera-wheel">
-        Mouse wheel
-        <select
-          value={wheelMode}
-          onChange={(event) => {
-            onWheelMode(event.target.value === "scroll" ? "scroll" : "zoom");
-          }}
-        >
-          <option value="zoom">Zooms</option>
-          <option value="scroll">Scrolls (Ctrl/⌘ + wheel zooms)</option>
-        </select>
-      </label>
+      </IconButton>
+      <SelectField
+        label="Mouse wheel"
+        className="camera-wheel"
+        value={wheelMode}
+        onChange={(event) => {
+          onWheelMode(event.target.value === "scroll" ? "scroll" : "zoom");
+        }}
+      >
+        <option value="zoom">Zooms</option>
+        <option value="scroll">Scrolls (Ctrl/⌘ + wheel zooms)</option>
+      </SelectField>
     </div>
   );
 }

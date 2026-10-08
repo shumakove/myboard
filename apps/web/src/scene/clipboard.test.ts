@@ -156,8 +156,22 @@ describe("CVS-20: копирование и вставка объектов", ()
   it("BUG-008: копия ложится поверх объектов, записанных JSON-значением", () => {
     const objects = board();
     // Сторонний клиент пишет объекты обычным JSON, а не Y.Map (ARCHITECTURE.md, раздел 6).
-    objects.set("a", { type: "shape", x: 0, y: 0, width: 50, height: 50, z: 1 });
-    objects.set("b", { type: "shape", x: 60, y: 0, width: 50, height: 50, z: 2 });
+    objects.set("a", {
+      type: "shape",
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      z: 1,
+    });
+    objects.set("b", {
+      type: "shape",
+      x: 60,
+      y: 0,
+      width: 50,
+      height: 50,
+      z: 2,
+    });
     const clip = copyObjects(objects, readScene(objects), ["a", "b"]);
     if (clip === null) throw new Error("нет копии");
     const roots = pasteObjects(

@@ -8,6 +8,7 @@ import {
   type BoardSort,
   type Folder,
 } from "./libraryApi";
+import { Input, Select } from "../ui";
 
 /** Пауза после ввода в поиск перед запросом к серверу. */
 export const SEARCH_DELAY_MS = 300;
@@ -89,7 +90,7 @@ export function BoardList({
     <section aria-labelledby="all-boards-title">
       <h2 id="all-boards-title">All boards</h2>
       <div className="library-controls">
-        <input
+        <Input
           type="search"
           aria-label="Search boards"
           placeholder="Search boards and folders"
@@ -100,7 +101,7 @@ export function BoardList({
         />
         <div className="library-control">
           <label htmlFor={sortId}>Sort by</label>
-          <select
+          <Select
             id={sortId}
             value={sort}
             onChange={(event) => {
@@ -112,11 +113,11 @@ export function BoardList({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="library-control">
           <label htmlFor={periodId}>Modified</label>
-          <select
+          <Select
             id={periodId}
             value={periodDays}
             onChange={(event) => {
@@ -128,7 +129,7 @@ export function BoardList({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
       {searching && (
@@ -140,7 +141,7 @@ export function BoardList({
         />
       )}
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}

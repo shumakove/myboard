@@ -35,10 +35,13 @@ export function UserAccounts() {
           setUsers((list) => [...(list ?? []), user]);
         }}
       />
-      <section aria-labelledby="accounts-title">
+      <section
+        aria-labelledby="accounts-title"
+        className="ui-panel page-section"
+      >
         <h2 id="accounts-title">Accounts</h2>
         {error && (
-          <p className="admin-error" role="alert">
+          <p className="ui-error" role="alert">
             {error}
           </p>
         )}

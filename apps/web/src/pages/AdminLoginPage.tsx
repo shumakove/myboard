@@ -2,7 +2,7 @@ import { useState, type SubmitEvent } from "react";
 import { Redirect, useLocation } from "wouter";
 import { errorMessage, signIn } from "../admin/adminApi";
 import { useAdminSession } from "../admin/useAdminSession";
-import "../admin/admin.css";
+import { Button, FloatingPanel, TextField } from "../ui";
 
 /** `/admin/login` — вход администратора (ADM-01). */
 export function AdminLoginPage() {
@@ -31,12 +31,12 @@ export function AdminLoginPage() {
   }
 
   return (
-    <main className="admin">
-      <h1>Admin sign in</h1>
-      <form className="admin-form" onSubmit={(e) => void submit(e)}>
-        <label>
-          Email
-          <input
+    <main className="auth-page">
+      <FloatingPanel className="auth-card">
+        <h1>Admin sign in</h1>
+        <form className="ui-form" onSubmit={(e) => void submit(e)}>
+          <TextField
+            label="Email"
             type="email"
             name="email"
             autoComplete="username"
@@ -46,10 +46,8 @@ export function AdminLoginPage() {
               setEmail(e.target.value);
             }}
           />
-        </label>
-        <label>
-          Password
-          <input
+          <TextField
+            label="Password"
             type="password"
             name="password"
             autoComplete="current-password"
@@ -59,16 +57,16 @@ export function AdminLoginPage() {
               setPassword(e.target.value);
             }}
           />
-        </label>
-        {error && (
-          <p className="admin-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={pending}>
-          Sign in
-        </button>
-      </form>
+          {error && (
+            <p className="ui-error" role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" variant="primary" disabled={pending}>
+            Sign in
+          </Button>
+        </form>
+      </FloatingPanel>
     </main>
   );
 }
