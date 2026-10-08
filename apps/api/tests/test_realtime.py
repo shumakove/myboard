@@ -747,6 +747,29 @@ def test_api_restart_keeps_board_content(
         assert _snapshot(g.doc) == expected
 
 
+def test_cvs06_board_settings_root_survives_compaction_and_restart(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    # CVS-06: фон и шаг сетки — корень `settings` документа; сервер его не объявляет,
+    # но хранит, сжимает в снимок и отдаёт как остальное содержимое.
+    def change_settings(doc: Doc[Any]) -> None:
+        doc.get("settings", type=Map).update({"background": "#263238", "gridStep": 40})
+
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.edit(change_settings)
+        owner.flush()
+        _compact_now(client)
+        assert _count(settings, "board_updates", board) == 0
+    with (
+        TestClient(create_app(settings)) as restarted,
+        _connect(restarted, f"token={link}", kate) as guest,
+    ):
+        assert guest.doc.get("settings", type=Map).to_py() == {
+            "background": "#263238",
+            "gridStep": 40.0,
+        }
+
+
 def test_deleted_object_moves_to_trash_and_is_logged(
     client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
 ) -> None:

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
+import { createBoardDocument } from "../realtime/boardDocument";
 import { BoardPresence } from "../realtime/boardPresence";
 import type {
   AwarenessState,
@@ -26,7 +27,11 @@ function setup(
   const sent: AwarenessState[] = [];
   presence.attach((state) => sent.push(state));
   const view = render(
-    <BoardWorkspace boardId={boardId} objects={objects} presence={presence} />,
+    <BoardWorkspace
+      boardId={boardId}
+      board={{ ...createBoardDocument(objects.doc ?? new Y.Doc()), objects }}
+      presence={presence}
+    />,
   );
   act(() => {
     presence.receive({ type: "presence", self: "p1", peers });

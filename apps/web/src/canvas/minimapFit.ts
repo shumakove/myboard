@@ -61,3 +61,21 @@ export function toBoard(point: Point, fit: MinimapFit): Point {
     y: (point.y - fit.offsetY) / fit.scale,
   };
 }
+
+/** BUG-003: наименьший размер рамки видимой области на миникарте, px. */
+export const MIN_VIEW_FRAME: Size = { width: 12, height: 9 };
+
+/**
+ * BUG-003 (CVS-04): рамка видимой области не меньше MIN_VIEW_FRAME, центр — на месте.
+ * При далёких объектах вид — крошечная доля мира, но «где я» должно быть видно.
+ */
+export function visibleFrame(frame: Rect, min: Size = MIN_VIEW_FRAME): Rect {
+  const width = Math.max(frame.width, min.width);
+  const height = Math.max(frame.height, min.height);
+  return {
+    x: frame.x + (frame.width - width) / 2,
+    y: frame.y + (frame.height - height) / 2,
+    width,
+    height,
+  };
+}

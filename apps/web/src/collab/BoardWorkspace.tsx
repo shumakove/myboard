@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type * as Y from "yjs";
-import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
+import type { CameraUpdate } from "../canvas/BoardCanvas";
 import { centerOn, ZOOM_STEP, zoomBy, type Size } from "../canvas/camera";
 import { CameraControls } from "../canvas/CameraControls";
 import { Minimap } from "../canvas/Minimap";
@@ -8,18 +7,21 @@ import { useSceneRects } from "../canvas/sceneBounds";
 import { useCameraKeys } from "../canvas/useCameraKeys";
 import { usePersistentCamera } from "../canvas/usePersistentCamera";
 import { loadWheelMode, saveWheelMode, type WheelMode } from "../canvas/wheel";
+import type { BoardDocument } from "../realtime/boardDocument";
 import type { BoardPresence } from "../realtime/boardPresence";
 import type { CameraView } from "../realtime/messages";
 import { usePresence } from "../realtime/usePresence";
+import { BoardScene } from "../scene/BoardScene";
+import { BoardSettingsControls } from "../scene/BoardSettingsControls";
 import { peerColor } from "./peerColor";
 import { PresencePanel } from "./PresencePanel";
 import { RemoteCursors } from "./RemoteCursors";
 import "./collab.css";
 
 /**
- * Холст доски вместе с присутствием: камера (CVS-01…CVS-05, MOB-02), чужие курсоры
- * с именами (COL-02) и их скрытие (COL-03), «смотреть глазами участника» (COL-04),
- * список присутствующих (COL-09).
+ * Холст доски вместе с присутствием: камера (CVS-01…CVS-05, MOB-02), сцена с объектами
+ * (T5.2), чужие курсоры с именами (COL-02) и их скрытие (COL-03), «смотреть глазами
+ * участника» (COL-04), список присутствующих (COL-09).
  *
  * Слежение: вид повторяет камеру выбранного участника, пока наблюдатель не нажмёт
  * Stop following или не сдвинет вид сам (мышь, колесо, клавиши, касания, миникарта);
@@ -27,22 +29,22 @@ import "./collab.css";
  */
 export function BoardWorkspace({
   boardId,
-  objects,
+  board,
   presence,
 }: {
   boardId: string;
-  /** Объекты доски — для миникарты. */
-  objects: Y.Map<unknown>;
+  board: BoardDocument;
   presence: BoardPresence;
 }) {
   const { peers } = usePresence(presence);
   const [camera, setCamera] = usePersistentCamera(boardId);
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
   const [wheelMode, setWheelMode] = useState<WheelMode>(loadWheelMode);
-  const rects = useSceneRects(objects);
+  const rects = useSceneRects(board.objects);
   const [following, setFollowing] = useState<string | null>(null);
   const [cursorsShown, setCursorsShown] = useState(true);
   const followed = peers.find((p) => p.peer === following && !p.self);
+  const selfName = peers.find((p) => p.self)?.name ?? "";
 
   // Свой вид и слежение видны остальным: за этой вкладкой тоже можно следить.
   useEffect(() => {
@@ -83,60 +85,66 @@ export function BoardWorkspace({
   return (
     <div className="board-workspace">
       <div className="board-main">
-        <CameraControls
-          zoom={camera.zoom}
-          onZoomIn={() => {
-            move((current) => zoomBy(current, ZOOM_STEP));
-          }}
-          onZoomOut={() => {
-            move((current) => zoomBy(current, 1 / ZOOM_STEP));
-          }}
-          wheelMode={wheelMode}
-          onWheelMode={(mode) => {
-            setWheelMode(mode);
-            saveWheelMode(mode);
-          }}
-        />
-        <div
-          className="board-stage"
-          style={
-            followed ? { outlineColor: peerColor(followed.peer) } : undefined
-          }
-          data-following={followed ? "true" : undefined}
-        >
-          <BoardCanvas
-            camera={camera}
-            wheelMode={wheelMode}
-            onMove={move}
-            onPointer={(cursor) => {
-              presence.setLocal({ cursor });
+        <div className="board-bar">
+          <CameraControls
+            zoom={camera.zoom}
+            onZoomIn={() => {
+              move((current) => zoomBy(current, ZOOM_STEP));
             }}
-            onResize={setViewport}
-          >
-            {cursorsShown && <RemoteCursors peers={peers} zoom={camera.zoom} />}
-          </BoardCanvas>
-          <Minimap
-            camera={camera}
-            viewport={viewport}
-            rects={rects}
-            onNavigate={(point) => {
-              move((current) => centerOn(current, point));
+            onZoomOut={() => {
+              move((current) => zoomBy(current, 1 / ZOOM_STEP));
+            }}
+            wheelMode={wheelMode}
+            onWheelMode={(mode) => {
+              setWheelMode(mode);
+              saveWheelMode(mode);
             }}
           />
-          {followed && (
-            <p className="follow-banner">
-              Following {followed.name}
-              <button
-                type="button"
-                onClick={() => {
-                  setFollowing(null);
-                }}
-              >
-                Stop following
-              </button>
-            </p>
-          )}
+          <BoardSettingsControls settings={board.settings} />
         </div>
+        <BoardScene
+          board={board}
+          camera={camera}
+          wheelMode={wheelMode}
+          userName={selfName}
+          stageStyle={
+            followed ? { outlineColor: peerColor(followed.peer) } : undefined
+          }
+          stageAttributes={{ "data-following": followed ? "true" : undefined }}
+          onMove={move}
+          onPointer={(cursor) => {
+            presence.setLocal({ cursor });
+          }}
+          onResize={setViewport}
+          worldOverlay={
+            cursorsShown && <RemoteCursors peers={peers} zoom={camera.zoom} />
+          }
+          stageOverlay={
+            <>
+              <Minimap
+                camera={camera}
+                viewport={viewport}
+                rects={rects}
+                onNavigate={(point) => {
+                  move((current) => centerOn(current, point));
+                }}
+              />
+              {followed && (
+                <p className="follow-banner">
+                  Following {followed.name}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFollowing(null);
+                    }}
+                  >
+                    Stop following
+                  </button>
+                </p>
+              )}
+            </>
+          }
+        />
       </div>
       <PresencePanel
         peers={peers}

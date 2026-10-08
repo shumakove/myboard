@@ -10,6 +10,7 @@ import {
   minimapWorld,
   toBoard,
   toMinimap,
+  visibleFrame,
   type MinimapFit,
 } from "./minimapFit";
 
@@ -72,7 +73,7 @@ export function Minimap({
     setFrozen(null);
   }
 
-  const frame = toMinimap(view, fit);
+  const frame = visibleFrame(toMinimap(view, fit));
   return (
     <svg
       className="minimap"
@@ -100,6 +101,7 @@ export function Minimap({
           />
         );
       })}
+      {/* Рамка вида поверх объектов, своим цветом и не меньше нескольких px (BUG-003). */}
       <rect
         className="minimap-view"
         data-testid="minimap-view"
