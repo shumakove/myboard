@@ -54,21 +54,21 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-12 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-12, desktop) | PASS (BUG-004 исправлен, проверено) |
 | CVS-13 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-13, desktop) | PASS |
 | CVS-14 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-14, desktop) | PASS |
-| CVS-15 | T5.3 | — | не проверено |
-| CVS-16 | T5.3 | — | не проверено |
-| CVS-17 | T5.3 | — | не проверено |
-| CVS-18 | T5.3 | — | не проверено |
-| CVS-19 | T5.3 | — | не проверено |
-| CVS-20 | T5.3 | — | не проверено |
+| CVS-15 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-15, desktop) | PASS |
+| CVS-16 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-16, desktop); регрессия CVS-12 в scene.spec.ts | PASS |
+| CVS-17 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-17, desktop) | PASS |
+| CVS-18 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-18, desktop) | PASS |
+| CVS-19 | T5.3, T6.5 | acceptance/e2e/operations.spec.ts (CVS-19, desktop) | PASS (блокировка, Unlock all); ластик — проверить в T6.5 |
+| CVS-20 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-20, desktop) | PASS (BUG-008 minor открыт) |
 | CVS-21 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-21, desktop + mobile) | PASS |
-| CVS-22 | T5.3 | — | не проверено |
+| CVS-22 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-22, desktop) | PASS |
 | CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
 | CVS-24 | T5.4 | — | не проверено |
 | CVS-25 | T5.4 | — | не проверено |
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
 | MOB-02 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile) | PASS (BUG-006 исправлен в 403f6f8, проверено) |
-| MOB-03 | T5.2 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено) |
+| MOB-03 | T5.2 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено; BUG-007 minor открыт — панель Selection на телефоне закрывает верх холста) |
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
 | MOB-06 | T11.1 | — | не проверено |
