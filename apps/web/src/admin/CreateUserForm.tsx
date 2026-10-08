@@ -1,4 +1,5 @@
 import { useState, type SubmitEvent } from "react";
+import { Button, TextField } from "../ui";
 import { createUser, errorMessage, type User } from "./adminApi";
 
 /** ADM-03: новая учётка с именем, почтой и паролем; повтор почты — ошибка (ADM-07). */
@@ -30,53 +31,50 @@ export function CreateUserForm({
   }
 
   return (
-    <section aria-labelledby="create-user-title">
+    <section
+      aria-labelledby="create-user-title"
+      className="ui-panel page-section"
+    >
       <h2 id="create-user-title">Create user</h2>
-      <form className="admin-form" onSubmit={(e) => void submit(e)}>
-        <label>
-          Name
-          <input
-            name="name"
-            required
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-            }}
-          />
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            name="email"
-            required
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-            }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            name="password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-            }}
-          />
-        </label>
+      <form className="ui-form admin-form" onSubmit={(e) => void submit(e)}>
+        <TextField
+          label="Name"
+          name="name"
+          required
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+          }}
+        />
+        <TextField
+          label="Email"
+          type="email"
+          name="email"
+          required
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+          }}
+        />
+        <TextField
+          label="Password"
+          type="password"
+          name="password"
+          autoComplete="new-password"
+          required
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+          }}
+        />
         {error && (
-          <p className="admin-error" role="alert">
+          <p className="ui-error" role="alert">
             {error}
           </p>
         )}
-        <button type="submit" disabled={pending}>
+        <Button type="submit" variant="primary" disabled={pending}>
           Create user
-        </button>
+        </Button>
       </form>
     </section>
   );

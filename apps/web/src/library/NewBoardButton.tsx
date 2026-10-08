@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { createBoard, errorMessage } from "./libraryApi";
+import { Button } from "../ui";
 
 /** BRD-01: создаёт доску и сразу открывает её. */
 export function NewBoardButton() {
@@ -22,11 +23,15 @@ export function NewBoardButton() {
 
   return (
     <div className="library-new">
-      <button type="button" disabled={pending} onClick={() => void create()}>
+      <Button
+        variant="primary"
+        disabled={pending}
+        onClick={() => void create()}
+      >
         New board
-      </button>
+      </Button>
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}

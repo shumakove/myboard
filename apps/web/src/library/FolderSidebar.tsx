@@ -6,6 +6,7 @@ import { FolderItem, type FolderTreeActions } from "./FolderItem";
 import { buildTree } from "./folderTree";
 import { NewFolderForm } from "./NewFolderForm";
 import type { LibraryTree } from "./useLibraryTree";
+import { Button } from "../ui";
 
 /** BRD-07: избранные папки и доски; папка по нажатию раскрывается в дереве. */
 function Favorites({
@@ -89,9 +90,12 @@ export function FolderSidebar({
   const roots = tree ? buildTree(tree.folders, tree.boards) : [];
 
   return (
-    <aside className="library-sidebar" aria-label="Folders and favorites">
+    <aside
+      className="library-sidebar ui-panel"
+      aria-label="Folders and favorites"
+    >
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}
@@ -103,14 +107,13 @@ export function FolderSidebar({
       >
         <div className="library-folders-header">
           <h2 id="folders-title">Folders</h2>
-          <button
-            type="button"
+          <Button
             onClick={() => {
               setAdding(true);
             }}
           >
             New folder
-          </button>
+          </Button>
         </div>
         {adding && (
           <NewFolderForm

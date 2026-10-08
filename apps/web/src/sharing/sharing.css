@@ -1,62 +1,33 @@
-/* Диалог Share и вход по ссылке: простая адаптивная вёрстка, на телефоне — во всю ширину. */
-.share-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: rgb(0 0 0 / 40%);
-}
-
-.share-dialog {
-  display: grid;
-  gap: 12px;
-  width: min(480px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  padding: 16px;
-  border-radius: 8px;
-  background: #fff;
-  font-family: system-ui, sans-serif;
-}
-
-.share-dialog h2,
-.share-dialog p {
-  margin: 0;
-}
-
+/* Диалог Share: ссылка с кнопкой копирования, подтверждение сброса внутри диалога. */
 .share-link {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-.share-link input {
+.share-link .ui-input {
   flex: 1 1 220px;
-  min-width: 0;
-  padding: 6px 8px;
-  font: inherit;
+}
+
+.share-reset {
+  justify-self: start;
 }
 
 .share-confirm {
   display: grid;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid #e0a0a0;
-  border-radius: 6px;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
 }
 
 .share-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .share-footer {
   justify-content: flex-end;
-}
-
-.share-error {
-  color: #b00020;
 }

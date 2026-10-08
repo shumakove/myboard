@@ -1,29 +1,48 @@
-/* Сцена: панель инструментов слева от холста. */
+/* Сцена: плавающая панель инструментов слева от холста. */
 .board-scene {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--space-2);
   align-items: start;
 }
 
 .tool-panel {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
+  padding: var(--space-1);
 }
 
+/* Инструмент — кнопка 44×44: её тянут на холст и пальцем (CVS-09, UI-04). */
 .tool-button {
-  flex: none;
   min-width: 44px;
   min-height: 44px;
-  padding: 4px 8px;
+  padding: 0 var(--space-2);
   touch-action: none; /* кнопку тянут на холст пальцем */
+}
+
+.board-actions {
+  display: contents;
+}
+
+/* Подпись инструмента под пальцем, пока кнопку тянут на холст. */
+.tool-ghost {
+  position: fixed;
+  z-index: var(--layer-overlay);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 /*
  * BUG-006: на узком экране панель — одной строкой над холстом (лишнее прокручивается
- * вбок), а не столбцом, и холст ниже на высоту строки панели и настроек доски: холст
- * с миникартой целиком в первом экране, как в T5.1 (MOB-02).
+ * вбок), а не столбцом; холст ниже на высоту шапки, панели вида и панели инструментов —
+ * холст с миникартой целиком в первом экране (MOB-02).
  */
 @media (max-width: 640px) {
   .board-scene {
@@ -36,7 +55,9 @@
   }
 
   .board-scene .board-canvas {
-    height: calc(60vh - 80px);
+    height: calc(100vh - 250px);
+    height: calc(100svh - 250px);
+    min-height: 280px;
   }
 }
 
@@ -60,7 +81,7 @@
   justify-content: center;
   text-align: center;
   font-size: 20px;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-md);
 }
 
 .scene-shape {
@@ -82,8 +103,8 @@
 }
 
 .scene-unknown {
-  border: 1px dashed #9aa4b2;
-  background: rgb(154 164 178 / 15%);
+  border: 1px dashed var(--color-text-subtle);
+  background: var(--color-surface-hover);
 }
 
 .scene-placeholder {
@@ -93,7 +114,7 @@
 .scene-editor {
   z-index: 2;
   resize: none;
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-accent);
   user-select: text;
 }
 
@@ -107,11 +128,11 @@
 }
 
 .selection-frame {
-  outline: calc(2px * var(--inverse-zoom, 1)) solid #2563eb;
+  outline: calc(2px * var(--inverse-zoom, 1)) solid var(--color-accent);
 }
 
 .selection-outline {
-  outline: calc(1px * var(--inverse-zoom, 1)) dashed #2563eb;
+  outline: calc(1px * var(--inverse-zoom, 1)) dashed var(--color-accent);
 }
 
 .selection-handle {
@@ -121,9 +142,9 @@
   width: var(--size);
   height: var(--size);
   box-sizing: border-box;
-  border: calc(2px * var(--inverse-zoom, 1)) solid #2563eb;
-  border-radius: 2px;
-  background: #fff;
+  border: calc(2px * var(--inverse-zoom, 1)) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   pointer-events: auto;
 }
 
@@ -158,10 +179,23 @@
   cursor: grab;
 }
 
+/* UI-04: пальцем маркер берётся в области 44×44 экранных px, видимый размер прежний. */
+@media (pointer: coarse) {
+  .selection-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(44px * var(--inverse-zoom, 1));
+    height: calc(44px * var(--inverse-zoom, 1));
+    transform: translate(-50%, -50%);
+  }
+}
+
 .selection-area {
   position: absolute;
-  border: calc(1px * var(--inverse-zoom, 1)) solid #2563eb;
-  background: rgb(37 99 235 / 8%);
+  border: calc(1px * var(--inverse-zoom, 1)) solid var(--color-accent);
+  background: var(--color-accent-wash);
   pointer-events: none;
 }
 
@@ -174,8 +208,8 @@
 }
 
 .selection-lasso polygon {
-  fill: rgb(37 99 235 / 8%);
-  stroke: #2563eb;
+  fill: var(--color-accent-wash);
+  stroke: var(--color-accent);
   stroke-width: calc(1.5px * var(--inverse-zoom, 1));
   stroke-dasharray: calc(4px * var(--inverse-zoom, 1));
 }
@@ -183,76 +217,73 @@
 /* Панель выделения и контекстное меню — поверх холста, в экранных px. */
 .selection-bar {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  right: 8px;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--layer-panel);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   width: fit-content;
-  max-width: calc(100% - 16px);
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
-  font-size: 14px;
+  max-width: calc(100% - 2 * var(--space-2));
+  padding: var(--space-1);
+  font-size: var(--font-size-md);
 }
 
-.selection-bar button,
-.selection-bar select {
-  min-height: 32px;
+.selection-bar .ui-button {
+  min-height: var(--control-size-sm);
+  padding: 0 var(--space-2);
+}
+
+.selection-bar .ui-select {
+  min-height: var(--control-size-sm);
+}
+
+.selection-count {
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 .selection-filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
-.selection-style {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/*
+ * BUG-007: на телефоне панель выделения — одна строка 44 px (лишнее прокручивается
+ * вбок), с автором и датами в той же строке: верх холста остаётся свободным для
+ * долгого нажатия (MOB-03).
+ */
+@media (max-width: 640px) {
+  .selection-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .selection-filter,
+  .selection-bar .object-info {
+    flex-wrap: nowrap;
+    flex: none;
+  }
+
+  .selection-bar .object-info {
+    width: auto;
+    white-space: nowrap;
+  }
 }
 
 .context-menu {
   position: absolute;
-  z-index: 5;
-  display: grid;
-  min-width: 180px;
-  padding: 4px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
-}
-
-.context-menu button {
-  min-height: 36px;
-  padding: 4px 12px;
-  border: 0;
-  background: none;
-  text-align: left;
-}
-
-.context-menu button:hover,
-.context-menu button:focus-visible {
-  background: #e8efff;
 }
 
 .board-settings {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.board-settings label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 /* CVS-17: группа — невидимая рамка своих объектов, нажатия проходят к объектам. */
@@ -268,8 +299,8 @@
   right: calc(4px * var(--inverse-zoom, 1));
   width: calc(14px * var(--inverse-zoom, 1));
   height: calc(14px * var(--inverse-zoom, 1));
-  fill: #4b5563;
-  stroke: #4b5563;
+  fill: var(--color-text-muted);
+  stroke: var(--color-text-muted);
   stroke-width: 1.5;
   pointer-events: none;
 }
@@ -282,7 +313,7 @@
 .handle-spacing-x,
 .handle-spacing-y {
   border-radius: calc(4px * var(--inverse-zoom, 1));
-  background: #2563eb;
+  background: var(--color-accent);
 }
 
 .handle-spacing-x {
@@ -304,7 +335,7 @@
 /* CVS-16: направляющие выравнивания — тонкие линии постоянной экранной толщины. */
 .alignment-guide {
   position: absolute;
-  background: #e11d48;
+  background: var(--color-guide);
   pointer-events: none;
 }
 
@@ -316,28 +347,24 @@
   height: calc(1px * var(--inverse-zoom, 1));
 }
 
-.board-actions {
-  display: contents;
-}
-
 /* CVS-22: автор и даты одного выделенного объекта. */
 .object-info {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
+  gap: var(--space-0) var(--space-3);
   width: 100%;
   margin: 0;
-  color: #4b5563;
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
 }
 
 .object-info div {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .object-info dt {
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
 
 .object-info dd {

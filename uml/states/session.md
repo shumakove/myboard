@@ -6,9 +6,9 @@
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Active: POST /api/admin/login → 204<br/>create_session(ADMIN): INSERT sessions, Set-Cookie myboard_admin
+  [*] --> Active: POST /api/admin/login → 204<br/>create_session(ADMIN)#58; INSERT sessions, Set-Cookie myboard_admin
   Active --> Active: запрос с cookie<br/>find_subject(token, ADMIN) находит строку
-  Active --> [*]: POST /api/admin/logout<br/>delete_session: DELETE строки, cookie стёрта
+  Active --> [*]: POST /api/admin/logout<br/>delete_session#58; DELETE строки, cookie стёрта
   Active --> Orphaned: браузер закрыт<br/>(cookie без Max-Age)
   Orphaned --> [*]
 ```
@@ -17,11 +17,11 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Active: POST /api/login → 204<br/>create_session(USER): INSERT sessions,<br/>Set-Cookie myboard_session (Max-Age 400 дней)
-  Active --> Active: GET /api/session<br/>find_subject(token, USER) + active_user → authenticated: true,<br/>cookie переустановлена с новым Max-Age (ACC-03)
+  [*] --> Active: POST /api/login → 204<br/>create_session(USER)#58; INSERT sessions,<br/>Set-Cookie myboard_session (Max-Age 400 дней)
+  Active --> Active: GET /api/session<br/>find_subject(token, USER) + active_user → authenticated#58; true,<br/>cookie переустановлена с новым Max-Age (ACC-03)
   Active --> Active: браузер закрыт и открыт снова<br/>(cookie постоянная)
-  Active --> [*]: POST /api/logout<br/>delete_session: DELETE строки, cookie стёрта
-  Active --> [*]: PATCH /api/admin/users/{id} {password} → 200 (ADM-04)<br/>или {disabled: true} → 200 (ADM-05)<br/>update_user: delete_subject_sessions(USER, id) — все сессии пользователя
+  Active --> [*]: POST /api/logout<br/>delete_session#58; DELETE строки, cookie стёрта
+  Active --> [*]: PATCH /api/admin/users/{id} {password} → 200 (ADM-04)<br/>или {disabled#58; true} → 200 (ADM-05)<br/>update_user#58; delete_subject_sessions(USER, id) — все сессии пользователя
   Active --> Orphaned: cookie истекла без визитов 400 дней
   Orphaned --> [*]
 ```
@@ -43,12 +43,12 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Active: POST /api/share/{token}/join {name} → 200 (SHR-02, SHR-03)<br/>create_session(GUEST, uuid4, board_id, display_name):<br/>INSERT sessions, Set-Cookie myboard_board_{board_id.hex} (без Max-Age)
+  [*] --> Active: POST /api/share/{token}/join {name} → 200 (SHR-02, SHR-03)<br/>create_session(GUEST, uuid4, board_id, display_name)#58;<br/>INSERT sessions, Set-Cookie myboard_board_{board_id.hex} (без Max-Age)
   Active --> Active: GET /api/share/{token}<br/>find_board_session(cookie, board_id) → participant {name}
-  Active --> Active: WS /api/ws?token={token} (T4.1)<br/>authorize → _participant: board_by_token, find_board_session,<br/>перепроверка раз в 5 с
+  Active --> Active: WS /api/ws?token={token} (T4.1)<br/>authorize → _participant#58; board_by_token, find_board_session,<br/>перепроверка раз в 5 с
   Active --> Replaced: POST /api/share/{token}/join {name} тем же браузером<br/>delete_session(cookie), затем новая сессия с новым именем
   Replaced --> [*]
-  Active --> [*]: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>delete_board_sessions(board_id): DELETE всех guest-сессий доски,<br/>Hub.close_participants: открытые каналы → close(4403)
+  Active --> [*]: POST /api/boards/{board_id}/share/reset (SHR-06)<br/>delete_board_sessions(board_id)#58; DELETE всех guest-сессий доски,<br/>Hub.close_participants#58; открытые каналы → close(4403)
   Active --> Orphaned: браузер закрыт<br/>(cookie без Max-Age)
   Orphaned --> [*]
 ```
@@ -67,14 +67,14 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-  [*] --> loading: RequireAccount смонтирован<br/>check(): GET /api/session
-  loading --> signedIn: authenticated: true, name, email
-  loading --> signedOut: authenticated: false<br/>или сбой сети без первого ответа
-  signedIn --> signedIn: check() → authenticated: true<br/>(имя и почта обновлены, ADM-04)
+  [*] --> loading: RequireAccount смонтирован<br/>check()#58; GET /api/session
+  loading --> signedIn: authenticated#58; true, name, email
+  loading --> signedOut: authenticated#58; false<br/>или сбой сети без первого ответа
+  signedIn --> signedIn: check() → authenticated#58; true<br/>(имя и почта обновлены, ADM-04)
   signedIn --> signedIn: check() — сбой сети<br/>(состояние не меняется)
-  signedIn --> signedOut: check() → authenticated: false (ACC-05)
-  signedIn --> signedOut: onUnauthorized: 401 любого запроса,<br/>кроме POST /api/login и /api/admin/* (ACC-05)
-  signedOut --> [*]: Redirect /login (replace)<br/>RequireAccount размонтирован: опрос и подписки сняты
+  signedIn --> signedOut: check() → authenticated#58; false (ACC-05)
+  signedIn --> signedOut: onUnauthorized#58; 401 любого запроса,<br/>кроме POST /api/login и /api/admin/* (ACC-05)
+  signedOut --> [*]: Redirect /login (replace)<br/>RequireAccount размонтирован#58; опрос и подписки сняты
 ```
 
 `check()` вызывается:

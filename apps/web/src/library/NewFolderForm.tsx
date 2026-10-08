@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from "react";
 import { createFolder, errorMessage, type Folder } from "./libraryApi";
+import { Button, Input } from "../ui";
 
 /** BRD-09: форма новой папки — на верхнем уровне или внутри `parentId`. */
 export function NewFolderForm({
@@ -29,7 +30,7 @@ export function NewFolderForm({
 
   return (
     <form className="library-folder-form" onSubmit={(e) => void submit(e)}>
-      <input
+      <Input
         aria-label="Folder name"
         placeholder="Folder name"
         value={title}
@@ -40,14 +41,12 @@ export function NewFolderForm({
           setTitle(event.target.value);
         }}
       />
-      <button type="submit" disabled={pending}>
+      <Button type="submit" variant="primary" disabled={pending}>
         Create
-      </button>
-      <button type="button" onClick={onCancel}>
-        Cancel
-      </button>
+      </Button>
+      <Button onClick={onCancel}>Cancel</Button>
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}

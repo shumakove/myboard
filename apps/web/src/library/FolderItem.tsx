@@ -6,6 +6,7 @@ import { FavoriteButton } from "./FavoriteButton";
 import type { FolderNode } from "./folderTree";
 import type { Folder } from "./libraryApi";
 import { NewFolderForm } from "./NewFolderForm";
+import { IconButton } from "../ui";
 
 export interface FolderTreeActions {
   expanded: Set<string>;
@@ -73,16 +74,15 @@ export function FolderItem({
           onChange={actions.onChange}
           onError={actions.onError}
         />
-        <button
-          type="button"
-          aria-label={`New folder in ${folder.title}`}
+        <IconButton
+          label={`New folder in ${folder.title}`}
           title="New folder inside"
           onClick={() => {
             setAdding(true);
           }}
         >
           +
-        </button>
+        </IconButton>
       </div>
       {adding && (
         <NewFolderForm

@@ -33,6 +33,7 @@ import { SelectionBar } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
 import { ToolPanel } from "./ToolPanel";
+import { Button } from "../ui";
 import { placement, type ToolId } from "./tools";
 import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
@@ -263,8 +264,8 @@ export function BoardScene({
     <div className="board-scene">
       <ToolPanel tool={tool} onTool={setTool} onDrop={drop}>
         <span role="group" aria-label="Board actions" className="board-actions">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             className="tool-button"
             title="Paste the last copied objects in the center of the view."
             onClick={() => {
@@ -274,9 +275,9 @@ export function BoardScene({
             }}
           >
             Paste
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
             className="tool-button"
             disabled={commands.unlockAll === null}
             onClick={() => {
@@ -284,7 +285,7 @@ export function BoardScene({
             }}
           >
             Unlock all
-          </button>
+          </Button>
         </span>
       </ToolPanel>
       <div
@@ -297,7 +298,11 @@ export function BoardScene({
           camera={camera}
           wheelMode={wheelMode}
           background={settings.background}
-          dotColor={isDark(settings.background) ? "#5f6b73" : "#c8c8c8"}
+          dotColor={
+            isDark(settings.background)
+              ? "var(--color-grid-dot-on-dark)"
+              : "var(--color-grid-dot)"
+          }
           gridStep={settings.gridStep}
           gestures={gestures}
           canvasRef={canvasRef}

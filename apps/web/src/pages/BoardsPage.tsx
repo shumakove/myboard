@@ -12,8 +12,8 @@ import { NewBoardButton } from "../library/NewBoardButton";
 import { RecentBoards } from "../library/RecentBoards";
 import { useExpandedFolders } from "../library/useExpandedFolders";
 import { useLibraryTree } from "../library/useLibraryTree";
-import "../account/account.css";
 import "../library/library.css";
+import { Button, FloatingPanel } from "../ui";
 
 /**
  * `/` — доски вошедшего пользователя (ACC-04): создание (BRD-01), недавние и полный
@@ -75,18 +75,16 @@ export function BoardsPage() {
   }
 
   return (
-    <main className="account library-page">
-      <header className="account-header">
+    <main className="page library-page">
+      <FloatingPanel className="page-header">
         <h1>Boards</h1>
         {session.status === "signedIn" && (
-          <div className="account-user">
+          <div className="page-user">
             <span>{session.name}</span>
-            <button type="button" onClick={() => void leave()}>
-              Sign out
-            </button>
+            <Button onClick={() => void leave()}>Sign out</Button>
           </div>
         )}
-      </header>
+      </FloatingPanel>
       {session.status === "loading" && <p>Loading…</p>}
       {session.status === "signedIn" && (
         <LibraryDnd folders={folders} onMoved={moved} onError={setSidebarError}>
@@ -97,7 +95,7 @@ export function BoardsPage() {
               actions={actions}
               onReveal={reveal}
             />
-            <div className="library-content">
+            <div className="library-content ui-panel">
               <NewBoardButton />
               <RecentBoards version={version} />
               <BoardList

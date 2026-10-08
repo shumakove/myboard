@@ -1,48 +1,65 @@
-/* Вход пользователя досок и шапка списка: простая адаптивная вёрстка. */
-.account {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 16px;
-  font-family: system-ui, sans-serif;
+/* Страница доски: шапка с названием и действиями, состояние связи. */
+.board-page {
+  padding: var(--space-3);
 }
 
-.account-header {
+/* Одна строка при любом названии: холст на телефоне остаётся в первом экране (BUG-006). */
+.board-header {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
 }
 
-.account-user {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  overflow-wrap: anywhere;
-}
-
-.account-form {
-  display: grid;
-  gap: 12px;
-  max-width: 360px;
-}
-
-.account-form label {
-  display: grid;
-  gap: 4px;
-}
-
-.account-form input {
-  padding: 6px 8px;
-  font: inherit;
-}
-
-.account-form button {
-  justify-self: start;
-}
-
-.account-error {
+.board-header h1 {
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
-  color: #b00020;
+  overflow: hidden;
+  font-size: var(--font-size-lg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-header-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Состояние связи: строка мелким текстом с точкой-индикатором. */
+.board-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.board-status::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-subtle);
+}
+
+.board-status[data-status="online"]::before {
+  background: var(--color-accent);
+}
+
+.board-status[data-status="offline"]::before,
+.board-status[data-status="closed"]::before {
+  background: var(--color-danger);
 }

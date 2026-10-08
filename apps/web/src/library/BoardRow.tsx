@@ -9,6 +9,7 @@ import {
   renameBoard,
   type Board,
 } from "./libraryApi";
+import { Button, Input } from "../ui";
 
 type Mode = "view" | "rename" | "confirmDelete";
 
@@ -57,7 +58,7 @@ export function BoardRow({
     <li className="library-row" aria-label={board.title}>
       {mode === "rename" ? (
         <form className="library-rename" onSubmit={rename}>
-          <input
+          <Input
             aria-label="Board name"
             value={title}
             maxLength={200}
@@ -67,12 +68,10 @@ export function BoardRow({
               setTitle(event.target.value);
             }}
           />
-          <button type="submit" disabled={pending}>
+          <Button type="submit" variant="primary" disabled={pending}>
             Save
-          </button>
-          <button type="button" onClick={cancel}>
-            Cancel
-          </button>
+          </Button>
+          <Button onClick={cancel}>Cancel</Button>
         </form>
       ) : (
         <div className="library-row-head">
@@ -98,41 +97,39 @@ export function BoardRow({
             onChange={onChange}
             onError={setError}
           />
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={() => {
               setMode("rename");
             }}
           >
             Rename
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => {
               setMode("confirmDelete");
             }}
           >
             Delete
-          </button>
+          </Button>
         </div>
       )}
       {mode === "confirmDelete" && (
         <div className="library-actions" role="group" aria-label="Delete board">
           <span>Delete this board?</span>
-          <button
-            type="button"
+          <Button
+            variant="danger"
             disabled={pending}
             onClick={() => void run(() => deleteBoard(board.id))}
           >
             Yes, delete
-          </button>
-          <button type="button" onClick={cancel}>
-            Cancel
-          </button>
+          </Button>
+          <Button onClick={cancel}>Cancel</Button>
         </div>
       )}
       {error && (
-        <p className="account-error" role="alert">
+        <p className="ui-error" role="alert">
           {error}
         </p>
       )}

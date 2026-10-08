@@ -35,7 +35,7 @@ export function FolderSearchResults({
 
   if (error) {
     return (
-      <p className="account-error" role="alert">
+      <p className="ui-error" role="alert">
         {error}
       </p>
     );

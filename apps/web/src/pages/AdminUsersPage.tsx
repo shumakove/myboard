@@ -3,6 +3,7 @@ import { signOut } from "../admin/adminApi";
 import { UserAccounts } from "../admin/UserAccounts";
 import { useAdminSession } from "../admin/useAdminSession";
 import "../admin/admin.css";
+import { Button, FloatingPanel } from "../ui";
 
 /** `/admin/users` — учётные записи пользователей досок (ADM-02…ADM-07). */
 export function AdminUsersPage() {
@@ -18,18 +19,16 @@ export function AdminUsersPage() {
   }
 
   return (
-    <main className="admin">
-      <header className="admin-header">
+    <main className="page admin-page">
+      <FloatingPanel className="page-header">
         <h1>Users</h1>
         {session.status === "signedIn" && (
-          <div className="admin-account">
+          <div className="page-user">
             <span>{session.email}</span>
-            <button type="button" onClick={() => void leave()}>
-              Sign out
-            </button>
+            <Button onClick={() => void leave()}>Sign out</Button>
           </div>
         )}
-      </header>
+      </FloatingPanel>
       {session.status === "loading" && <p>Loading…</p>}
       {session.status === "signedOut" && (
         <p>

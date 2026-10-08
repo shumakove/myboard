@@ -33,7 +33,6 @@ export function RemoteCursors({
               <path
                 d="M1 1 L1 17 L5.5 12.5 L8.5 19 L11 18 L8 11.5 L14 11.5 Z"
                 fill="currentColor"
-                stroke="#fff"
                 strokeWidth="1.2"
               />
             </svg>

@@ -13,6 +13,7 @@ import type { CameraView } from "../realtime/messages";
 import { usePresence } from "../realtime/usePresence";
 import { BoardScene } from "../scene/BoardScene";
 import { BoardSettingsControls } from "../scene/BoardSettingsControls";
+import { Button, FloatingPanel } from "../ui";
 import { peerColor } from "./peerColor";
 import { PresencePanel } from "./PresencePanel";
 import { RemoteCursors } from "./RemoteCursors";
@@ -89,7 +90,7 @@ export function BoardWorkspace({
   return (
     <div className="board-workspace">
       <div className="board-main">
-        <div className="board-bar">
+        <FloatingPanel className="board-bar">
           <CameraControls
             zoom={camera.zoom}
             onZoomIn={() => {
@@ -105,7 +106,7 @@ export function BoardWorkspace({
             }}
           />
           <BoardSettingsControls settings={board.settings} />
-        </div>
+        </FloatingPanel>
         <BoardScene
           board={board}
           camera={camera}
@@ -136,14 +137,13 @@ export function BoardWorkspace({
               {followed && (
                 <p className="follow-banner">
                   Following {followed.name}
-                  <button
-                    type="button"
+                  <Button
                     onClick={() => {
                       setFollowing(null);
                     }}
                   >
                     Stop following
-                  </button>
+                  </Button>
                 </p>
               )}
             </>

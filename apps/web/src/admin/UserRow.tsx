@@ -1,4 +1,5 @@
 import { useState, type SubmitEvent } from "react";
+import { Button, TextField } from "../ui";
 import {
   errorMessage,
   updateUser,
@@ -54,31 +55,32 @@ export function UserRow({
         <>
           <td>{user.name}</td>
           <td className="admin-email">{user.email}</td>
-          <td>{status}</td>
+          <td className="admin-status" data-disabled={user.disabled}>
+            {status}
+          </td>
         </>
       )}
       <td>
         <div className="admin-actions">
           {!editing && (
-            <button
-              type="button"
+            <Button
               onClick={() => {
                 setEditing(true);
               }}
             >
               Edit
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
+          <Button
+            variant={user.disabled ? "secondary" : "danger"}
             disabled={pending}
             onClick={() => void save({ disabled: !user.disabled })}
           >
             {user.disabled ? "Enable" : "Disable"}
-          </button>
+          </Button>
         </div>
         {error && (
-          <p className="admin-error" role="alert">
+          <p className="ui-error" role="alert">
             {error}
           </p>
         )}
@@ -111,50 +113,42 @@ function EditUserForm({
   }
 
   return (
-    <form className="admin-form admin-form-inline" onSubmit={submit}>
-      <label>
-        Name
-        <input
-          name="name"
-          required
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-          }}
-        />
-      </label>
-      <label>
-        Email
-        <input
-          type="email"
-          name="email"
-          required
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-          }}
-        />
-      </label>
-      <label>
-        New password
-        <input
-          type="password"
-          name="password"
-          autoComplete="new-password"
-          placeholder="Leave empty to keep"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-          }}
-        />
-      </label>
+    <form className="ui-form admin-form admin-form-inline" onSubmit={submit}>
+      <TextField
+        label="Name"
+        name="name"
+        required
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value);
+        }}
+      />
+      <TextField
+        label="Email"
+        type="email"
+        name="email"
+        required
+        value={email}
+        onChange={(e) => {
+          setEmail(e.target.value);
+        }}
+      />
+      <TextField
+        label="New password"
+        type="password"
+        name="password"
+        autoComplete="new-password"
+        placeholder="Leave empty to keep"
+        value={password}
+        onChange={(e) => {
+          setPassword(e.target.value);
+        }}
+      />
       <div className="admin-actions">
-        <button type="submit" disabled={pending}>
+        <Button type="submit" variant="primary" disabled={pending}>
           Save
-        </button>
-        <button type="button" onClick={onCancel}>
-          Cancel
-        </button>
+        </Button>
+        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   );
