@@ -1255,8 +1255,13 @@ test('MOB-03 a long press selects the object; a long press on empty space starts
     expect.soft((await docState(page, boardId)).objects['qa-a'], 'долгое нажатие без движения не двигает объект (BUG-004)').toMatchObject({ x: A.x, y: A.y });
     // долгое нажатие на пустом месте + протяжка — выделение области, вид на месте
     const cam1 = await cameraBy(page, 'qa-ref', REF);
-    const from = await onCanvas(page, 0.15, 0.15);
+    const from0 = await onCanvas(page, 0.15, 0.15);
     const to = await onCanvas(page, 0.85, 0.55);
+    // Начало жеста — на пустом холсте: с T5.3 панель Selection на телефоне выше и закрывает
+    // верх холста (BUG-007), поэтому точка опускается под панель (над объектами).
+    const bar = await selectionBar(page).boundingBox();
+    const from = bar && from0.y <= bar.y + bar.height ? { x: from0.x, y: bar.y + bar.height + 6 } : from0;
+    expect(from.y, 'точка начала выше объектов').toBeLessThan((await boxOf(obj(page, 'qa-a'))).y);
     await f.down(from);
     await f.hold(900);
     await f.moveTo(from, to, 12);
