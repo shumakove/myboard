@@ -56,6 +56,11 @@ interface Session {
   timer: ReturnType<typeof setTimeout> | null;
   last: Point;
   modifiers: { shiftKey: boolean; altKey: boolean };
+  /**
+   * Вид, сдвинутый автопрокруткой этого жеста. Хранится здесь, а не берётся из props:
+   * отрисовка может отставать на тик, и точка доски считалась бы по старому виду.
+   */
+  view: CameraView | null;
 }
 
 /**
@@ -162,10 +167,11 @@ export function BoardCanvas({
     element: HTMLElement,
     event: ReactPointerEvent | ReactMouseEvent,
     pointerType: string,
+    view: CameraView = latest.current.camera,
   ): CanvasPress {
     const { point, size } = locate(element, event);
     return {
-      board: screenToBoard(point, latest.current.camera, size),
+      board: screenToBoard(point, view, size),
       screen: point,
       target: event.target,
       pointerType,
@@ -194,8 +200,8 @@ export function BoardCanvas({
       const size = { width: element.clientWidth, height: element.clientHeight };
       const v = edgeVelocity(current.last, size);
       if (!current.moved || (v.x === 0 && v.y === 0)) return;
-      const view = panBy(latest.current.camera, -v.x, -v.y);
-      latest.current.camera = view;
+      const view = panBy(current.view ?? latest.current.camera, -v.x, -v.y);
+      current.view = view;
       latest.current.onMove(() => view);
       gesture.move({
         board: screenToBoard(current.last, view, size),
@@ -234,6 +240,7 @@ export function BoardCanvas({
       timer: null,
       last: press.screen,
       modifiers: { shiftKey: event.shiftKey, altKey: event.altKey },
+      view: null,
     };
     session.current = current;
     if (gesture?.autoscroll) autoscroll(element, gesture);
@@ -252,10 +259,14 @@ export function BoardCanvas({
   function pointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const { point, size } = locate(event.currentTarget, event);
     const fingers = pressed.current;
-    const board = screenToBoard(point, camera, size);
+    const current = session.current;
+    const view =
+      current?.pointerId === event.pointerId
+        ? (current.view ?? camera)
+        : camera;
+    const board = screenToBoard(point, view, size);
     if (fingers.size <= 1) onPointer(board);
 
-    const current = session.current;
     if (current?.pointerId === event.pointerId) {
       const tolerance =
         event.pointerType === "mouse"
@@ -298,7 +309,12 @@ export function BoardCanvas({
       current.gesture?.cancel();
       return;
     }
-    const press = pressOf(event.currentTarget, event, event.pointerType);
+    const press = pressOf(
+      event.currentTarget,
+      event,
+      event.pointerType,
+      current.view ?? latest.current.camera,
+    );
     const { gesture } = current;
     if (gesture) {
       // BUG-004: отпускание на месте документ не меняет — объект не прилипает к сетке.

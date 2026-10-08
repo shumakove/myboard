@@ -1,6 +1,5 @@
 /* Сцена: панель инструментов слева от холста. */
 .board-scene {
-  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
@@ -22,8 +21,9 @@
 }
 
 /*
- * BUG-006: на узком экране панель — строкой поверх низа холста, а не столбцом над ним:
- * холст остаётся в первом экране, как в T5.1 (MOB-02). Миникарта поднимается над панелью.
+ * BUG-006: на узком экране панель — одной строкой над холстом (лишнее прокручивается
+ * вбок), а не столбцом, и холст ниже на высоту строки панели и настроек доски: холст
+ * с миникартой целиком в первом экране, как в T5.1 (MOB-02).
  */
 @media (max-width: 640px) {
   .board-scene {
@@ -31,41 +31,13 @@
   }
 
   .tool-panel {
-    position: absolute;
-    z-index: 4;
-    bottom: 8px;
-    left: 8px;
     flex-direction: row;
-    max-width: calc(100% - 16px);
-    box-sizing: border-box;
     overflow-x: auto;
-    padding: 4px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background: rgb(255 255 255 / 92%);
-    box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
   }
 
-  .board-scene .minimap {
-    bottom: 68px;
+  .board-scene .board-canvas {
+    height: calc(60vh - 80px);
   }
-}
-
-.tool-button[aria-pressed="true"] {
-  background: #2563eb;
-  color: #fff;
-}
-
-.tool-ghost {
-  position: fixed;
-  z-index: 10;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: rgb(37 99 235 / 85%);
-  color: #fff;
-  font-size: 13px;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
 }
 
 /* Объекты сцены — в слое доски, координаты и размеры в единицах доски. */

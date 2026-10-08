@@ -199,7 +199,7 @@ describe("CVS-09: создание объектов", () => {
     expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("BUG-006: отпускание над панелью, лежащей поверх холста, объект не ставит", () => {
+  it("отпускание над панелью поверх холста (миникартой) объект не ставит", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function (this: HTMLElement) {
         return this.dataset.testid === "board-canvas"
@@ -209,9 +209,11 @@ describe("CVS-09: создание объектов", () => {
     );
     const { board } = renderScene();
     const button = screen.getByRole("button", { name: "Shape" });
-    // На телефоне панель инструментов — полоса внизу холста (y > 440).
+    // Панель поверх низа холста (y > 440), как миникарта.
+    const overlay = document.createElement("div");
+    document.body.append(overlay);
     const elementFromPoint = vi.fn((_x: number, y: number) =>
-      y > 440 ? button : canvas(),
+      y > 440 ? overlay : canvas(),
     );
     Object.defineProperty(document, "elementFromPoint", {
       configurable: true,
@@ -237,6 +239,7 @@ describe("CVS-09: создание объектов", () => {
       ]);
     } finally {
       Reflect.deleteProperty(document, "elementFromPoint");
+      overlay.remove();
     }
   });
 
