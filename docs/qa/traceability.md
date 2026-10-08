@@ -59,7 +59,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-17 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-17, desktop) | PASS |
 | CVS-18 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-18, desktop) | PASS |
 | CVS-19 | T5.3, T6.5 | acceptance/e2e/operations.spec.ts (CVS-19, desktop) | PASS (блокировка, Unlock all); ластик — проверить в T6.5 |
-| CVS-20 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-20, desktop) | PASS (BUG-008 minor открыт) |
+| CVS-20 | T5.3, T5.6 | acceptance/e2e/operations.spec.ts (CVS-20, «CVS-20 BUG-008 …», desktop) | PASS (BUG-008 исправлен в c5e2d74, проверено в T5.6) |
 | CVS-21 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-21, desktop + mobile) | PASS |
 | CVS-22 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-22, desktop) | PASS |
 | CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
@@ -68,7 +68,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
 | MOB-02 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile) | PASS (BUG-006 исправлен в 403f6f8, проверено) |
-| MOB-03 | T5.2 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено; BUG-007 minor открыт — панель Selection на телефоне закрывает верх холста) |
+| MOB-03 | T5.2, T5.6 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено; BUG-007 исправлен в c5e2d74, проверено в T5.6 — жест у верха холста) |
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
 | MOB-06 | T11.1 | — | не проверено |
@@ -171,6 +171,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BAK-04 | T10.2 | — | не проверено |
 | BAK-05 | T10.2 | — | не проверено |
 | BAK-06 | T10.1, T11.2 (итог) | — | не проверено |
+| UI-01 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile) | PASS |
+| UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
+| UI-03 | T5.6 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile) | PASS (BUG-009 minor открыт — высота тихих кнопок 36/32 px) |
+| UI-04 | T5.6 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile) | PASS |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
 
@@ -201,3 +205,4 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ARCH-T42-01 (кадры `awareness`/`presence` на `/api/ws`; повреждённый `awareness` и клиентский `presence` закрывают только отправителя `1007`) | T4.2 | acceptance/api/test_presence.py::test_arch_t42_01_* | PASS |
 | ARCH-T42-02 (присутствие не в документе: нет `sync UPDATE`, поздний клиент — пустой документ, `updated_at` не меняется; нет в снимках и журнале; ZIP — T10.1) | T4.2, T4.3 | acceptance/api/test_presence.py::test_arch_t42_02_*, acceptance/api/test_history.py::test_arch_t42_02_* | PASS (ZIP — T10.1) |
 | ARCH-T43-ENV (`SNAPSHOT_INTERVAL_SECONDS` необязательна) | T4.3 | acceptance/api/test_history.py::test_arch_t43_env_* | PASS |
+| UML-MERMAID (схемы `uml/` разбираются Mermaid) | T5.6 | acceptance/e2e/uml.spec.ts | PASS (на main до T5.6 — 6 ошибок в `uml/states/`) |
