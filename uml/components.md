@@ -1,6 +1,6 @@
 # Компоненты
 
-Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`. T5.1 сделал полную камеру холста в клиенте `canvas`: масштаб кнопками, клавишами, колесом и щипком, сдвиг мышью, пальцем и стрелками, выбор поведения колеса, миникарта по объектам документа и запоминание вида в `localStorage`; на сервере в `SharedBoard` добавлено поле `id` (ключ запомненного вида участника).
+Фактическое устройство кода приложения. Реализованы каркас сервера `apps/api` (T0.2), каркас интерфейса `apps/web` (T0.3), панель администратора (T1.1) и вход пользователя досок (T1.2): модуль `identity` на сервере, страницы `/admin/login`, `/admin/users`, `/login` и проверка входа в клиенте. T1.4 добавил в клиент обёртку `RequireAccount`: страницы пользователя досок следят за отзывом сессии (ACC-05); сервер в T1.4 не менялся. T2.1 добавил список досок: модуль `library` на сервере (маршруты `/api/boards*`) и одноимённый модуль клиента на страницах `/` и `/boards/:id`. T2.2 добавил папки и избранное: маршруты `/api/folders*`, `/api/boards/{board_id}/folder`, `/api/boards/{board_id}/favorite` и боковой список с перетаскиванием на странице `/`. T3.1 добавил ссылку на доску: модуль `sharing` на сервере (маршруты `/api/boards/{board_id}/share*`, `/api/share/{token}*`, гостевые сессии в `identity.sessions`) и модуль `sharing` клиента — диалог Share на `/boards/:id` и страница входа участника `/b/:token`. T4.1 добавил синхронизацию документа доски: модуль `realtime` на сервере (WebSocket `/api/ws`, `Hub`, `BoardRoom` на `pycrdt`, журнал `board_updates`) и модуль `realtime` клиента (`BoardConnection` на `yjs`, `BoardLive` со строкой состояния связи на `/boards/:id` и `/b/:token`). T4.2 добавил присутствие по тому же каналу: сообщения `awareness`/`presence` в `realtime` сервера (`BoardRoom.announce`, `update_awareness`, `announce_leave`), на клиенте — `BoardPresence`, минимальный холст `canvas` с камерой и модуль `collab` (список присутствующих, чужие курсоры, слежение). T4.3 добавил снимки и ленту: модуль `history` на сервере (таблицы `board_snapshots`, `board_events`; маршрутов пока нет), сжатие журнала в `Hub` (фоновая задача процесса, выгрузка доски, остановка) и клиентскую функцию корзины `moveToTrash`. T5.1 сделал полную камеру холста в клиенте `canvas`: масштаб кнопками, клавишами, колесом и щипком, сдвиг мышью, пальцем и стрелками, выбор поведения колеса, миникарта по объектам документа и запоминание вида в `localStorage`; на сервере в `SharedBoard` добавлено поле `id` (ключ запомненного вида участника). T5.2 добавил в клиент модуль `scene`: объекты документа на холсте (стикер, фигура, текст), панель инструментов, выделение щелчком, рамкой и лассо, панель выделения с фильтром по типу и массовыми свойствами, перемещение с прилипанием и автопрокруткой, размер и поворот, удаление в корзину, контекстные меню, долгое нажатие пальцем и общий для доски фон и шаг сетки (корень документа `settings`); сервер не менялся.
 
 ## Сервер `apps/api`
 
@@ -216,32 +216,52 @@ flowchart TB
   end
   subgraph realtimeMod [realtime]
     sock["socketUrl.ts<br/>socketUrl(page = window.location):<br/>https: → wss:, иначе ws:; host страницы + /api/ws"]
-    live["BoardLive({boardId, target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace key = boardId"]
+    live["BoardLive({boardId, target, checkAccess, onClosed})<br/>p role=status: Connecting to the board… /<br/>Live: changes are shared… / Offline. Your changes… /<br/>This board is no longer available. (COL-01);<br/>не closed → BoardWorkspace key = boardId, board"]
     useConn["useBoardConnection(target, checkAccess)<br/>{board, presence, status}; boardSocketUrl(target):<br/>?board={id} | ?token={token}"]
     conn["BoardConnection({doc, url, presence, onStatus, checkAccess})<br/>connecting | online | offline | closed;<br/>retryDelays 500…8000 мс, destroy();<br/>onopen → presence.attach, onclose → detach"]
     bpres["BoardPresence<br/>setLocal, attach, detach, receive,<br/>subscribe / getSnapshot → {peers: PeerPresence[]};<br/>AWARENESS_INTERVAL_MS = 50"]
     usePres["usePresence(presence)<br/>useSyncExternalStore"]
-    bdoc["boardDocument.ts<br/>BoardDocument, createBoardDocument():<br/>objects, trash, comments, timer, votes, notes;<br/>TrashEntry, moveToTrash(board, ids, deletedBy)"]
+    bdoc["boardDocument.ts<br/>BoardDocument, createBoardDocument():<br/>objects, trash, comments, timer, votes, notes, settings;<br/>TrashEntry, moveToTrash(board, ids, deletedBy)"]
     msgs["messages.ts<br/>MessageType Sync/Awareness/Presence, SyncKind,<br/>CloseCode, Point, CameraView, AwarenessState,<br/>PresencePeer, ServerMessage,<br/>encodeSync, encodeAwareness, decodeMessage (lib0)"]
   end
   subgraph collabMod [collab]
-    workspace["BoardWorkspace({boardId, objects, presence})<br/>camera (usePersistentCamera), viewport, wheelMode,<br/>rects (useSceneRects), following, cursorsShown;<br/>move(): following = null + своя камера;<br/>Following … / Stop following, рамка цвета участника<br/>(CVS-01…CVS-05, MOB-02, COL-02…COL-04)"]
+    workspace["BoardWorkspace({boardId, board, presence})<br/>camera (usePersistentCamera), viewport, wheelMode,<br/>rects (useSceneRects(board.objects)), following, cursorsShown,<br/>selfName (имя своего peer); board-bar: CameraControls +<br/>BoardSettingsControls; BoardScene с worldOverlay (курсоры)<br/>и stageOverlay (Minimap, Following … / Stop following);<br/>move(): following = null + своя камера; рамка цвета участника<br/>(CVS-01…CVS-05, MOB-02, COL-02…COL-04)"]
     ppanel["PresencePanel<br/>aside People on this board: On this board (N),<br/>… (you), · following …, Follow …,<br/>Hide cursors / Show cursors (COL-03, COL-04, COL-09)"]
     rcursors["RemoteCursors({peers, zoom})<br/>стрелка и имя, aria-label …'s cursor;<br/>свой не рисуется (COL-02)"]
     pcolor["peerColor(peer)<br/>hsl по id соединения"]
   end
   subgraph canvasMod [canvas]
-    bcanvas["BoardCanvas({camera, wheelMode, onMove, onPointer, onResize})<br/>data-testid board-canvas, board-world: scale(zoom) translate(-x, -y),<br/>точечный фон DOT_STEP = 32; pressed: зажатые указатели;<br/>левая/средняя кнопка или один палец → panBy,<br/>два пальца → pinch (MOB-02), колесо (passive: false) → wheelAction;<br/>pointermove → onPointer(screenToBoard), во время щипка — нет;<br/>ResizeObserver → onResize"]
+    bcanvas["BoardCanvas({camera, wheelMode, background, dotColor, gridStep,<br/>gestures: CanvasGestures, canvasRef, onMove, onPointer, onResize})<br/>data-testid board-canvas, data-grid-step, board-world: scale(zoom) translate(-x, -y);<br/>фон и точки сетки с шагом gridStep (0 — нет; шаг на экране удваивается до ≥ 8 px, CVS-06);<br/>Session: press, gesture, moved, view; gestures.start(press, longPress) → Gesture | null;<br/>move/end — после сдвига дальше TAP_TOLERANCE (мышь 4, палец 10 px),<br/>иначе click | cancel, без жеста — tap (BUG-004); LONG_PRESS_MS = 500 (MOB-03);<br/>contextmenu, dblclick; autoscroll каждые 16 мс по edgeVelocity (CVS-13);<br/>без жеста: левая/средняя кнопка или один палец → panBy,<br/>два пальца → pinch (MOB-02), колесо (passive: false) → wheelAction;<br/>pointermove → onPointer(screenToBoard), во время щипка — нет;<br/>ResizeObserver → onResize"]
     camera["camera.ts<br/>HOME, MIN_ZOOM = 0.1, MAX_ZOOM = 8, ZOOM_STEP = 1.25,<br/>Size, Rect, clampZoom, zoomBy, centerOn, viewRect,<br/>screenToBoard, boardToScreen, panBy, zoomAt, pinch"]
     controls["CameraControls({zoom, onZoomIn, onZoomOut, wheelMode, onWheelMode})<br/>toolbar View: Zoom out, Zoom level (N%), Zoom in;<br/>Mouse wheel: Zooms / Scrolls (Ctrl/⌘ + wheel zooms)<br/>(CVS-02, CVS-03)"]
-    minimap["Minimap({camera, viewport, rects, onNavigate})<br/>svg role=img Minimap 160×110: rect.minimap-object,<br/>minimap-view (рамка вида); щелчок / перетаскивание →<br/>onNavigate(toBoard), fit заморожен, пока зажато (CVS-04)"]
-    mfit["minimapFit.ts<br/>minimapWorld (объекты + вид + начало координат,<br/>поле MARGIN = 0.1), MinimapFit, fitWorld,<br/>toMinimap, toBoard"]
+    minimap["Minimap({camera, viewport, rects, onNavigate})<br/>svg role=img Minimap 160×110: rect.minimap-object,<br/>minimap-view (рамка вида поверх объектов, BUG-003); щелчок / перетаскивание →<br/>onNavigate(toBoard), fit заморожен, пока зажато (CVS-04)"]
+    mfit["minimapFit.ts<br/>minimapWorld (объекты + вид + начало координат,<br/>поле MARGIN = 0.1), MinimapFit, fitWorld,<br/>toMinimap, toBoard; visibleFrame:<br/>рамка вида не меньше MIN_VIEW_FRAME 12×9 px (BUG-003)"]
     scene["sceneBounds.ts<br/>sceneRects(objects): верхний уровень (без parent)<br/>с числовыми x, y, width, height; JSON или Y.Map;<br/>useSceneRects: observeDeep"]
     wheel["wheel.ts<br/>WheelMode zoom | scroll, DEFAULT_WHEEL_MODE = zoom,<br/>wheelAction → zoom(factor) | pan(dx, dy);<br/>loadWheelMode, saveWheelMode:<br/>localStorage myboard.wheelMode (CVS-03)"]
     keys["keyboard.ts<br/>cameraKeyAction: + = → zoomBy, - _ − → zoomBy,<br/>стрелки → panBy ARROW_STEP = 100;<br/>Ctrl/⌘/Alt → null; isTypingTarget"]
     ukeys["useCameraKeys(onMove)<br/>keydown на window, кроме полей ввода (CVS-02)"]
     upcam["usePersistentCamera(boardId)<br/>loadCamera ?? HOME, saveCamera при каждом изменении"]
     cstore["cameraStorage.ts<br/>loadCamera, saveCamera:<br/>localStorage myboard.camera.{boardId} → {x, y, zoom} (CVS-05)"]
+  end
+  subgraph sceneMod [scene]
+    bscene["BoardScene({board, camera, wheelMode, userName, stageStyle,<br/>stageAttributes, onMove, onPointer, onResize, worldOverlay, stageOverlay})<br/>состояние вкладки: tool, selection, draft, menu, editing;<br/>create, remove → moveToTrash(board, ids, userName) (CVS-21);<br/>window keydown: Delete/Backspace — удалить, Escape — снять выделение;<br/>window paste: текст → объект text под указателем или в центре вида (CVS-09);<br/>drop(type, client): кнопку отпустили над холстом, не над панелью;<br/>menuItems: Object menu — Edit text, Delete / Delete N objects;<br/>Board menu — Add … here, Select all (CVS-23)"]
+    tpanel["ToolPanel({tool, onTool, onDrop})<br/>toolbar Tools: Select, Lasso, Sticky note, Shape, Text<br/>(aria-pressed); перетаскивание кнопки дальше<br/>DRAG_THRESHOLD = 6 px → onDrop (CVS-09, CVS-10)"]
+    tools["tools.ts<br/>Tool: select | lasso | create, TOOLS, ToolId,<br/>toolById, placement (центр в точке, угол на сетку)"]
+    otypes["objectTypes.ts<br/>ObjectType sticky | shape | text, ObjectTypeSpec,<br/>OBJECT_TYPES (размер, rotatable, стиль), typeSpec,<br/>StyleKey fill | stroke | color | fontSize,<br/>STYLE_KEYS (Fill, Border, Text color, Font size), styleKeysOf"]
+    sobj["sceneObjects.ts<br/>SceneObject, ObjectPatch, newObjectId, readScene,<br/>createObject, objectMap, objectText, patchObjects"]
+    usobj["useSceneObjects(objects)<br/>readScene на любую правку (observeDeep)"]
+    ugest["useSceneGestures(controls: SceneControls)<br/>→ CanvasGestures: start (create, lasso, маркеры,<br/>объект, Shift / долгое нажатие → рамка), tap,<br/>contextMenu, doubleClick → editText"]
+    gest["gestures.ts<br/>Gesture {move, end, cancel, click?, autoscroll?},<br/>ScenePointer, AreaDraft marquee | lasso;<br/>moveGesture (сетка, Shift — ось, Alt — без прилипания, CVS-12),<br/>resizeGesture, rotateGesture (Shift — 15°, CVS-14), areaGesture (CVS-10)"]
+    geom["geometry.ts<br/>Frame, Corner, MIN_SIZE = 10, ROTATION_STEP = 15,<br/>boundsOf, rectContains, polygonContains, frameInside,<br/>snap, lockAxis, resizeFrame, groupScale, scaleFrame,<br/>rotateFrame, EDGE_ZONE = 40, EDGE_SPEED = 18,<br/>edgeVelocity (CVS-13), placeMenu (BUG-005)"]
+    layer["SceneLayer({objects, selected, editing})<br/>data-object-id, data-type, aria-label, aria-selected;<br/>AreaOverlay: selection-marquee, selection-lasso"]
+    ostyle["objectStyle.ts<br/>frameStyle (left, top, rotate), objectStyle"]
+    soverlay["SelectionOverlay({selected})<br/>selection-frame, Resize nw|ne|sw|se,<br/>Rotate — если rotatable у всех (CVS-14)"]
+    sbar["SelectionBar({selected, onFilter, onStyle, onEditText, onDelete})<br/>toolbar Selection: N selected, Keep only → Only … (n),<br/>общие свойства, Mixed; Edit text, Delete (CVS-11, CVS-21)"]
+    cmenu["ContextMenu({label, at, items, onClose})<br/>role=menu, позиция placeMenu до отрисовки;<br/>Escape, нажатие вне меню (CVS-23)"]
+    teditor["TextEditor({object, text: Y.Text, onDone})<br/>textarea Object text поверх объекта;<br/>Escape, уход фокуса → onDone (COL-01)"]
+    tbind["textBinding.ts<br/>applyTextChange (общие префикс и суффикс),<br/>shiftIndex (курсор при чужой правке)"]
+    bsettings["boardSettings.ts<br/>BoardSettings {background, gridStep}, DEFAULT_SETTINGS,<br/>BACKGROUNDS, GRID_STEPS, readSettings, updateSettings,<br/>useBoardSettings, isDark (CVS-06)"]
+    bsctl["BoardSettingsControls({settings})<br/>group Board settings: Background, Grid (Off, 10…80 px)"]
   end
   yjs["yjs, lib0"]
   oas["openapi.json<br/>pnpm api:fetch ← $PUBLIC_BASE_URL/api/openapi.json"]
@@ -291,20 +311,50 @@ flowchart TB
   board & shared --> live
   shared -->|"onClosed → recheck: openSharedBoard"| sApi
   live --> useConn
-  live -->|"boardId, board.objects, presence"| workspace
+  live -->|"boardId, board, presence"| workspace
   useConn --> conn & bdoc & bpres
   conn -->|"attach, detach, receive"| bpres
   bpres -->|"types"| msgs
   workspace -->|"setLocal, subscribe"| bpres
   workspace --> usePres
   usePres --> bpres
-  workspace --> bcanvas & ppanel & rcursors & controls & minimap
+  workspace --> ppanel & rcursors & controls & minimap
+  workspace -->|"board, camera, onMove, overlays"| bscene
+  workspace -->|"board.settings"| bsctl
+  bscene -->|"gestures, background, gridStep, canvasRef"| bcanvas
+  bscene --> tpanel & layer & soverlay & sbar & cmenu & teditor
+  bscene -->|"useSceneObjects, useBoardSettings"| usobj & bsettings
+  bscene -->|"createObject, objectText, patchObjects, readScene"| sobj
+  bscene -->|"moveToTrash"| bdoc
+  bscene -->|"placement"| tools
+  bscene -->|"useSceneGestures"| ugest
+  bscene -->|"screenToBoard"| camera
+  bscene -->|"isTypingTarget"| keys
+  ugest -->|"areaGesture, moveGesture,<br/>resizeGesture, rotateGesture"| gest
+  ugest -->|"toolById"| tools
+  gest --> geom
+  gest -->|"patchObjects"| sobj
+  usobj --> sobj
+  sobj -->|"OBJECT_TYPES"| otypes
+  sobj -->|"Y.Map, Y.Text"| yjs
+  tools --> otypes
+  tools -->|"snap"| geom
+  tpanel -->|"TOOLS"| tools
+  layer & sbar & soverlay -->|"typeSpec, styleKeysOf, STYLE_KEYS"| otypes
+  layer & soverlay & teditor --> ostyle
+  soverlay -->|"boundsOf"| geom
+  cmenu -->|"placeMenu"| geom
+  teditor --> tbind
+  bsctl --> bsettings
+  bsettings -->|"Y.Map settings: observe, set"| yjs
+  bcanvas -->|"edgeVelocity"| geom
   workspace -->|"zoomBy(ZOOM_STEP), centerOn"| camera
   workspace -->|"usePersistentCamera(boardId)"| upcam
   workspace -->|"useCameraKeys(move)"| ukeys
   workspace -->|"useSceneRects(objects)"| scene
   workspace -->|"loadWheelMode, saveWheelMode"| wheel
   bcanvas -->|"panBy, pinch, zoomAt, screenToBoard"| camera
+  minimap -->|"visibleFrame"| mfit
   bcanvas -->|"wheelAction"| wheel
   controls -->|"MIN_ZOOM, MAX_ZOOM"| camera
   minimap -->|"viewRect"| camera
@@ -357,14 +407,16 @@ flowchart TB
 - `accountApi` показывает одно скупое сообщение для `401` и `422` — Invalid email or password. (ACC-02); `429` — Too many sign-in attempts. Try again later.; сетевой сбой — Network error. Try again.
 - `adminApi` переводит коды ответа в текст для администратора: `401` Invalid email or password., `404` User not found., `409` Email is already in use., `422` Enter a name, a valid email and a password., `429` Too many sign-in attempts. Try again later.
 - Cookie сессий скрипту не видны (`HttpOnly`), поэтому состояние входа страницы узнают из `GET /api/session` и `GET /api/admin/session`. `/login` у вошедшего перенаправляет на `/`; `/`, `/boards/:id`, `/templates` обёрнуты в `RequireAccount`: без сессии и после её отзыва — `Redirect /login` (replace). Отзыв замечается опросом `GET /api/session` раз в 2 с у видимой вкладки, сразу при возврате на вкладку и по любому ответу `401`, кроме `POST /api/login` и `/api/admin/*` (ACC-05, состояния — [states/session.md](states/session.md)); `/admin/login` при действующей сессии перенаправляет на `/admin/users`, `/admin/users` без сессии показывает приглашение со ссылкой Sign in.
-- `/boards/:id` за `RequireAccount` показывает название своей доски, строку состояния связи `BoardLive` и холст с присутствием (объектов пока нет, T5.*); до ответа `GET /api/session` страницы под `RequireAccount` не монтируются и своих запросов не шлют (BUG-002); чужая, удалённая и несуществующая — Board unavailable / Board not found. `/templates` — заглушка за `RequireAccount`; `/t/:token`, `/b/:token/embed` — заглушки без проверки входа. `/b/:token` без `RequireAccount`: сессию участника хранит cookie этой доски, страница узнаёт имя из `GET /api/share/{token}`, затем открывает `BoardLive` по токену; закрытый без доступа канал (сброс ссылки) ведёт к повторному `GET /api/share/{token}` и Board unavailable без перезагрузки. Холст с присутствием — как у владельца.
-- Присутствие (T4.2): `useBoardConnection` создаёт вместе с документом `BoardPresence`, `BoardConnection` передаёт ему кадры `awareness`/`presence` и шлёт своё состояние; `BoardWorkspace` рисует холст `BoardCanvas` с чужими курсорами, плашку слежения и `PresencePanel`. Объектов на холсте пока нет (T5.2). Сценарий — [sequences/presence.md](sequences/presence.md).
+- `/boards/:id` за `RequireAccount` показывает название своей доски, строку состояния связи `BoardLive` и сцену с объектами и присутствием; до ответа `GET /api/session` страницы под `RequireAccount` не монтируются и своих запросов не шлют (BUG-002); чужая, удалённая и несуществующая — Board unavailable / Board not found. `/templates` — заглушка за `RequireAccount`; `/t/:token`, `/b/:token/embed` — заглушки без проверки входа. `/b/:token` без `RequireAccount`: сессию участника хранит cookie этой доски, страница узнаёт имя из `GET /api/share/{token}`, затем открывает `BoardLive` по токену; закрытый без доступа канал (сброс ссылки) ведёт к повторному `GET /api/share/{token}` и Board unavailable без перезагрузки. Холст с присутствием — как у владельца.
+- Присутствие (T4.2): `useBoardConnection` создаёт вместе с документом `BoardPresence`, `BoardConnection` передаёт ему кадры `awareness`/`presence` и шлёт своё состояние; `BoardWorkspace` рисует сцену `BoardScene` (внутри — холст `BoardCanvas`) с чужими курсорами, плашку слежения и `PresencePanel`. Сценарий — [sequences/presence.md](sequences/presence.md).
 - Камера (T5.1): вид — центр `{x, y}` в координатах доски и `zoom` (10 %…800 %), сдвиг не ограничен (CVS-01). Все свои движения вида идут через `BoardWorkspace.move` — он снимает слежение (COL-04) и меняет камеру: кнопки и клавиши `+`/`=`, `-` — `zoomBy` ×1,25 вокруг центра, стрелки — `panBy` на 100 px экрана (клавиши слушаются на всей странице, кроме полей ввода, без Ctrl/⌘/Alt; CVS-02); колесо по `WheelMode`: `zoom` — масштаб вокруг указателя, `scroll` — сдвиг (Shift — по горизонтали), масштаб с Ctrl/⌘ (CVS-03); перетаскивание левой или средней кнопкой и один палец — сдвиг, два пальца — `pinch`, точка между пальцами идёт за ними (MOB-02, `touch-action: none` на холсте и миникарте); миникарта — `centerOn` в выбранную точку (CVS-04). Камера уходит в `awareness` как раньше (`setLocal({camera})`).
 - Запоминание (CVS-05): `localStorage` `myboard.camera.{boardId}` — вид каждой доски, `myboard.wheelMode` — режим колеса для всех досок этого браузера. `boardId` владельцу даёт `BoardPage` (`board.id`), участнику — `SharedBoardPage` (`SharedBoard.id`); `BoardLive` пересоздаёт `BoardWorkspace` (`key = boardId`) при смене доски. Недоступное хранилище или испорченная запись — начальный вид `HOME` (0; 0; 100 %).
 - Миникарта (CVS-04) читает объекты верхнего уровня из `objects` документа (`useSceneRects`, пересчёт на любую правку) и показывает их, рамку вида и начало координат; поле вписывания замораживается, пока указатель зажат.
-- Модуль `realtime` (T4.1): `moveToTrash` (T4.3) — перенос объектов в корзину документа, интерфейсом пока не вызывается (T5.*). Один `Y.Doc` на открытую доску (`useBoardConnection`), `BoardConnection` — провайдер документа поверх `/api/ws` (сценарий — [sequences/sync.md](sequences/sync.md), кадры — [ws-protocol.md](ws-protocol.md)). Внешние библиотеки — `yjs`, `lib0`. Двойник сокета в тестах — `realtime/fakeSocket.ts`.
+- Модуль `realtime` (T4.1): `moveToTrash` (T4.3) — перенос объектов в корзину документа, его вызывает `BoardScene` (CVS-21). Один `Y.Doc` на открытую доску (`useBoardConnection`), `BoardConnection` — провайдер документа поверх `/api/ws` (сценарий — [sequences/sync.md](sequences/sync.md), кадры — [ws-protocol.md](ws-protocol.md)). Внешние библиотеки — `yjs`, `lib0`. Двойник сокета в тестах — `realtime/fakeSocket.ts`.
 - Адреса API и WebSocket строятся из адреса страницы (`window.location`), `localhost` в клиенте нет; тестовая среда Vitest (jsdom) открыта по `http://192.168.1.20:8080/`, API в тестах подменяют `admin/fakeAdminServer.ts`, `account/fakeAccountServer.ts` и `library/fakeLibraryServer.ts` (подключается к двойнику входа через `extraRoute`).
 - Параметр `?object={id}` на `/b/{token}` отдельным маршрутом не выделен — его прочитает страница доски.
+- Сцена (T5.2): `BoardScene` держит своё для вкладки (инструмент, выделение, черновик области, меню, редактируемый текст) и пишет в документ только объекты, `settings` и корзину. Холст не знает об инструментах: жесты ему отдаёт `useSceneGestures` через `CanvasGestures`; нажатие, не ставшее жестом (`start` → `null`), двигает вид, как в T5.1. Инструмент создания: щелчок ставит объект центром в точку (угол — на сетку), выделяет его, открывает `TextEditor` и возвращает Select; та же кнопка, перетащенная на холст, ставит объект в точке отпускания. Выделение: щелчок, Shift+щелчок, Shift+перетаскивание пустого места — рамка, Lasso — область; попадает объект, все углы которого внутри (CVS-10). Перемещение пишет только изменившийся сдвиг; общая рамка прилипает углом к сетке `gridStep` (CVS-12). У края холста (`EDGE_ZONE` 40 px) жест с `autoscroll` сдвигает вид, объект идёт за указателем (CVS-13). MOB-03: короткое движение пальцем по невыделенному объекту двигает вид, касание выделяет, долгое нажатие (500 мс, сдвиг ≤ 10 px) выделяет и тянет объект или начинает рамку; выделенный объект палец тянет сразу.
+- Раскладка (BUG-006): на ширине ≤ 640 px панель инструментов — одна строка над холстом (`scene/scene.css`), холст высотой `calc(60vh - 80px)` — целиком в первом экране телефона.
 - Сборка: `pnpm build` = `tsc --noEmit && vite build` (плагин `@vitejs/plugin-react`), результат `dist` раздаёт сервис `web` (см. [deployment.md](deployment.md)).
 
-Актуально на: T5.1, 34125f1. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`), CVS-01…CVS-05, MOB-02 (камера и миникарта); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.
+Актуально на: T5.2, b5342f6. Требования: ADM-01…ADM-07 (панель администратора), ACC-01…ACC-03, ACC-05 (вход пользователя досок и отзыв сессии), ACC-04, BRD-01…BRD-07, BRD-09…BRD-11 (список досок, папки, избранное), SHR-01…SHR-03, SHR-05, SHR-06 (ссылка на доску), COL-01, SHR-04 (канал документа доски), COL-02…COL-04, COL-09 (присутствие и курсоры), COL-08 (основа: `moveToTrash`), CVS-01…CVS-05, MOB-02 (камера и миникарта), CVS-06, CVS-09…CVS-14, CVS-21, CVS-23, MOB-03 (сцена, создание и выделение); каркас — ARCHITECTURE.md, разделы 3, 4, 6, 10.

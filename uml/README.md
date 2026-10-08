@@ -35,7 +35,7 @@
 | T2.1, T2.2 | `data-model.md`, `components.md` |
 | T3.1 | `data-model.md`, `components.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
 | T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` (с T4.3 — корзина); T4.1 также `components.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` (закрытие канала при сбросе ссылки и отзыве доступа); T4.2 также `components.md`, `sequences/presence.md`, `sequences/link-reset.md` (присутствие и курсоры); T4.3 также `components.md` (модуль `history`, сжатие в `Hub`), `deployment.md` (`SNAPSHOT_INTERVAL_SECONDS`) |
-| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`) |
+| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`); T5.2 также `states/board-object.md` (создание, правки и удаление из интерфейса) |
 | T7.* | `data-model.md`, `board-document.md`, `sequences/media-upload.md` |
 | T8.1 | `board-document.md` |
 | T8.2 | `data-model.md`, `sequences/history-restore.md` |
@@ -50,9 +50,9 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa (`SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309) |
-| [components.md](components.md) | T5.1, 34125f1 |
+| [components.md](components.md) | клиент: T5.2, b5342f6; сервер: T5.1, 34125f1 |
 | [data-model.md](data-model.md) | T4.3, 7477309 |
-| [board-document.md](board-document.md) | T5.1, 34125f1 |
+| [board-document.md](board-document.md) | T5.2, b5342f6 |
 | [ws-protocol.md](ws-protocol.md) | T4.3, 7477309 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
 | [sequences/link-join.md](sequences/link-join.md) | T5.1, 34125f1 |
@@ -62,4 +62,4 @@
 | [states/session.md](states/session.md) | сервер: T1.3, b53b509 (канал WebSocket — T4.1, 28e1b09); вкладка: T1.4, 6f59eaf; участник по ссылке: T4.1, 28e1b09 |
 | [states/share-link.md](states/share-link.md) | T4.1, 28e1b09 |
 | [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
-| [states/board-object.md](states/board-object.md) | T4.3, 7477309 |
+| [states/board-object.md](states/board-object.md) | T5.2, b5342f6 (сервер — T4.3, 7477309) |
