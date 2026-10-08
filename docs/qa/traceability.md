@@ -43,15 +43,15 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-01 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-01, desktop + mobile); scene.spec.ts «CVS-01 CVS-04 objects far…» (объекты на холсте) | PASS |
 | CVS-02 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-02, desktop + mobile) | PASS |
 | CVS-03 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-03, desktop) | PASS |
-| CVS-04 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-04, desktop + mobile); scene.spec.ts «CVS-04 BUG-003 …» | PASS (BUG-003 исправлен в dev/T5.2, проверено; в main — со слиянием T5.2) |
+| CVS-04 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-04, desktop + mobile); scene.spec.ts «CVS-04 BUG-003 …» | PASS (BUG-003 исправлен в ad33d81, проверено) |
 | CVS-05 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-05, desktop + mobile) | PASS |
 | CVS-06 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-06, desktop + mobile) | PASS |
 | CVS-07 | T5.4 | — | не проверено |
 | CVS-08 | T5.5 | — | не проверено |
 | CVS-09 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-09, ARCH-T52-01; desktop + mobile) | PASS |
-| CVS-10 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-10, desktop) | FAIL (BUG-004: выделение щелчком пишет в документ и двигает объект вне сетки) |
+| CVS-10 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-10, desktop) | PASS (BUG-004 исправлен в 018aed6, проверено) |
 | CVS-11 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-11, desktop) | PASS |
-| CVS-12 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-12, desktop) | FAIL (BUG-004) |
+| CVS-12 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-12, desktop) | PASS (BUG-004 исправлен, проверено) |
 | CVS-13 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-13, desktop) | PASS |
 | CVS-14 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-14, desktop) | PASS |
 | CVS-15 | T5.3 | — | не проверено |
@@ -62,13 +62,13 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-20 | T5.3 | — | не проверено |
 | CVS-21 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-21, desktop + mobile) | PASS |
 | CVS-22 | T5.3 | — | не проверено |
-| CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 minor) |
+| CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
 | CVS-24 | T5.4 | — | не проверено |
 | CVS-25 | T5.4 | — | не проверено |
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
-| MOB-02 | T5.1 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02; mobile) | PASS на main (T5.1); на dev/T5.2 регрессия — BUG-006 |
-| MOB-03 | T5.2 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (побочный сдвиг при долгом нажатии — BUG-004) |
+| MOB-02 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile) | PASS (BUG-006 исправлен в 403f6f8, проверено) |
+| MOB-03 | T5.2 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено) |
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
 | MOB-06 | T11.1 | — | не проверено |
