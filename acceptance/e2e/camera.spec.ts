@@ -593,6 +593,45 @@ test('MOB-02 one finger pans the canvas by the gesture distance and keeps the zo
   }
 });
 
+// BUG-006 (решение владельца — чинить в T5.2): на телефоне холст и миникарта в первом экране,
+// жесты MOB-02 начинаются без прокрутки страницы. Строго — профиль mobile (Pixel 7) у владельца
+// и участника по ссылке; узкий телефон 360×640 — мягкая проверка (наблюдение).
+test('MOB-02 BUG-006 on a phone the canvas and the minimap are in the first screen without scrolling', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const opts = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, opts);
+  const guest = await openGuest(browser, opts, owner.token, 'QA Phone');
+  try {
+    for (const [who, page] of [['владелец', owner.page], ['участник', guest.page]] as const) {
+      const vp = page.viewportSize()!;
+      const scroll = await page.evaluate(() => ({ sx: window.scrollX, sy: window.scrollY }));
+      expect(scroll, `${who}: страница открыта без прокрутки`).toEqual({ sx: 0, sy: 0 });
+      const c = (await canvas(page).boundingBox())!;
+      const m = (await minimap(page).boundingBox())!;
+      const inside = (b: { x: number; y: number; width: number; height: number }) =>
+        b.x >= 0 && b.y >= 0 && b.x + b.width <= vp.width + 0.5 && b.y + b.height <= vp.height + 0.5;
+      expect(inside(c), `${who}: холст ${JSON.stringify(c)} в окне ${JSON.stringify(vp)}`).toBe(true);
+      expect(inside(m), `${who}: миникарта ${JSON.stringify(m)} в окне ${JSON.stringify(vp)}`).toBe(true);
+      // холст — заметная часть экрана, а не полоска
+      expect(c.height, `${who}: высота холста`).toBeGreaterThanOrEqual(vp.height * 0.4);
+      // центр холста — действительно холст, а не перекрывающая его панель
+      const hit = await page.evaluate(([x, y]) => {
+        const el = document.elementFromPoint(x, y);
+        return !!el && !!el.closest('[data-testid="board-canvas"]');
+      }, [c.x + c.width / 2, c.y + c.height / 2] as const);
+      expect(hit, `${who}: в центре холста — холст`).toBe(true);
+    }
+    // узкий телефон — наблюдение
+    await guest.page.setViewportSize({ width: 360, height: 640 });
+    await guest.page.waitForTimeout(300);
+    const c2 = (await canvas(guest.page).boundingBox())!;
+    expect.soft(c2.y + Math.min(c2.height, 200) <= 640, `360×640: холст ${JSON.stringify(c2)}`).toBe(true);
+  } finally {
+    await guest.close();
+    await owner.close();
+  }
+});
+
 test('MOB-02 two-finger pinch zooms in when spread and out when pinched; one finger pans again after it', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));

@@ -133,7 +133,16 @@ async function dragTo(page: Page, handle: Locator, target: () => Promise<Point>,
   for (let i = 1; i <= steps; i++) {
     await touchAt('touchMove', { x: start.x + ((to.x - start.x) * i) / steps, y: start.y + ((to.y - start.y) * i) / steps });
   }
-  await touchAt('touchMove', { x: to.x, y: to.y + 1 });
+  // Во время жеста страница может прокрутиться (замер: scrollY 87 → 107), и цель уезжает из-под
+  // пальца. Как человек, доводим палец до текущего положения цели, пока оно не перестанет меняться.
+  let aim = to;
+  for (let i = 0; i < 5; i++) {
+    await touchAt('touchMove', { x: aim.x, y: aim.y + 1 });
+    await page.waitForTimeout(100);
+    const now = await target();
+    if (Math.abs(now.x - aim.x) < 1 && Math.abs(now.y - aim.y) < 1) break;
+    aim = now;
+  }
   await touchAt('touchEnd');
   await cdp.detach();
 }
