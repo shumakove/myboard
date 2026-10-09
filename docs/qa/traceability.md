@@ -46,7 +46,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-04 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-04, desktop + mobile); scene.spec.ts «CVS-04 BUG-003 …» | PASS (BUG-003 исправлен в ad33d81, проверено) |
 | CVS-05 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-05, desktop + mobile) | PASS |
 | CVS-06 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-06, desktop + mobile) | PASS |
-| CVS-07 | T5.4, T6.1 | acceptance/e2e/undo-tools.spec.ts (CVS-07 *, desktop + mobile), acceptance/e2e/text.spec.ts (CVS-07 COL-01 BUG-014) | PASS в T5.4; в T6.1 FAIL — BUG-014 major (отмена правки текста после правки другого участника) |
+| CVS-07 | T5.4, T6.1 | acceptance/e2e/undo-tools.spec.ts (CVS-07 *, desktop + mobile), acceptance/e2e/text.spec.ts (CVS-07 COL-01 BUG-014 ×2) | PASS (T6.1: BUG-014 исправлен, проверено) |
 | CVS-08 | T5.5 | acceptance/e2e/search.spec.ts (CVS-08 *, desktop + mobile) | PASS |
 | CVS-09 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-09, ARCH-T52-01; desktop + mobile) | PASS |
 | CVS-10 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-10, desktop) | PASS (BUG-004 исправлен в 018aed6, проверено) |
@@ -72,14 +72,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
 | MOB-06 | T11.1 | — | не проверено |
-| TXT-01 | T6.1 | acceptance/e2e/text.spec.ts (TXT-01 *, BUG-011) | PASS (BUG-011 minor); задача REJECTED (BUG-014) |
-| TXT-02 | T6.1 | acceptance/e2e/text.spec.ts (TXT-02 *, desktop + mobile; BUG-016) | PASS (BUG-016 minor); задача REJECTED (BUG-014) |
-| TXT-03 | T6.1 | acceptance/e2e/text.spec.ts (TXT-03 shortcuts…) | PASS; задача REJECTED (BUG-014) |
-| TXT-04 | T6.1 | acceptance/e2e/text.spec.ts (TXT-04 *, BUG-012, BUG-013) | PASS (BUG-012, BUG-013 minor); задача REJECTED (BUG-014) |
-| TXT-05 | T6.1 | acceptance/e2e/text.spec.ts (TXT-05 …) | PASS; задача REJECTED (BUG-014) |
-| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …) | PASS; задача REJECTED (BUG-014) |
-| TXT-07 | T6.1 | acceptance/e2e/text.spec.ts (TXT-07 …) | PASS; задача REJECTED (BUG-014) |
-| TXT-08 | T6.1 | acceptance/e2e/text.spec.ts (TXT-08 *) | PASS (BUG-011 minor); задача REJECTED (BUG-014) |
+| TXT-01 | T6.1 | acceptance/e2e/text.spec.ts (TXT-01 *, BUG-011) | PASS |
+| TXT-02 | T6.1 | acceptance/e2e/text.spec.ts (TXT-02 *, desktop + mobile; BUG-016 ×2) | PASS |
+| TXT-03 | T6.1 | acceptance/e2e/text.spec.ts (TXT-03 shortcuts…) | PASS |
+| TXT-04 | T6.1 | acceptance/e2e/text.spec.ts (TXT-04 *, BUG-012, BUG-013, BUG-017) | PASS (BUG-017 minor) |
+| TXT-05 | T6.1 | acceptance/e2e/text.spec.ts (TXT-05 …) | PASS |
+| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …, MOB-06 TXT-02 TXT-06 BUG-016) | PASS |
+| TXT-07 | T6.1 | acceptance/e2e/text.spec.ts (TXT-07 …) | PASS |
+| TXT-08 | T6.1 | acceptance/e2e/text.spec.ts (TXT-08 *, BUG-011) | PASS |
 | STK-01 | T6.2 | — | не проверено |
 | STK-02 | T6.2 | — | не проверено |
 | STK-03 | T6.2 | — | не проверено |
@@ -173,8 +173,8 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BAK-06 | T10.1, T11.2 (итог) | — | не проверено |
 | UI-01 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile; с T5.4 — строго R = G = B) | PASS |
 | UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
-| UI-03 | T5.6, T5.4, T5.5 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape), acceptance/e2e/search.spec.ts (UI-01 UI-03 search panel…, UI-03 BUG-010), text.spec.ts (UI-01 UI-03 text formatting bar…) | PASS (BUG-009 исправлен в T5.4; BUG-010 исправлен в dev/T6.1, проверено — до слияния T6.1 открыт) |
-| UI-04 | T5.6, T5.4, T6.1 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile) | PASS (T6.1: BUG-015 minor — кнопки Text formatting на телефоне) |
+| UI-03 | T5.6, T5.4, T5.5 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape), acceptance/e2e/search.spec.ts (UI-01 UI-03 search panel…, UI-03 BUG-010), text.spec.ts (UI-01 UI-03 text formatting bar…, TXT-04 BUG-012/BUG-017) | PASS (BUG-009 исправлен в T5.4; BUG-010 исправлен в T6.1, проверено) |
+| UI-04 | T5.6, T5.4, T6.1 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile; BUG-015) | PASS (T6.1: BUG-015 исправлен) |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
 
