@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 import { canvas, profileOpts } from './camera';
 import { boxOf, centerOf, Finger, obj, selectedIds } from './scene';
 import {
-  collectStyles, hsl, hueDist, inPalette, luminance, openScreens, panelOf, screen, signature, transparent,
+  collectStyles, hsl, hueDist, inPalette, luminance, openScreens, panelOf, rgba, screen, signature, transparent,
   type ElStyle, type Stand,
 } from './ui';
 
@@ -27,6 +27,32 @@ async function participantColors(page: Page): Promise<Set<string>> {
       Array.from(root.querySelectorAll('*')).map((e) => getComputedStyle(e).backgroundColor),
     ),
   );
+}
+
+/** Чистый серый: R = G = B (UI-01 в редакции 0f2d0c5). */
+function pureGray(c: string): boolean {
+  const v = rgba(c);
+  return !v || (v[0] === v[1] && v[1] === v[2]);
+}
+
+/** Чистый серый либо насыщенный цвет тона акцента/опасного действия (±12°). */
+function pureGrayOrTone(c: string, hues: number[]): boolean {
+  if (pureGray(c) || transparent(c)) return true;
+  const h = hsl(c);
+  return h.s > 0.25 && hues.some((x) => hueDist(h.h, x) <= 12);
+}
+
+/** Выделить опорный объект qa-ui: щелчок (desktop) или долгое нажатие пальцем (mobile, MOB-03). */
+async function selectOnBoard(page: Page, isMobile: boolean) {
+  if (isMobile) {
+    const f = await Finger.of(page);
+    await f.down(centerOf(await boxOf(obj(page, 'qa-ui'))));
+    await f.hold(900);
+    await f.up();
+  } else {
+    await obj(page, 'qa-ui').click();
+  }
+  await expect.poll(() => selectedIds(page)).toEqual(['qa-ui']);
 }
 
 /** Акцент — фон основной кнопки Sign in на странице входа. */
@@ -134,20 +160,39 @@ test('UI-01 one accent colour for primary and active actions; text and borders s
     const danger = (await signature(screen(st, 'admin-users'), screen(st, 'admin-users').getByRole('button', { name: 'Disable' }).first()))['background-color'];
     const hues = [accentHue, hsl(danger).h];
     expect.soft(hueDist(hues[0], hues[1]), 'опасное действие — другой цвет').toBeGreaterThan(30);
-    for (const s of st.screens) {
+    const tintedBg = new Set<string>();
+    // экраны + доска с открытыми диалогами All tools и Share
+    const board = screen(st, 'board');
+    const extra: { name: string; page: Page; open?: () => Promise<void> }[] = [
+      { name: 'board+all-tools', page: board, open: async () => {
+        await board.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: 'All tools' }).click();
+        await expect(board.getByRole('dialog', { name: 'All tools' })).toBeVisible();
+      } },
+      { name: 'board+share', page: board, open: async () => {
+        await board.keyboard.press('Escape');
+        await board.getByRole('button', { name: 'Share' }).click();
+        await expect(board.getByRole('dialog')).toBeVisible();
+      } },
+    ];
+    for (const s of [...st.screens, ...extra]) {
+      const open = (s as { open?: () => Promise<void> }).open;
+      if (open) await open();
       const skip = await participantColors(s.page);
       for (const e of ui(await collectStyles(s.page))) {
         if (skip.has(e.bg) && !e.hasText) continue; // метка цвета участника
         if (e.isControl) expect.soft(inPalette(e.bg, hues), `${s.name}: фон «${e.label}» ${e.bg}`).toBe(true);
         if (e.hasText) expect.soft(inPalette(e.color, hues), `${s.name}: текст «${e.label}» ${e.color}`).toBe(true);
         if (e.borderWidth > 0) expect.soft(inPalette(e.borderColor, hues), `${s.name}: рамка «${e.label}» ${e.borderColor}`).toBe(true);
-        // нейтральная шкала: серые текста и рамок почти без насыщенности
+        // нейтральная шкала (UI-01 в редакции 0f2d0c5): текст и рамки — чистые серые R = G = B
+        // либо насыщенный тон акцента/опасного действия
         for (const c of [e.hasText ? e.color : '', e.borderWidth > 0 ? e.borderColor : ''].filter(Boolean)) {
-          const h = hsl(c);
-          if (hueDist(h.h, hues[0]) > 12 && hueDist(h.h, hues[1]) > 12) expect.soft(h.s, `${s.name}: «${e.label}» ${c} — серый`).toBeLessThanOrEqual(0.2);
+          expect.soft(pureGrayOrTone(c, hues), `${s.name}: «${e.label}» ${c} — чистый серый или акцент`).toBe(true);
         }
+        if (!transparent(e.bg) && !pureGray(e.bg) && hsl(e.bg).s <= 0.25) tintedBg.add(`${s.name}: ${e.bg}`);
       }
     }
+    await board.keyboard.press('Escape');
+    test.info().annotations.push({ type: 'наблюдение (фон не входит в «текст и границы»)', description: tintedBg.size ? [...tintedBg].join('; ') : 'нейтральные фоны — чистые серые' });
   } finally {
     await st.close();
   }
@@ -252,11 +297,9 @@ test('UI-03 buttons and inputs of one kind look the same on different screens', 
     // кнопки панели инструментов холста — отдельный элемент UI-03 («плавающие панели инструментов»):
     // сравниваются между собой; тихие кнопки вне панели инструментов — между экранами
     await sameKind(st, 'инструмент', [b('board', 'Lasso'), b('board-guest', 'Lasso'), b('board', 'Shape')]);
-    if (!isMobile) {
-      await obj(screen(st, 'board'), 'qa-ui').click();
-      // высота — отдельный тест BUG-009 (minor): 36 px в списке и 32 px в панели Selection
-      await sameKind(st, 'тихая', [b('boards', 'Rename'), ['board', screen(st, 'board').getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Arrange', exact: true })]], SAME.filter((p) => p !== 'height'));
-    }
+    await selectOnBoard(screen(st, 'board'), isMobile);
+    // BUG-009 исправлен в T5.4: высота сравнивается вместе с прочими свойствами
+    await sameKind(st, 'тихая', [b('boards', 'Rename'), ['board', screen(st, 'board').getByRole('toolbar', { name: 'Selection' }).getByRole('button', { name: 'Arrange', exact: true })]]);
     await sameKind(st, 'кнопка-значок', [b('board', 'Zoom in'), b('board', 'Zoom out'), b('board-guest', 'Zoom in')]);
     // опасное действие — Disable в админке; второе место — подтверждение удаления доски
     const boards = screen(st, 'boards');
@@ -278,11 +321,10 @@ test('UI-03 buttons and inputs of one kind look the same on different screens', 
 });
 
 test('UI-03 BUG-009 quiet buttons have one height on the list screen and on the board', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
-  desktopOnly(isMobile);
-  test.fail(true, 'BUG-009 (minor) открыт: тихие кнопки 36 px в списке досок и 32 px в панели Selection');
+  // BUG-009 исправлен в T5.4 (решение владельца 0f2d0c5): пометка test.fail снята, тест — в наборе навсегда
   const st = await openScreens(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   try {
-    await obj(screen(st, 'board'), 'qa-ui').click();
+    await selectOnBoard(screen(st, 'board'), isMobile);
     const bar = screen(st, 'board').getByRole('toolbar', { name: 'Selection' });
     await sameKind(st, 'тихая (высота)', [
       ['boards', screen(st, 'boards').getByRole('button', { name: 'Rename', exact: true })],
@@ -590,4 +632,132 @@ test('UI-04 control check: the touch-target probe detects a small control', asyn
   expect(bad.length).toBe(2);
   expect(bad[0]).toContain('20×20');
   expect(bad[1]).toContain('44×30');
+});
+
+// ---------- T5.4: переключатель (впервые на экране — диалог All tools) ----------
+
+async function openAllTools(page: Page, isMobile: boolean) {
+  const b = page.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: 'All tools' });
+  if (isMobile) await b.tap();
+  else await b.click();
+  const d = page.getByRole('dialog', { name: 'All tools' });
+  await expect(d).toBeVisible();
+  return d;
+}
+
+test('UI-03 the switch in All tools: role switch, toggles by a click and by Space, visible hover, press, keyboard focus and disabled states; the dialog looks like Share', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const st = await openScreens(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    const page = screen(st, 'board');
+    const dlg = await openAllTools(page, false);
+    const sw = dlg.getByRole('switch', { name: 'Pin Lasso' });
+    await expect(sw).toHaveAttribute('role', 'switch');
+    await expect(sw).toBeChecked();
+    // видимая часть переключателя — его подпись-обёртка (сам input может быть скрыт)
+    const visual = sw.locator('xpath=ancestor::label[1]');
+    const track = visual.locator('[aria-hidden="true"]').first();
+    const PROPS = ['background-color', 'border-top-color', 'box-shadow', 'outline-style', 'outline-width', 'outline-color', 'opacity'] as const;
+    const look = async () => ({ ...(await signature(page, track, PROPS)), ...(Object.fromEntries(Object.entries(await signature(page, visual, PROPS)).map(([k, v]) => [`label:${k}`, v]))) });
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    const on = await look();
+    // щелчок переключает, вид меняется
+    await visual.click();
+    await expect(sw).not.toBeChecked();
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    const off = await look();
+    expect.soft(off, 'включён и выключен выглядят по-разному').not.toEqual(on);
+    // пробел с клавиатуры
+    await sw.focus();
+    await page.keyboard.press('Space');
+    await expect(sw).toBeChecked();
+    // фокус с клавиатуры: Tab с предыдущего элемента
+    await dlg.getByRole('button', { name: 'Lasso', exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await expect(sw).toBeFocused();
+    await page.waitForTimeout(300);
+    const focus = await look();
+    await sw.evaluate((e) => (e as HTMLElement).blur());
+    await page.waitForTimeout(300);
+    const rest = await look();
+    expect.soft(focus, `фокус с клавиатуры виден: ${JSON.stringify(focus)}`).not.toEqual(rest);
+    // наведение и нажатие
+    await visual.hover();
+    await page.waitForTimeout(300);
+    expect.soft(await look(), 'наведение меняет вид').not.toEqual(rest);
+    await page.mouse.down();
+    await page.waitForTimeout(300);
+    const pressed = await look();
+    await page.mouse.move(0, 0);
+    await page.mouse.up();
+    expect.soft(pressed, 'нажатие меняет вид').not.toEqual(rest);
+    await expect(sw, 'нажатие с уводом указателя не переключило').toBeChecked();
+    // недоступность
+    const dis = await sw.evaluate(async (e, props) => {
+      const i = e as HTMLInputElement;
+      i.disabled = true;
+      await new Promise((r) => setTimeout(r, 500));
+      const lab = i.closest('label')!;
+      const tr = lab.querySelector('[aria-hidden="true"]')!;
+      const a = getComputedStyle(tr);
+      const b = getComputedStyle(lab);
+      const r = { ...Object.fromEntries(props.map((p) => [p, a.getPropertyValue(p)])), ...Object.fromEntries(props.map((p) => [`label:${p}`, b.getPropertyValue(p)])), cursor: b.cursor, inputCursor: getComputedStyle(i).cursor };
+      i.disabled = false;
+      return r;
+    }, PROPS as unknown as string[]);
+    const { cursor, inputCursor, ...disLook } = dis;
+    expect.soft(disLook, 'недоступный выглядит иначе').not.toEqual(rest);
+    expect.soft([cursor, inputCursor], 'курсор недоступного').not.toContain('pointer');
+    // диалог All tools = диалог Share
+    const DLG = ['background-color', 'border-radius', 'box-shadow', 'padding-top', 'padding-left'] as const;
+    const at = await signature(page, dlg, DLG);
+    await page.keyboard.press('Escape');
+    await expect(dlg).toBeHidden();
+    await page.getByRole('button', { name: 'Share' }).click();
+    const share = page.getByRole('dialog');
+    await expect(share).toBeVisible();
+    expect.soft(at, 'диалог All tools = диалог Share').toEqual(await signature(page, share, DLG));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => localStorage.clear());
+  } finally {
+    await st.close();
+  }
+});
+
+test('UI-04 on a phone the All tools dialog: switches, tool buttons and move buttons have touch targets of at least 44×44; same style as the desktop', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const phone = await openScreens(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const desk = await openScreens(browser, { ...devices['Desktop Chrome'], baseURL, viewport: { width: 1440, height: 900 } });
+  try {
+    const page = screen(phone, 'board');
+    const dlg = await openAllTools(page, true);
+    await expect(dlg).toBeInViewport();
+    expect.soft(await smallTargets(page), 'All tools: области нажатия меньше 44×44').toEqual([]);
+    // переключатель за краем видимой области (если диалог листается) — тоже проверяется
+    for (const sw of await dlg.getByRole('switch').all()) {
+      await sw.scrollIntoViewIfNeeded();
+      const bad = await smallTargets(page);
+      expect.soft(bad.filter((b) => b.includes('Pin ')), 'переключатели').toEqual([]);
+    }
+    const dd = await openAllTools(screen(desk, 'board'), false);
+    const KEEP = ['background-color', 'color', 'font-family', 'border-radius', 'box-shadow'] as const;
+    expect.soft(await signature(page, dlg, KEEP), 'диалог: телефон = компьютер').toEqual(await signature(screen(desk, 'board'), dd, KEEP));
+    const tr = (p: Page) => p.getByRole('dialog', { name: 'All tools' }).getByRole('switch').first().locator('xpath=ancestor::label[1]').locator('[aria-hidden="true"]').first();
+    expect.soft(await signature(page, tr(page), ['background-color', 'border-radius']), 'переключатель: телефон = компьютер').toEqual(await signature(screen(desk, 'board'), tr(screen(desk, 'board')), ['background-color', 'border-radius']));
+  } finally {
+    await phone.close();
+    await desk.close();
+  }
+});
+
+// контроль от ложного PASS: строгая проверка серого отвергает холодный серый T5.6 и принимает чистый
+test('UI-01 control check: the pure-grey probe rejects a tinted grey', () => {
+  const hues = [hsl('rgb(67, 89, 236)').h, hsl('rgb(209, 53, 43)').h];
+  expect(pureGrayOrTone('rgb(91, 97, 115)', hues)).toBe(false);
+  expect(pureGrayOrTone('rgb(238, 240, 244)', hues)).toBe(false);
+  expect(pureGrayOrTone('rgb(28, 28, 28)', hues)).toBe(true);
+  expect(pureGrayOrTone('rgba(28, 28, 28, 0.5)', hues)).toBe(true);
+  expect(pureGrayOrTone('rgb(67, 89, 236)', hues)).toBe(true);
 });
