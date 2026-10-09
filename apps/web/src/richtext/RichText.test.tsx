@@ -102,7 +102,9 @@ describe("TXT-01, TXT-02, TXT-06: показ форматированного т
     );
     await user.click(screen.getByRole("button", { name: "Sticky note: Idea" }));
     expect(onOpenObject).toHaveBeenCalledWith("known");
-    expect(screen.getByRole("button", { name: "Missing object" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Missing object" }),
+    ).toBeDisabled();
     expect(container.querySelector("hr")).not.toBeNull();
   });
 

@@ -7,6 +7,7 @@ import type { SceneObject } from "./sceneObjects";
 /**
  * CVS-08: поиск по тексту и тегам объектов доски. Щелчок по результату (или Enter —
  * следующий результат) переводит вид к объекту и выделяет его; панель остаётся открытой.
+ * Escape закрывает панель, где бы в ней ни был фокус (BUG-010, UI-03).
  */
 export function BoardSearch({
   scene,
@@ -39,6 +40,13 @@ export function BoardSearch({
       role="search"
       aria-label="Search board"
       className="board-search"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // Escape панели не снимает выделение на доске.
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
     >
       <div className="board-search-row">
         <Input
@@ -54,9 +62,6 @@ export function BoardSearch({
             if (event.key === "Enter") {
               event.preventDefault();
               next();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onClose();
             }
           }}
         />

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { isRich, parseDelta, plainText, safeLink, toBlocks } from "./delta";
+import {
+  isRich,
+  parseDelta,
+  plainText,
+  safeLink,
+  toBlocks,
+  type DeltaOp,
+} from "./delta";
 
 describe("TXT-02, TXT-06: строки и блоки форматированного текста", () => {
   it("заголовки, списки с вложенностью, отметки дел и позиции переводов строк", () => {
@@ -12,7 +19,7 @@ describe("TXT-02, TXT-06: строки и блоки форматированн�
     text.format(16, 1, { list: "bullet", indent: 1 });
     text.format(21, 1, { list: "ordered" });
 
-    const blocks = toBlocks(text.toDelta());
+    const blocks = toBlocks(text.toDelta() as DeltaOp[]);
     expect(blocks).toEqual([
       expect.objectContaining({ kind: "line", header: 1, list: null, end: 5 }),
       expect.objectContaining({ list: "checked", indent: 0, end: 10 }),
@@ -79,10 +86,9 @@ describe("TXT-02, TXT-06: строки и блоки форматированн�
   it("isRich отличает форматирование от простого текста; parseDelta проверяет чужие данные", () => {
     expect(isRich([{ insert: "plain\n" }])).toBe(false);
     expect(isRich([{ insert: "b", attributes: { bold: true } }])).toBe(true);
-    expect(parseDelta([{ insert: "a" }, { insert: { divider: true } }])).toEqual([
-      { insert: "a" },
-      { insert: { divider: true } },
-    ]);
+    expect(
+      parseDelta([{ insert: "a" }, { insert: { divider: true } }]),
+    ).toEqual([{ insert: "a" }, { insert: { divider: true } }]);
     expect(parseDelta([{ insert: { script: "x" } }])).toBeNull();
     expect(parseDelta("text")).toBeNull();
   });

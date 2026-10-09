@@ -60,7 +60,7 @@ describe("COL-01: редактор и Y.Text объекта", () => {
     quillB.insertText(0, "YY", "user");
     Y.applyUpdate(b, Y.encodeStateAsUpdate(a, Y.encodeStateVector(b)));
     Y.applyUpdate(a, Y.encodeStateAsUpdate(b, Y.encodeStateVector(a)));
-    expect(a.getText("t").toString()).toBe("YYmiddleXX");
+    expect(a.getText("t").toJSON()).toBe("YYmiddleXX");
     expect(quillA.getText()).toBe("YYmiddleXX\n");
     expect(quillB.getText()).toBe("YYmiddleXX\n");
   });
@@ -73,7 +73,7 @@ describe("COL-01: редактор и Y.Text объекта", () => {
     unbind();
     quill.insertText(0, "local", "user");
     text.insert(0, "remote");
-    expect(text.toString()).toBe("remote");
+    expect(text.toJSON()).toBe("remote");
     expect(quill.getText()).toBe("local\n");
   });
 });

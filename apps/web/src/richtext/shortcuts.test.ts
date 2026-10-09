@@ -28,12 +28,15 @@ describe("TXT-03: быстрая разметка", () => {
     ["1. ", { list: "ordered" }],
     ["[] ", { list: "unchecked" }],
     ["[x] ", { list: "checked" }],
-  ])("«%s» в начале строки задаёт формат строки и исчезает", (prefix, format) => {
-    const quill = editor();
-    typeInto(quill, `${prefix}Item`);
-    expect(quill.getText()).toBe("Item\n");
-    expect(quill.getFormat(0, 1)).toEqual(format);
-  });
+  ])(
+    "«%s» в начале строки задаёт формат строки и исчезает",
+    (prefix, format) => {
+      const quill = editor();
+      typeInto(quill, `${prefix}Item`);
+      expect(quill.getText()).toBe("Item\n");
+      expect(quill.getFormat(0, 1)).toEqual(format);
+    },
+  );
 
   it("второй строкой тоже работает; не в начале строки — обычный текст", () => {
     const quill = editor();
