@@ -836,6 +836,42 @@ test('TXT-06 link to an object that was deleted shows it is missing and does not
   }
 });
 
+test('TXT-06 BUG-018 document edits are kept on the server when the linked object is deleted and the page is reloaded right away', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    const page = owner.page;
+    const lost: string[] = [];
+    // дефект плавающий: три доски подряд, каждая — сборка документа и перезагрузка сразу после выхода из правки
+    for (let round = 0; round < 3; round++) {
+      const boardId = round === 0 ? owner.boardId : await owner.newBoard();
+      if (round > 0) {
+        await page.goto(`/boards/${boardId}`);
+        await expect(canvas(page)).toBeVisible();
+      }
+      await seed(page, boardId, { 'qa-far': FAR });
+      const id = await buildDocument(page);
+      // переход по ссылке, удаление объекта по Delete и сразу перезагрузка (как в «TXT-06 link to an object that was deleted»)
+      await obj(page, id).getByRole('button', { name: /Budget review/ }).click();
+      await expect(obj(page, 'qa-far')).toHaveAttribute('aria-selected', 'true');
+      await page.keyboard.press('Delete');
+      await expect(obj(page, 'qa-far')).toHaveCount(0);
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await expect(obj(page, id)).toBeVisible();
+      // то, что было на экране до перезагрузки, должно быть и после неё
+      await page.waitForTimeout(1500);
+      const shownAfter = { hr: await obj(page, id).locator('hr').count(), missing: await obj(page, id).getByText('Missing object').count() };
+      const d = await docObject(page, `board=${boardId}`, id);
+      const kinds = JSON.stringify(d?.delta ?? []);
+      if (!shownAfter.hr || !shownAfter.missing || !kinds.includes('objectLink') || !kinds.includes('divider')) lost.push(`доска ${round + 1}: на экране ${JSON.stringify(shownAfter)}, сервер ${kinds.slice(0, 200)}`);
+    }
+    expect(lost, 'ссылка на объект и разделитель, видимые до перезагрузки, есть в документе сервера').toEqual([]);
+  } finally {
+    await owner.close();
+  }
+});
+
 // ---------- TXT-07 ----------
 
 test('TXT-07 selected text blocks are copied as rich HTML and plain text that an external editor accepts', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
