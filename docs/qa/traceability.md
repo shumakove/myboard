@@ -39,7 +39,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | SHR-04 | T4.1 (канал), T11.2 | acceptance/api/test_realtime.py::test_shr04_*, test_col01_shr04_*; acceptance/e2e/realtime.spec.ts (SHR-04) | PASS (канал, T4.1); действия холста — T11.2 |
 | SHR-05 | T3.1 | acceptance/api/test_sharing.py::test_shr05_*, acceptance/e2e/share.spec.ts (SHR-05) | PASS |
 | SHR-06 | T3.1, T4.1 (WebSocket) | acceptance/api/test_sharing.py::test_shr06_*, acceptance/api/test_realtime.py::test_shr06_*, acceptance/e2e/share.spec.ts, realtime.spec.ts (SHR-06) | PASS |
-| SHR-07 | T5.5 | — | не проверено |
+| SHR-07 | T5.5 | acceptance/e2e/search.spec.ts (SHR-07 *, desktop + mobile) | PASS |
 | CVS-01 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-01, desktop + mobile); scene.spec.ts «CVS-01 CVS-04 objects far…» (объекты на холсте) | PASS |
 | CVS-02 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-02, desktop + mobile) | PASS |
 | CVS-03 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-03, desktop) | PASS |
@@ -47,7 +47,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-05 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-05, desktop + mobile) | PASS |
 | CVS-06 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-06, desktop + mobile) | PASS |
 | CVS-07 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-07 *, desktop + mobile) | PASS |
-| CVS-08 | T5.5 | — | не проверено |
+| CVS-08 | T5.5 | acceptance/e2e/search.spec.ts (CVS-08 *, desktop + mobile) | PASS |
 | CVS-09 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-09, ARCH-T52-01; desktop + mobile) | PASS |
 | CVS-10 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-10, desktop) | PASS (BUG-004 исправлен в 018aed6, проверено) |
 | CVS-11 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-11, desktop) | PASS |
@@ -173,7 +173,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BAK-06 | T10.1, T11.2 (итог) | — | не проверено |
 | UI-01 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile; с T5.4 — строго R = G = B) | PASS |
 | UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
-| UI-03 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape) | PASS (BUG-009 исправлен в T5.4) |
+| UI-03 | T5.6, T5.4, T5.5 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape), acceptance/e2e/search.spec.ts (UI-01 UI-03 search panel…, UI-03 BUG-010) | PASS (BUG-009 исправлен в T5.4; BUG-010 minor открыт) |
 | UI-04 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools) | PASS |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
