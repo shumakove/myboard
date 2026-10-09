@@ -7,6 +7,7 @@ import {
   isRichText,
   OBJECT_TYPES,
   STYLE_KEYS,
+  TAGGED_TYPES,
   type ObjectType,
   type StyleKey,
 } from "./objectTypes";
@@ -42,6 +43,8 @@ export interface SceneObject extends Frame {
   rich: DeltaOp[] | null;
   /** Теги объекта (STK-03, KBN-02) — ищутся вместе с текстом (CVS-08). */
   tags: string[];
+  /** STK-03: имя автора показано на стикере (поле `showAuthor`, по умолчанию — да). */
+  showAuthor: boolean;
   style: Partial<Record<StyleKey, string | number>>;
   /** Начало координат родителя на доске; `x`, `y` рамки — уже в координатах доски. */
   origin: Point;
@@ -111,7 +114,8 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       if (bounds === null) return; // пустая группа не рисуется
       frame = { ...bounds, rotation: 0 };
     }
-    const { id, type, parent, z, text, rich, tags, style, meta } = object;
+    const { id, type, parent, z, text, rich, tags, showAuthor, style, meta } =
+      object;
     scene.splice(at, 0, {
       id,
       type,
@@ -120,6 +124,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       text,
       rich,
       tags,
+      showAuthor,
       style,
       meta,
       ...frame,
@@ -191,6 +196,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     text: typeof record.text === "string" ? record.text : "",
     rich: isRichText(type) ? richContent(value, record.text) : null,
     tags: readTags(record.tags),
+    showAuthor: record.showAuthor !== false,
     style,
     lockedSelf: record.locked === true,
     meta,
@@ -215,6 +221,13 @@ function readTags(value: unknown): string[] {
     .map((tag) => tag.trim())
     .filter((tag) => tag !== "");
   return [...new Set(tags)];
+}
+
+/** Теги объекта — `Y.Array` строк: одновременные добавления разных тегов сливаются. */
+export function writeTags(map: Y.Map<unknown>, tags: readonly string[]): void {
+  const array = new Y.Array<string>();
+  array.push([...tags]);
+  map.set("tags", array);
 }
 
 export function isNumber(value: unknown): value is number {
@@ -292,6 +305,12 @@ export function createObject(
     const content = new Y.Text(typeof text === "string" ? text : undefined);
     object.set("text", content);
     if (typeof text !== "string") content.applyDelta([...text]);
+    // STK-03: пустой список тегов сразу — одновременные первые теги двух участников
+    // попадут в один `Y.Array`, а не затрут друг друга.
+    if (TAGGED_TYPES.includes(type)) {
+      const tags = new Y.Array<string>();
+      object.set("tags", tags);
+    }
     for (const [key, value] of Object.entries(creationMeta(actor)))
       object.set(key, value);
     objects.set(id, object);

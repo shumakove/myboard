@@ -33,13 +33,14 @@ export function estimateHeight(
 /**
  * Новая высота текста или документа под измеренное содержимое, `null` — менять не нужно.
  * Текстовый блок следует за текстом в обе стороны; документ только растёт — его высоту
- * можно задать больше содержимого (TXT-06).
+ * можно задать больше содержимого (TXT-06). Размер стикера текст не меняет (STK-02).
  */
 export function fittedHeight(
   type: string,
   current: number,
   measured: number,
 ): number | null {
+  if (type !== "text" && type !== "document") return null;
   const fits =
     type === "document"
       ? measured <= current

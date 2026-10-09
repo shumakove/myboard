@@ -1,17 +1,10 @@
-import {
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from "react";
+import { useState, type ReactNode } from "react";
 import type { Point } from "../realtime/messages";
 import type { ObjectType } from "./objectTypes";
 import { ToolListDialog } from "./ToolListDialog";
 import { keyLabel, toolById, toolTitle, type ToolId } from "./tools";
+import { useDragToBoard } from "./useDragToBoard";
 import { Button, FloatingPanel } from "../ui";
-
-/** Сдвиг указателя, после которого нажатие на кнопку — уже перетаскивание, px. */
-const DRAG_THRESHOLD = 6;
 
 /**
  * Левая панель инструментов (CVS-09, CVS-10, CVS-24). На панели — закреплённые
@@ -37,58 +30,8 @@ export function ToolPanel({
   /** Действия доски после инструментов (в той же строке на телефоне). */
   children?: ReactNode;
 }) {
-  const [ghost, setGhost] = useState<{ label: string; at: Point } | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  const drag = useRef<{
-    pointerId: number;
-    start: Point;
-    dragging: boolean;
-  } | null>(null);
-  const suppressClick = useRef(false);
-
-  function pointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0) return;
-    suppressClick.current = false;
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Без захвата перетаскивание закончится над кнопкой.
-    }
-    drag.current = {
-      pointerId: event.pointerId,
-      start: { x: event.clientX, y: event.clientY },
-      dragging: false,
-    };
-  }
-
-  function pointerMove(
-    event: ReactPointerEvent<HTMLButtonElement>,
-    label: string,
-  ) {
-    const current = drag.current;
-    if (current?.pointerId !== event.pointerId) return;
-    const at = { x: event.clientX, y: event.clientY };
-    if (
-      !current.dragging &&
-      Math.hypot(at.x - current.start.x, at.y - current.start.y) >
-        DRAG_THRESHOLD
-    ) {
-      current.dragging = true;
-    }
-    if (current.dragging) setGhost({ label, at });
-  }
-
-  function pointerUp(
-    event: ReactPointerEvent<HTMLButtonElement>,
-    type: ObjectType,
-  ) {
-    const current = drag.current;
-    drag.current = null;
-    setGhost(null);
-    if (current?.pointerId !== event.pointerId || !current.dragging) return;
-    suppressClick.current = true; // за отпусканием придёт click — это не выбор инструмента
-    onDrop(type, { x: event.clientX, y: event.clientY });
-  }
+  const drag = useDragToBoard(onDrop);
 
   return (
     <>
@@ -107,25 +50,11 @@ export function ToolPanel({
             aria-keyshortcuts={keyLabel(item.key)}
             title={toolTitle(item)}
             onClick={() => {
-              if (suppressClick.current) {
-                suppressClick.current = false;
-                return;
-              }
+              // За отпусканием после перетаскивания приходит click — это не выбор.
+              if (drag.consumeClick()) return;
               onTool(item.id);
             }}
-            {...(item.kind === "create" && {
-              onPointerDown: pointerDown,
-              onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => {
-                pointerMove(event, item.label);
-              },
-              onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => {
-                pointerUp(event, item.id);
-              },
-              onPointerCancel: () => {
-                drag.current = null;
-                setGhost(null);
-              },
-            })}
+            {...(item.kind === "create" && drag.handlers(item.id, item.label))}
           >
             {item.label}
           </Button>
@@ -143,15 +72,7 @@ export function ToolPanel({
           All tools
         </Button>
         {children}
-        {ghost && (
-          <div
-            className="tool-ghost"
-            aria-hidden="true"
-            style={{ left: ghost.at.x, top: ghost.at.y }}
-          >
-            {ghost.label}
-          </div>
-        )}
+        {drag.ghost}
       </FloatingPanel>
       {/* Вне панели: в ней кнопки инструментов ищут по имени. */}
       {listOpen && (

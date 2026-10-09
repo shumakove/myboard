@@ -10,6 +10,7 @@ import type * as Y from "yjs";
 import type { CameraView } from "../realtime/messages";
 import { Button, Menu, MenuItem, TextField } from "../ui";
 import { bindQuill } from "./binding";
+import { useFitFont } from "./fitFont";
 import { contentHeight } from "./measure";
 import {
   DEFAULT_PLACEMENT,
@@ -66,7 +67,9 @@ const MARKS = [
  * - быстрая разметка `#`, `-`, `1.`, `[]` и `--` → `—` (TXT-03);
  * - меню блоков по «/» в начале строки или после пробела (TXT-04), в документе — ещё
  *   разделитель и ссылка на объект (TXT-06);
- * - вставка из других редакторов с базовым форматированием — модуль буфера Quill (TXT-08).
+ * - вставка из других редакторов с базовым форматированием — модуль буфера Quill (TXT-08);
+ * - стикер: шрифт подгоняется под стикер по мере ввода (STK-02), Tab создаёт следующий
+ *   стикер (STK-04) вместо отступа пункта списка.
  * Escape или уход фокуса за пределы редактора завершают правку.
  */
 export function RichTextEditor({
@@ -78,6 +81,8 @@ export function RichTextEditor({
   onEdit,
   onDone,
   onPickObject,
+  autoFit = false,
+  onTab,
 }: {
   type: string;
   text: Y.Text;
@@ -91,6 +96,10 @@ export function RichTextEditor({
   onDone: () => void;
   /** TXT-06: выбрать объект доски для ссылки; `null` — выбор отменён. */
   onPickObject: (done: (id: string | null) => void) => void;
+  /** STK-02: размер шрифта подгоняется под объект. */
+  autoFit?: boolean;
+  /** STK-04: Tab (без Shift) вне меню «/» — своё действие вместо отступа. */
+  onTab?: () => void;
 }) {
   const isDocument = type === "document";
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -109,6 +118,7 @@ export function RichTextEditor({
   const holdRef = useRef(false);
   const slashRef = useRef<Slash | null>(null);
   const zoom = camera.zoom || 1;
+  useFitFont(wrapperRef, autoFit, [style.width, style.height]);
   const latest = useRef({ onEdit, objectLabel, zoom });
   useEffect(() => {
     latest.current = { onEdit, objectLabel, zoom };
@@ -301,7 +311,15 @@ export function RichTextEditor({
   }
 
   function onKeyDownCapture(event: KeyboardEvent) {
-    if (slash === null) return;
+    if (slash === null) {
+      if (onTab !== undefined && event.key === "Tab" && !event.shiftKey) {
+        // До клавиатуры Quill: иначе Tab сделал бы отступ пункта списка.
+        event.preventDefault();
+        event.stopPropagation();
+        onTab();
+      }
+      return;
+    }
     const handled = () => {
       event.preventDefault();
       event.stopPropagation();

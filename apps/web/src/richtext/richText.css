@@ -280,6 +280,17 @@
   position: relative;
 }
 
+/* STK-02: поле стикера — текст по центру, как на холсте; шрифт подгоняется под стикер. */
+.scene-object.scene-sticky.rich-editor {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.scene-sticky.rich-editor > .ql-container {
+  width: 100%;
+}
+
 .rich-editor .ql-clipboard {
   position: absolute;
   top: 50%;

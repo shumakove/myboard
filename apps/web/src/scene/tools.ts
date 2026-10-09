@@ -27,6 +27,7 @@ const CREATE_KEYS: Record<ObjectType, string> = {
   shape: "KeyS",
   text: "KeyT",
   document: "KeyD",
+  stack: "KeyK",
 };
 
 export const TOOLS: readonly Tool[] = [

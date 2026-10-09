@@ -226,7 +226,7 @@ export function pasteObjects(
       const map = new Y.Map<unknown>();
       for (const [key, value] of Object.entries(source.fields)) {
         if (SKIPPED.has(key)) continue;
-        map.set(key, key === "text" ? textField(value) : value);
+        map.set(key, fieldValue(key, value));
       }
       if (root) {
         map.set("x", Number(source.fields.x) + shift.x - parentAnchor.x);
@@ -240,6 +240,17 @@ export function pasteObjects(
     }
   });
   return roots;
+}
+
+/** Поле вставленного объекта: текст — `Y.Text`, теги — `Y.Array` (STK-03). */
+function fieldValue(key: string, value: unknown): unknown {
+  if (key === "text") return textField(value);
+  if (key === "tags" && Array.isArray(value)) {
+    const tags = new Y.Array<unknown>();
+    tags.push(value.filter((tag) => typeof tag === "string"));
+    return tags;
+  }
+  return value;
 }
 
 /** Текст вставленного объекта — `Y.Text` (с форматированием, если копия — дельта). */
