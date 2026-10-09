@@ -241,6 +241,8 @@ describe("TXT-03, TXT-04: редактор текста", () => {
     await user.click(screen.getByRole("button", { name: "Edit text" }));
     const field = screen.getByRole("textbox", { name: "Object text" });
     expect(field).toHaveFocus();
+    // Панель выделения на время правки скрыта: она закрывала бы панель редактора.
+    expect(screen.queryByRole("toolbar", { name: "Selection" })).toBeNull();
     const toolbar = screen.getByRole("toolbar", { name: "Text formatting" });
     for (const name of [
       "Bold",

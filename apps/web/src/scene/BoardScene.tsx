@@ -518,7 +518,10 @@ export function BoardScene({
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
-          selected={units}
+          // Пока правят форматированный текст, над ним — панель редактора, а не выделения.
+          selected={
+            editedObject !== null && isRichText(editedObject.type) ? [] : units
+          }
           onFilter={(type) => {
             setSelection(units.filter((o) => o.type === type).map((o) => o.id));
           }}
