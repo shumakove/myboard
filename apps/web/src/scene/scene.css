@@ -102,6 +102,15 @@
   align-items: flex-start;
 }
 
+/* TXT-06: документ — карточка с полями; фон — свойство объекта (по умолчанию белый). */
+.scene-object.scene-document {
+  padding: 16px 20px;
+  align-items: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
 .scene-unknown {
   border: 1px dashed var(--color-text-subtle);
   background: var(--color-surface-hover);
@@ -234,6 +243,14 @@
   padding: 0 var(--space-2);
 }
 
+/* TXT-01: остальные свойства текста — строкой ниже по кнопке Text style. */
+.selection-more {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
 .selection-count {
   padding: 0 var(--space-2);
   color: var(--color-text-muted);
@@ -260,6 +277,7 @@
   }
 
   .selection-filter,
+  .selection-more,
   .selection-bar .object-info {
     flex-wrap: nowrap;
     flex: none;

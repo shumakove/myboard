@@ -1,0 +1,367 @@
+/*
+ * TXT-01, TXT-02, TXT-06: форматированный текст — одно оформление у показа на холсте
+ * и у редактора Quill (та же разметка: p, h1…h3, ol > li[data-list], hr). Цвет и шрифт
+ * текста задаёт объект (свойства оформления), здесь — только строение блоков.
+ */
+.rich-text {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1em;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+  counter-reset: list-0 list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text p,
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text ol {
+  margin: 0;
+  padding: 0;
+  counter-set: list-0 list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text h1,
+.rich-text h2,
+.rich-text h3 {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rich-text h1 {
+  font-size: 2em;
+}
+
+.rich-text h2 {
+  font-size: 1.5em;
+}
+
+.rich-text h3 {
+  font-size: 1.2em;
+}
+
+.rich-text a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.rich-text hr {
+  margin: 0.5em 0;
+  border: 0;
+  border-top: 1px solid currentcolor;
+  opacity: 0.35;
+}
+
+/* Списки: маркер — псевдоэлемент .ql-ui (как у Quill), номер — счётчик уровня. */
+.rich-text li {
+  position: relative;
+  padding-left: 1.5em;
+  list-style-type: none;
+  counter-set: list-1 list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text li > .ql-ui {
+  position: absolute;
+}
+
+.rich-text li > .ql-ui::before,
+.rich-text li > .rt-check {
+  display: inline-block;
+  width: 1.2em;
+  margin: 0 0.3em 0 -1.5em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rich-text li > .rt-check {
+  position: absolute;
+  top: 0.15em;
+  height: 1em;
+  margin: 0 0 0 -1.4em;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.rich-text li[data-list="bullet"] > .ql-ui::before {
+  content: "\2022";
+}
+
+.rich-text li[data-list="checked"] > .ql-ui::before {
+  content: "\2611";
+}
+
+.rich-text li[data-list="unchecked"] > .ql-ui::before {
+  content: "\2610";
+}
+
+.rich-text li[data-list="checked"] > .ql-ui,
+.rich-text li[data-list="unchecked"] > .ql-ui {
+  cursor: pointer;
+}
+
+.rich-text li[data-list="checked"] {
+  text-decoration-line: line-through;
+}
+
+.rich-text li[data-list="ordered"] {
+  counter-increment: list-0;
+}
+
+.rich-text li[data-list="ordered"] > .ql-ui::before {
+  content: counter(list-0, decimal) ". ";
+}
+
+.rich-text .ql-indent-1 {
+  padding-left: 1.5em;
+}
+
+.rich-text li.ql-indent-1 {
+  padding-left: 3em;
+  counter-set: list-2 list-3 list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-1 {
+  counter-increment: list-1;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-1 > .ql-ui::before {
+  content: counter(list-1, lower-alpha) ". ";
+}
+
+.rich-text .ql-indent-2 {
+  padding-left: 3em;
+}
+
+.rich-text li.ql-indent-2 {
+  padding-left: 4.5em;
+  counter-set: list-3 list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-2 {
+  counter-increment: list-2;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-2 > .ql-ui::before {
+  content: counter(list-2, lower-roman) ". ";
+}
+
+.rich-text .ql-indent-3 {
+  padding-left: 4.5em;
+}
+
+.rich-text li.ql-indent-3 {
+  padding-left: 6em;
+  counter-set: list-4 list-5 list-6 list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-3 {
+  counter-increment: list-3;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-3 > .ql-ui::before {
+  content: counter(list-3, decimal) ". ";
+}
+
+.rich-text .ql-indent-4 {
+  padding-left: 6em;
+}
+
+.rich-text li.ql-indent-4 {
+  padding-left: 7.5em;
+  counter-set: list-5 list-6 list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-4 {
+  counter-increment: list-4;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-4 > .ql-ui::before {
+  content: counter(list-4, lower-alpha) ". ";
+}
+
+.rich-text .ql-indent-5 {
+  padding-left: 7.5em;
+}
+
+.rich-text li.ql-indent-5 {
+  padding-left: 9em;
+  counter-set: list-6 list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-5 {
+  counter-increment: list-5;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-5 > .ql-ui::before {
+  content: counter(list-5, lower-roman) ". ";
+}
+
+.rich-text .ql-indent-6 {
+  padding-left: 9em;
+}
+
+.rich-text li.ql-indent-6 {
+  padding-left: 10.5em;
+  counter-set: list-7 list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-6 {
+  counter-increment: list-6;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-6 > .ql-ui::before {
+  content: counter(list-6, decimal) ". ";
+}
+
+.rich-text .ql-indent-7 {
+  padding-left: 10.5em;
+}
+
+.rich-text li.ql-indent-7 {
+  padding-left: 12em;
+  counter-set: list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-7 {
+  counter-increment: list-7;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-7 > .ql-ui::before {
+  content: counter(list-7, lower-alpha) ". ";
+}
+
+.rich-text .ql-indent-8 {
+  padding-left: 12em;
+}
+
+.rich-text li.ql-indent-8 {
+  padding-left: 13.5em;
+  counter-set: none;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-8 {
+  counter-increment: list-8;
+}
+
+.rich-text li[data-list="ordered"].ql-indent-8 > .ql-ui::before {
+  content: counter(list-8, lower-roman) ". ";
+}
+
+/* TXT-06: ссылка на объект доски — кнопка-метка в строке текста. */
+.rt-object-link {
+  display: inline;
+  margin: 0;
+  padding: 0 0.25em;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rt-object-link:disabled {
+  background: var(--color-surface-hover);
+  color: var(--color-text-subtle);
+  cursor: default;
+}
+
+/* Редактор поверх объекта: поле растёт с текстом, панель и меню — над холстом. */
+.scene-object.rich-editor {
+  display: block;
+  overflow: visible;
+  cursor: text;
+}
+
+.rich-editor .ql-container {
+  position: relative;
+}
+
+.rich-editor .ql-clipboard {
+  position: absolute;
+  top: 50%;
+  left: -100000px;
+  height: 1px;
+  overflow-y: hidden;
+}
+
+.rich-toolbar,
+.rich-slash-menu {
+  position: absolute;
+  z-index: 3;
+  font-size: var(--font-size-md);
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+  text-align: left;
+  text-decoration: none;
+  color: var(--color-text);
+  font-family: var(--font-family);
+  transform: scale(var(--inverse-zoom, 1));
+}
+
+.rich-toolbar {
+  bottom: 100%;
+  left: 0;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  margin-bottom: calc(8px * var(--inverse-zoom, 1));
+  padding: var(--space-1);
+  white-space: nowrap;
+  transform-origin: bottom left;
+}
+
+.rich-mark--bold {
+  font-weight: 700;
+}
+
+.rich-mark--italic {
+  font-style: italic;
+}
+
+.rich-mark--underline {
+  text-decoration: underline;
+}
+
+.rich-mark--strike {
+  text-decoration: line-through;
+}
+
+.rich-link-form {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.rich-slash-menu {
+  transform-origin: top left;
+}
+
+.rich-slash-menu [data-active="true"] {
+  background: var(--color-accent-soft);
+}
+
+/* TXT-06: выбор объекта для ссылки документа. */
+.object-picker-list {
+  display: grid;
+  max-height: 50vh;
+  margin: var(--space-2) 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.object-picker-item {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
+
+.object-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+}

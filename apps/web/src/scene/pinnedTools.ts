@@ -6,8 +6,13 @@ export const PINNED_TOOLS_KEY = "myboard.pinnedTools";
 
 const ALL_IDS: readonly ToolId[] = TOOLS.map((tool) => tool.id);
 
-/** По умолчанию закреплены все инструменты в порядке полного списка. */
-export const DEFAULT_PINNED: readonly ToolId[] = ALL_IDS;
+/**
+ * По умолчанию закреплены инструменты T5.4 в порядке полного списка; документ (T6.1) —
+ * в полном списке All tools, его можно закрепить.
+ */
+export const DEFAULT_PINNED: readonly ToolId[] = ALL_IDS.filter(
+  (id) => id !== "document",
+);
 
 function isToolId(value: unknown): value is ToolId {
   return ALL_IDS.includes(value as ToolId);

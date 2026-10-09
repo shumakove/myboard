@@ -1,8 +1,11 @@
 import * as Y from "yjs";
 import type { Rect } from "../canvas/camera";
 import type { Point } from "../realtime/messages";
+import { isRich, parseDelta, plainText, type DeltaOp } from "../richtext/delta";
+import { deltaToHtml } from "../richtext/html";
 import { boundsOf, snap } from "./geometry";
 import { topmost, withDescendants } from "./groups";
+import { isRichText } from "./objectTypes";
 import {
   creationMeta,
   isNumber,
@@ -15,7 +18,9 @@ import {
 /**
  * CVS-20: копирование, вырезание, дублирование и вставка объектов — на этой доске
  * и между досками. Копия — JSON полей объектов: корни с координатами доски, вложенные
- * объекты групп — относительно своего родителя.
+ * объекты групп — относительно своего родителя. Текст с форматированием (текст
+ * и документ, TXT-01…TXT-06) копируется дельтой, остальной текст — строкой.
+ * TXT-07: для внешних редакторов копия — ещё и HTML с форматированием и простой текст.
  */
 
 /** Тип данных копии в системном буфере обмена (событие copy/paste). */
@@ -72,6 +77,8 @@ export function copyObjects(
     for (const [key, field] of Object.entries(data)) {
       if (!SKIPPED.has(key)) fields[key] = field;
     }
+    const rich = richField(value, object.type);
+    if (rich !== null) fields.text = rich;
     const root = rootIds.has(object.id);
     if (root) {
       // Корень — в координатах доски: у группы это начало координат её объектов.
@@ -83,12 +90,48 @@ export function copyObjects(
   return { format: FORMAT, objects: copied, bounds };
 }
 
-/** Простой текст копии — для вставки в другие программы. */
-export function clipText(clip: Clip): string {
+/** Дельта текста с форматированием; простой текст и прочие типы — `null`. */
+function richField(value: unknown, type: string): DeltaOp[] | null {
+  if (!(value instanceof Y.Map) || !isRichText(type)) return null;
+  const text: unknown = value.get("text");
+  if (!(text instanceof Y.Text)) return null;
+  const delta = text.toDelta() as DeltaOp[];
+  return isRich(delta) ? delta : null;
+}
+
+/** Текст объекта копии как дельта; без текста — `null`. */
+function textOf(object: ClipObject): DeltaOp[] | null {
+  const { text } = object.fields;
+  if (typeof text === "string") return text === "" ? null : [{ insert: text }];
+  return parseDelta(text);
+}
+
+/** Простой текст копии — для вставки в другие программы (CVS-20, TXT-07). */
+export function clipText(
+  clip: Clip,
+  label: (id: string) => string = () => "",
+): string {
   return clip.objects
-    .map((o) => o.fields.text)
-    .filter((text): text is string => typeof text === "string" && text !== "")
+    .map(textOf)
+    .filter((delta) => delta !== null)
+    .map((delta) => plainText(delta, label).replace(/\n+$/, ""))
+    .filter((text) => text !== "")
     .join("\n");
+}
+
+/**
+ * TXT-07: копия как HTML — заголовки, списки, ссылки и начертание сохраняются при
+ * вставке во внешний редактор; текст каждого объекта — своими абзацами.
+ */
+export function clipHtml(
+  clip: Clip,
+  label: (id: string) => string = () => "",
+): string {
+  return clip.objects
+    .map(textOf)
+    .filter((delta) => delta !== null)
+    .map((delta) => deltaToHtml(delta, label))
+    .join("");
 }
 
 /** Разбор копии из буфера или хранилища; чужие и испорченные данные — `null`. */
@@ -183,12 +226,7 @@ export function pasteObjects(
       const map = new Y.Map<unknown>();
       for (const [key, value] of Object.entries(source.fields)) {
         if (SKIPPED.has(key)) continue;
-        map.set(
-          key,
-          key === "text" && typeof value === "string"
-            ? new Y.Text(value)
-            : value,
-        );
+        map.set(key, key === "text" ? textField(value) : value);
       }
       if (root) {
         map.set("x", Number(source.fields.x) + shift.x - parentAnchor.x);
@@ -202,6 +240,16 @@ export function pasteObjects(
     }
   });
   return roots;
+}
+
+/** Текст вставленного объекта — `Y.Text` (с форматированием, если копия — дельта). */
+function textField(value: unknown): unknown {
+  if (typeof value === "string") return new Y.Text(value);
+  const delta = parseDelta(value);
+  if (delta === null) return value;
+  const text = new Y.Text();
+  text.applyDelta(delta);
+  return text;
 }
 
 function zOf(object: ClipObject): number {

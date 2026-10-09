@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("CVS-24 закреплённые инструменты", () => {
-  it("по умолчанию закреплены все инструменты в порядке полного списка", () => {
+  it("по умолчанию закреплены инструменты T5.4; документ — только в полном списке", () => {
     expect(loadPinned()).toEqual([
       "select",
       "lasso",
@@ -22,7 +22,7 @@ describe("CVS-24 закреплённые инструменты", () => {
       "shape",
       "text",
     ]);
-    expect(DEFAULT_PINNED).toEqual(allTools([]));
+    expect(allTools(DEFAULT_PINNED)).toEqual([...DEFAULT_PINNED, "document"]);
   });
 
   it("набор и порядок сохраняются в браузере", () => {
@@ -72,6 +72,7 @@ describe("CVS-24 закреплённые инструменты", () => {
       "lasso",
       "sticky",
       "shape",
+      "document",
     ]);
   });
 });

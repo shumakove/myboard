@@ -1,22 +1,33 @@
+import { RichText, type RichTextActions } from "../richtext/RichText";
 import type { AreaDraft } from "./gestures";
 import type { Guide } from "./guides";
-import { GROUP_TYPE, typeName, typeSpec } from "./objectTypes";
+import { GROUP_TYPE, isRichText, typeName, typeSpec } from "./objectTypes";
 import { frameStyle, objectStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
 
+/** Действия форматированного текста на холсте (TXT-02, TXT-06). */
+export interface RichTextHandlers {
+  /** Отметить пункт списка дел объекта `id`: `end` — перевод строки пункта. */
+  onCheck: (id: string, end: number, checked: boolean) => void;
+  onOpenObject: RichTextActions["onOpenObject"];
+  objectLabel: RichTextActions["objectLabel"];
+}
+
 /**
  * Объекты сцены в порядке отрисовки (CVS-09, CVS-17); текст редактируемого объекта —
- * в редакторе. Группа — невидимая рамка своих объектов; заблокированный объект помечен
- * замком (CVS-19).
+ * в редакторе. Текст и документ — с форматированием (TXT-01…TXT-06). Группа — невидимая
+ * рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
   objects,
   selected,
   editing,
+  rich,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
   editing: string | null;
+  rich: RichTextHandlers;
 }) {
   return (
     <>
@@ -34,14 +45,26 @@ export function SceneLayer({
             aria-selected={selected.has(object.id)}
             style={group ? frameStyle(object) : objectStyle(object)}
           >
-            {!group && editing !== object.id && (
-              <span className="scene-label">
-                {object.text ||
-                  (object.type === "text" ? (
-                    <span className="scene-placeholder">Text</span>
-                  ) : null)}
-              </span>
-            )}
+            {!group &&
+              editing !== object.id &&
+              (isRichText(object.type) ? (
+                <RichText
+                  ops={object.rich ?? []}
+                  placeholder={typeName(object.type)}
+                  actions={{
+                    // CVS-19: у заблокированного объекта пункты не отмечаются.
+                    onCheck: object.locked
+                      ? null
+                      : (end, checked) => {
+                          rich.onCheck(object.id, end, checked);
+                        },
+                    onOpenObject: rich.onOpenObject,
+                    objectLabel: rich.objectLabel,
+                  }}
+                />
+              ) : (
+                <span className="scene-label">{object.text}</span>
+              ))}
             {!group && object.locked && <LockBadge />}
           </div>
         );
