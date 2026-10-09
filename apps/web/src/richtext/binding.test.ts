@@ -98,7 +98,10 @@ describe("COL-01: редактор и Y.Text объекта", () => {
     const undo = new Y.UndoManager(owner.getText("t"));
     const ownerQuill = mountQuill();
     const unbindOwner = bindQuill(ownerQuill, owner.getText("t"));
-    ownerQuill.updateContents(new Delta().insert("base mine").delete(4), "user");
+    ownerQuill.updateContents(
+      new Delta().insert("base mine").delete(4),
+      "user",
+    );
     unbindOwner();
     sync(owner, guest);
     const guestQuill = mountQuill();

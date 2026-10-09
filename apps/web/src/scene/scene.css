@@ -199,6 +199,26 @@
     height: calc(44px * var(--inverse-zoom, 1));
     transform: translate(-50%, -50%);
   }
+
+  /*
+   * BUG-016: у угловых маркеров область касания — снаружи объекта: внутри у края
+   * лежат флажки списка дел и текст, касание должно доставаться им.
+   */
+  .handle-nw::after {
+    transform: translate(-100%, -100%);
+  }
+
+  .handle-ne::after {
+    transform: translate(0, -100%);
+  }
+
+  .handle-sw::after {
+    transform: translate(-100%, 0);
+  }
+
+  .handle-se::after {
+    transform: none;
+  }
 }
 
 .selection-area {

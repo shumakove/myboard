@@ -287,6 +287,16 @@ describe("TXT-04, TXT-06: меню «/» в документе", () => {
     expect(screen.getByRole("menu", { name: "Insert block" })).toBeVisible();
   });
 
+  it("BUG-016: нажатие на поля документа вокруг текста не уводит фокус из редактора", async () => {
+    await documentAfterDivider();
+    const field = screen.getByRole("textbox", { name: "Object text" });
+    const editor = field.closest<HTMLElement>(".scene-editor");
+    if (editor === null) throw new Error("нет редактора");
+    // `false` — действие по умолчанию (перенос фокуса) отменено.
+    expect(fireEvent.mouseDown(editor)).toBe(false);
+    expect(fireEvent.mouseDown(field)).toBe(true);
+  });
+
   it("«/» внутри слова меню не открывает", async () => {
     const { quill } = await documentAfterDivider();
     act(() => {

@@ -491,7 +491,7 @@ export function BoardScene({
               type={editedObject.type}
               text={editing.text}
               style={objectStyle(editedObject)}
-              zoom={camera.zoom}
+              camera={camera}
               objectLabel={label}
               onEdit={(height) => {
                 onRichEdit(editedObject, height);

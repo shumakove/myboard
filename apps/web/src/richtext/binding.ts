@@ -1,11 +1,6 @@
 import type * as Y from "yjs";
 import type { DeltaOp } from "./delta";
-import {
-  type Delta,
-  INLINE_FORMATS,
-  minimalChange,
-  type Quill,
-} from "./quill";
+import { type Delta, INLINE_FORMATS, minimalChange, type Quill } from "./quill";
 
 /** Атрибуты, которые чужая вставка сбрасывает явно, если у неё их нет. */
 const CLEARED: Record<string, null> = Object.fromEntries(

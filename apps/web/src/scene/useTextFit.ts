@@ -1,4 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type * as Y from "yjs";
 import { contentHeight } from "../richtext/measure";
 import { objectMap, writeFields } from "./sceneObjects";

@@ -1,14 +1,21 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
 import type * as Y from "yjs";
+import type { CameraView } from "../realtime/messages";
 import { Button, Menu, MenuItem, TextField } from "../ui";
 import { bindQuill } from "./binding";
 import { contentHeight } from "./measure";
+import {
+  DEFAULT_PLACEMENT,
+  measurePlacement,
+  type EditorPlacement,
+} from "./placement";
 import {
   createQuill,
   type Delta,
@@ -22,12 +29,15 @@ import { applyShortcut, insertedAt } from "./shortcuts";
 import { afterBreak, SLASH_COMMANDS, slashMatches } from "./slashCommands";
 import "./richText.css";
 
-/** Меню «/»: где стоит «/», что набрано после него, выбранный пункт, место на экране. */
+/**
+ * Меню «/»: где стоит «/», что набрано после него, выбранный пункт и строка курсора
+ * в единицах доски относительно редактора (`top` / `bottom` — верх и низ строки).
+ */
 interface Slash {
   start: number;
   query: string;
   active: number;
-  at: { left: number; top: number };
+  at: { left: number; top: number; bottom: number };
 }
 
 interface Range {
@@ -63,7 +73,7 @@ export function RichTextEditor({
   type,
   text,
   style,
-  zoom,
+  camera,
   objectLabel,
   onEdit,
   onDone,
@@ -72,7 +82,8 @@ export function RichTextEditor({
   type: string;
   text: Y.Text;
   style: CSSProperties;
-  zoom: number;
+  /** Вид камеры: панель и меню расставляются по экрану (BUG-012). */
+  camera: CameraView;
   /** Подпись ссылки на объект; `null` — объекта нет. */
   objectLabel: (id: string) => string | null;
   /** Своя правка текста; `height` — нужная высота объекта под содержимое. */
@@ -83,6 +94,10 @@ export function RichTextEditor({
 }) {
   const isDocument = type === "document";
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] =
+    useState<EditorPlacement>(DEFAULT_PLACEMENT);
   const hostRef = useRef<HTMLDivElement>(null);
   const [quill, setQuill] = useState<Quill | null>(null);
   const [formats, setFormats] = useState<Record<string, unknown>>({});
@@ -93,6 +108,7 @@ export function RichTextEditor({
   /** Пока выбирают объект в диалоге, уход фокуса правку не завершает. */
   const holdRef = useRef(false);
   const slashRef = useRef<Slash | null>(null);
+  const zoom = camera.zoom || 1;
   const latest = useRef({ onEdit, objectLabel, zoom });
   useEffect(() => {
     latest.current = { onEdit, objectLabel, zoom };
@@ -123,14 +139,15 @@ export function RichTextEditor({
     };
     const openSlash = (start: number) => {
       const bounds = editor.getBounds(start);
-      const scale = latest.current.zoom || 1;
+      const scale = latest.current.zoom;
       setMenu({
         start,
         query: "",
         active: 0,
         at: {
           left: host.offsetLeft + (bounds?.left ?? 0) / scale,
-          top: host.offsetTop + (bounds?.bottom ?? 0) / scale,
+          top: host.offsetTop + (bounds?.top ?? 0) / scale,
+          bottom: host.offsetTop + (bounds?.bottom ?? 0) / scale,
         },
       });
     };
@@ -196,6 +213,36 @@ export function RichTextEditor({
   };
 
   const matches = slash === null ? [] : slashMatches(slash.query, isDocument);
+
+  // BUG-012: панель и меню — там, где их видно целиком; пересчёт при сдвиге вида,
+  // смене поля, меню и панели.
+  useLayoutEffect(() => {
+    const field = wrapperRef.current;
+    if (field === null) return;
+    let caret = null;
+    if (slash !== null) {
+      const rect = field.getBoundingClientRect();
+      caret = {
+        left: rect.left + slash.at.left * zoom,
+        right: rect.left + slash.at.left * zoom,
+        top: rect.top + slash.at.top * zoom,
+        bottom: rect.top + slash.at.bottom * zoom,
+      };
+    }
+    const next = measurePlacement(
+      field,
+      toolbarRef.current,
+      menuRef.current,
+      caret,
+    );
+    setPlacement((current) =>
+      current.toolbarBelow === next.toolbarBelow &&
+      current.menuAbove === next.menuAbove &&
+      Math.abs(current.menuShift - next.menuShift) < 1
+        ? current
+        : next,
+    );
+  }, [camera, style, slash, link, zoom]);
 
   function runSlash(id: string) {
     if (quill === null || slash === null) return;
@@ -283,6 +330,19 @@ export function RichTextEditor({
       data-canvas-ignore=""
       style={style}
       onKeyDownCapture={onKeyDownCapture}
+      onMouseDown={(event) => {
+        // BUG-016: нажатие на поля объекта вокруг текста (у документа они широкие;
+        // на телефоне сюда приходит и касание, создавшее документ) не уводит фокус.
+        const target = event.target;
+        if (
+          target instanceof Node &&
+          quill !== null &&
+          !quill.root.contains(target) &&
+          !(target instanceof HTMLInputElement)
+        ) {
+          event.preventDefault();
+        }
+      }}
       onKeyDown={(event) => {
         if (event.key === "Escape") onDone();
       }}
@@ -294,7 +354,8 @@ export function RichTextEditor({
       }}
     >
       <div
-        className="rich-toolbar ui-panel"
+        ref={toolbarRef}
+        className={`rich-toolbar ui-panel${placement.toolbarBelow ? " rich-toolbar--below" : ""}`}
         role="toolbar"
         aria-label="Text formatting"
         onMouseDown={(event) => {
@@ -344,8 +405,12 @@ export function RichTextEditor({
       {slash !== null && matches.length > 0 && (
         <Menu
           label="Insert block"
-          className="rich-slash-menu"
-          style={{ left: slash.at.left, top: slash.at.top }}
+          ref={menuRef}
+          className={`rich-slash-menu${placement.menuAbove ? " rich-slash-menu--above" : ""}`}
+          style={{
+            left: slash.at.left + placement.menuShift / zoom,
+            top: placement.menuAbove ? slash.at.top : slash.at.bottom,
+          }}
           onMouseDown={(event) => {
             event.preventDefault();
           }}

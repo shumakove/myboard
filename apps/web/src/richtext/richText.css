@@ -315,6 +315,20 @@
   transform-origin: bottom left;
 }
 
+/* BUG-012: у верхнего края холста или под панелью интерфейса — под полем. */
+.rich-toolbar--below {
+  top: 100%;
+  bottom: auto;
+  margin-top: calc(8px * var(--inverse-zoom, 1));
+  margin-bottom: 0;
+  transform-origin: top left;
+}
+
+/* UI-04 (BUG-015): кнопки начертания — квадратные, на телефоне 44×44. */
+.rich-mark {
+  min-width: var(--control-size);
+}
+
 .rich-mark--bold {
   font-weight: 700;
 }
@@ -339,6 +353,11 @@
 
 .rich-slash-menu {
   transform-origin: top left;
+}
+
+/* BUG-012: у нижнего края холста или над миникартой — над строкой. */
+.rich-slash-menu--above {
+  transform: scale(var(--inverse-zoom, 1)) translateY(-100%);
 }
 
 .rich-slash-menu [data-active="true"] {

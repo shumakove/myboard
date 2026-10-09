@@ -41,6 +41,8 @@ export function fittedHeight(
   measured: number,
 ): number | null {
   const fits =
-    type === "document" ? measured <= current : Math.abs(measured - current) < 1;
+    type === "document"
+      ? measured <= current
+      : Math.abs(measured - current) < 1;
   return fits ? null : measured;
 }
