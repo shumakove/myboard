@@ -24,11 +24,14 @@ async function apiCreateBoard(request: APIRequestContext, title: string): Promis
   return (await res.json()) as Board;
 }
 
+/** Контейнер базы проверяемого стека: проект Compose из QA_COMPOSE_PROJECT (по умолчанию myboard-qa). */
+const PG_CONTAINER = `${process.env.QA_COMPOSE_PROJECT || 'myboard-qa'}-postgres-1`;
+
 /** Подготовка данных (способ из handoff T2.1): сдвинуть дату изменения доски в прошлое. */
 function ageBoard(id: string, days: number): void {
   if (!UUID.test(id)) throw new Error(`не uuid: ${id}`);
   const sql = `UPDATE boards SET updated_at = now() - interval '${days} days' WHERE id = '${id}'`;
-  execFileSync('docker', ['exec', 'myboard-qa-postgres-1', 'psql', '-U', 'myboard', '-d', 'myboard', '-c', sql]);
+  execFileSync('docker', ['exec', PG_CONTAINER, 'psql', '-U', 'myboard', '-d', 'myboard', '-c', sql]);
 }
 
 async function signIn(page: Page, user: CreatedUser) {

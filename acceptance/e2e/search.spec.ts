@@ -712,7 +712,6 @@ test('UI-04 on a phone search and object link are reachable, targets are at leas
 
 test('UI-03 BUG-010 search panel closes with Escape when focus is on its button, not in the field', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-010: Escape закрывает панель поиска только из поля ввода');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   try {
     const page = owner.page;
