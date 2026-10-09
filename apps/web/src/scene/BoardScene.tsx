@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -20,6 +21,8 @@ import { topmost } from "./groups";
 import type { Guide } from "./guides";
 import { typeSpec, type ObjectType } from "./objectTypes";
 import { AreaOverlay, GuidesOverlay, SceneLayer } from "./SceneLayer";
+import { REDO_KEYS, UNDO_KEYS } from "./keymap";
+import { usePinnedTools } from "./pinnedTools";
 import { arrangeMenu, boardMenu, objectMenu } from "./sceneMenus";
 import {
   createObject,
@@ -39,6 +42,7 @@ import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
 import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
+import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
 type Menu =
@@ -53,7 +57,7 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
 };
 
 /**
- * Сцена доски: объекты документа на холсте, инструменты, выделение и правки (T5.2, T5.3).
+ * Сцена доски: объекты документа на холсте, инструменты, выделение и правки (T5.2–T5.4).
  * Объекты общие — правку одного участника видят все (документ Yjs); инструмент,
  * выделение и меню — свои у каждой вкладки.
  *
@@ -61,7 +65,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * CVS-12 перемещение, CVS-13 автопрокрутка, CVS-14 размер и поворот, CVS-15 выравнивание
  * и распределение, CVS-16 направляющие, CVS-17 группы, CVS-18 порядок слоёв, CVS-19
  * блокировка, CVS-20 буфер обмена и дублирование, CVS-21 удаление, CVS-22 автор и даты,
- * CVS-23 контекстное меню, MOB-03 долгое нажатие.
+ * CVS-23 контекстное меню, MOB-03 долгое нажатие; T5.4 — CVS-07 отмена и повтор своих
+ * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши.
  */
 export function BoardScene({
   board,
@@ -106,6 +111,8 @@ export function BoardScene({
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
+  const { history, canUndo, canRedo } = useUndoHistory(board);
+  const { pinned, update: updatePinned } = usePinnedTools();
 
   // Объект, удалённый другим участником, пропадает из выделения сам.
   const selected = useMemo(
@@ -162,7 +169,7 @@ export function BoardScene({
   });
   const { units, editable } = commands;
 
-  const gestures = useSceneGestures({
+  const sceneGestures = useSceneGestures({
     objects,
     scene,
     selection,
@@ -184,14 +191,29 @@ export function BoardScene({
     },
     editText,
   });
+  const gestures = useMemo(
+    () => withUndoSteps(sceneGestures, history),
+    [sceneGestures, history],
+  );
 
-  useSceneShortcuts(
-    commands,
-    useCallback(() => {
+  // CVS-07: сеанс правки текста — один шаг отмены.
+  const editingId = editing?.id ?? null;
+  useEffect(() => {
+    if (editingId === null) return;
+    history.begin();
+    return () => {
+      history.end();
+    };
+  }, [editingId, history]);
+
+  useSceneShortcuts(commands, {
+    onEscape: useCallback(() => {
       setSelection([]);
       setTool("select");
     }, []),
-  );
+    onTool: setTool,
+    history,
+  });
 
   /** CVS-09: инструмент отпустили над холстом — объект встаёт в эту точку. */
   function drop(type: ObjectType, client: Point) {
@@ -262,8 +284,38 @@ export function BoardScene({
 
   return (
     <div className="board-scene">
-      <ToolPanel tool={tool} onTool={setTool} onDrop={drop}>
+      <ToolPanel
+        tool={tool}
+        pinned={pinned}
+        onTool={setTool}
+        onPinned={updatePinned}
+        onDrop={drop}
+      >
         <span role="group" aria-label="Board actions" className="board-actions">
+          <Button
+            variant="ghost"
+            className="tool-button"
+            title="Undo your last change (Ctrl+Z, ⌘Z)."
+            aria-keyshortcuts={UNDO_KEYS}
+            disabled={!canUndo}
+            onClick={() => {
+              history.undo();
+            }}
+          >
+            Undo
+          </Button>
+          <Button
+            variant="ghost"
+            className="tool-button"
+            title="Redo your undone change (Ctrl+Shift+Z, ⌘⇧Z, Ctrl+Y)."
+            aria-keyshortcuts={REDO_KEYS}
+            disabled={!canRedo}
+            onClick={() => {
+              history.redo();
+            }}
+          >
+            Redo
+          </Button>
           <Button
             variant="ghost"
             className="tool-button"

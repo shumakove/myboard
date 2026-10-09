@@ -38,4 +38,35 @@ describe("UI-01, UI-02: единая светлая тема", () => {
       .map(([path]) => path);
     expect(declaring).toEqual([]);
   });
+
+  it("UI-01: серая шкала и цвета текста, границ, теней — чистые серые (R = G = B)", () => {
+    const theme = sheets[THEME] ?? "";
+    const grays = [...theme.matchAll(/--gray-\d+:\s*#([0-9a-f]{6});/gi)].map(
+      (m) => m[1] ?? "",
+    );
+    expect(grays.length).toBeGreaterThanOrEqual(10);
+    // Тени и затемнение — тоже без оттенка; полупрозрачный акцент — не серый.
+    const shades = [
+      ...theme.matchAll(/rgb\((\d+) (\d+) (\d+) \/ [\d.]+%\)/g),
+    ].filter((m) => !m[0].startsWith("rgb(67 89 236"));
+    const tinted = [
+      ...grays.filter((hex) => {
+        const [r, g, b] = [0, 2, 4].map((k) => hex.slice(k, k + 2));
+        return r !== g || g !== b;
+      }),
+      ...shades.filter((m) => m[1] !== m[2] || m[2] !== m[3]).map((m) => m[0]),
+    ];
+    expect(tinted).toEqual([]);
+  });
+
+  it("BUG-009: высоту кнопок задаёт только ui.css — тихие кнопки одной высоты везде", () => {
+    const overrides = Object.entries(sheets)
+      .filter(([path]) => path !== "/src/ui/ui.css")
+      .flatMap(([path, css]) =>
+        [...css.matchAll(/([^{}]*\.ui-button[^{}]*)\{([^}]*)\}/g)]
+          .filter((m) => /(?:^|[\s;])(?:min-)?height\s*:/.test(m[2] ?? ""))
+          .map((m) => `${path}: ${(m[1] ?? "").trim()}`),
+      );
+    expect(overrides).toEqual([]);
+  });
 });

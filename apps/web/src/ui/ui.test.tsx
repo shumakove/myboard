@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
   Button,
@@ -133,6 +134,39 @@ describe("UI-03: меню, диалог, подсказка, вкладки, п�
     );
     await userEvent.keyboard("{Escape}");
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("Escape закрывает диалог, даже если другой обработчик этой клавиши перерисовал страницу", () => {
+    // В браузере между обработчиками одного нажатия выполняются микрозадачи: обработчик,
+    // зарегистрированный раньше диалога, успевает перерисовать его родителя (T5.4).
+    let rerender: () => void = () => undefined;
+    const earlier = () => {
+      flushSync(rerender);
+    };
+    window.addEventListener("keydown", earlier);
+    function Page() {
+      const [open, setOpen] = useState(true);
+      const [, setTick] = useState(0);
+      rerender = () => {
+        setTick((n) => n + 1);
+      };
+      return open ? (
+        <Dialog
+          title="All tools"
+          onClose={() => {
+            setOpen(false);
+          }}
+        >
+          <p>Body</p>
+        </Dialog>
+      ) : null;
+    }
+    render(<Page />);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    window.removeEventListener("keydown", earlier);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("подсказка появляется при фокусе с клавиатуры и описывает элемент", async () => {

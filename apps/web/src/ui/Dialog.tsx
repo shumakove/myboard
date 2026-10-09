@@ -1,4 +1,4 @@
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { classNames } from "./classNames";
 
 /**
@@ -17,15 +17,21 @@ export function Dialog({
   children: ReactNode;
 }) {
   const titleId = useId();
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  // Один обработчик на всё время диалога: если другой обработчик той же клавиши
+  // перерисует страницу посреди события, переподписка потеряла бы это нажатие.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") close.current();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="ui-backdrop">

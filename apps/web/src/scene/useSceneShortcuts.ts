@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import { isTypingTarget } from "../canvas/keyboard";
 import { CLIPBOARD_MIME, clipText, loadClip, parseClip } from "./clipboard";
+import { historyKey, toolKey } from "./keymap";
+import type { ToolId } from "./tools";
+import type { UndoHistory } from "./undoHistory";
 import type { SceneCommands } from "./useSceneCommands";
 
 /** Сочетание с Ctrl (⌘ на Mac) без Alt: команды буфера и дублирования. */
@@ -24,8 +27,21 @@ export function copyToClipboard(commands: SceneCommands, cut: boolean): void {
   if (cut) commands.remove?.();
 }
 
+/** Пока открыт модальный диалог (полный список инструментов, Share), клавиши — его. */
+function dialogOpen(): boolean {
+  return document.querySelector('[aria-modal="true"]') !== null;
+}
+
+export interface ShortcutActions {
+  onEscape: () => void;
+  onTool: (tool: ToolId) => void;
+  history: UndoHistory;
+}
+
 /**
- * Клавиши и события буфера обмена сцены:
+ * Клавиши и события буфера обмена сцены (CVS-25; камера — useCameraKeys, CVS-02):
+ * - CVS-25: V, L, N, S, T — инструменты Select, Lasso, Sticky note, Shape, Text;
+ * - CVS-07: Ctrl/⌘+Z — отмена, Ctrl/⌘+Shift+Z и Ctrl+Y — повтор своих правок;
  * - CVS-21: Delete/Backspace удаляют выделенное; Escape снимает выделение;
  * - CVS-20: Ctrl/⌘+C, X, V — копирование, вырезание, вставка через системный буфер
  *   (объекты — своим типом данных, текст — простым текстом), Ctrl/⌘+D — дубликат.
@@ -35,7 +51,7 @@ export function copyToClipboard(commands: SceneCommands, cut: boolean): void {
  */
 export function useSceneShortcuts(
   commands: SceneCommands,
-  onEscape: () => void,
+  { onEscape, onTool, history }: ShortcutActions,
 ): void {
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -47,7 +63,26 @@ export function useSceneShortcuts(
     const hasSelection = commands.units.length > 0;
 
     function keydown(event: KeyboardEvent) {
-      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      if (
+        event.defaultPrevented ||
+        isTypingTarget(event.target) ||
+        dialogOpen()
+      ) {
+        return;
+      }
+      const step = historyKey(event);
+      if (step !== null) {
+        event.preventDefault();
+        if (step === "undo") history.undo();
+        else history.redo();
+        return;
+      }
+      const tool = toolKey(event);
+      if (tool !== null) {
+        event.preventDefault();
+        onTool(tool);
+        return;
+      }
       const command = commandKey(event);
       if (command === "d") {
         event.preventDefault(); // не закладка браузера
@@ -108,7 +143,7 @@ export function useSceneShortcuts(
       window.removeEventListener("cut", copyOrCut);
       window.removeEventListener("paste", paste);
     };
-  }, [commands, onEscape]);
+  }, [commands, onEscape, onTool, history]);
 
   useEffect(
     () => () => {
