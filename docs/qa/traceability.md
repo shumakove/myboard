@@ -77,14 +77,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | TXT-03 | T6.1 | acceptance/e2e/text.spec.ts (TXT-03 shortcuts…) | PASS |
 | TXT-04 | T6.1 | acceptance/e2e/text.spec.ts (TXT-04 *, BUG-012, BUG-013, BUG-017) | PASS (BUG-017 minor) |
 | TXT-05 | T6.1 | acceptance/e2e/text.spec.ts (TXT-05 …) | PASS |
-| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …, MOB-06 TXT-02 TXT-06 BUG-016) | PASS |
+| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …, MOB-06 TXT-02 TXT-06 BUG-016, TXT-06 BUG-018) | FAIL (BUG-018 major, найден в T6.2: правки документа теряются сервером при перезагрузке под нагрузкой) |
 | TXT-07 | T6.1 | acceptance/e2e/text.spec.ts (TXT-07 …) | PASS |
 | TXT-08 | T6.1 | acceptance/e2e/text.spec.ts (TXT-08 *, BUG-011) | PASS |
-| STK-01 | T6.2 | — | не проверено |
-| STK-02 | T6.2 | — | не проверено |
-| STK-03 | T6.2 | — | не проверено |
-| STK-04 | T6.2 | — | не проверено |
-| STK-05 | T6.2 | — | не проверено |
+| STK-01 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-01 *, desktop + mobile) | PASS (T6.2 REJECTED по регрессии, BUG-018) |
+| STK-02 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-02 *) | PASS (T6.2 REJECTED по регрессии, BUG-018) |
+| STK-03 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-03 *, CVS-22, CVS-08, COL-01) | PASS (T6.2 REJECTED по регрессии, BUG-018) |
+| STK-04 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-04 *) | PASS (T6.2 REJECTED по регрессии, BUG-018) |
+| STK-05 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-05 *, desktop + mobile) | PASS (T6.2 REJECTED по регрессии, BUG-018) |
 | SHP-01 | T6.3 | — | не проверено |
 | SHP-02 | T6.3 | — | не проверено |
 | SHP-03 | T6.3 | — | не проверено |
