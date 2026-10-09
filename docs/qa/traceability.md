@@ -46,7 +46,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-04 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (CVS-04, desktop + mobile); scene.spec.ts «CVS-04 BUG-003 …» | PASS (BUG-003 исправлен в ad33d81, проверено) |
 | CVS-05 | T5.1 | acceptance/e2e/camera.spec.ts (CVS-05, desktop + mobile) | PASS |
 | CVS-06 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-06, desktop + mobile) | PASS |
-| CVS-07 | T5.4 | — | не проверено |
+| CVS-07 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-07 *, desktop + mobile) | PASS |
 | CVS-08 | T5.5 | — | не проверено |
 | CVS-09 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-09, ARCH-T52-01; desktop + mobile) | PASS |
 | CVS-10 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-10, desktop) | PASS (BUG-004 исправлен в 018aed6, проверено) |
@@ -63,8 +63,8 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-21 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-21, desktop + mobile) | PASS |
 | CVS-22 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-22, desktop) | PASS |
 | CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
-| CVS-24 | T5.4 | — | не проверено |
-| CVS-25 | T5.4 | — | не проверено |
+| CVS-24 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-24 *, desktop + mobile) | PASS |
+| CVS-25 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-25 *) | PASS |
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
 | MOB-02 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile) | PASS (BUG-006 исправлен в 403f6f8, проверено) |
@@ -171,10 +171,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | BAK-04 | T10.2 | — | не проверено |
 | BAK-05 | T10.2 | — | не проверено |
 | BAK-06 | T10.1, T11.2 (итог) | — | не проверено |
-| UI-01 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile) | PASS |
+| UI-01 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile; с T5.4 — строго R = G = B) | PASS |
 | UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
-| UI-03 | T5.6 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile) | PASS (BUG-009 minor открыт — высота тихих кнопок 36/32 px) |
-| UI-04 | T5.6 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile) | PASS |
+| UI-03 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape) | PASS (BUG-009 исправлен в T5.4) |
+| UI-04 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools) | PASS |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
 
