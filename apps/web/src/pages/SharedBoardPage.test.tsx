@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, waitFor, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
@@ -170,9 +170,10 @@ describe("/b/{token}?object={id} — ссылка на объект (SHR-07)", (
     );
     openAt(`/b/tok-1?object=${id}`);
     await screen.findByText("You joined as Kate.");
-
+    // Канал открывается в эффекте страницы — ждём сокет, а не только текст.
+    const socket = await waitFor(() => FakeSocket.last());
     act(() => {
-      boardServer.accept(FakeSocket.last());
+      boardServer.accept(socket);
     });
 
     const linked = document.querySelector(`[data-object-id="${id}"]`);

@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  waitFor,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
@@ -94,9 +101,10 @@ describe("/boards/{id} — своя доска (BRD-01)", () => {
       "Plan",
     );
     openAt("/boards/b-1");
-    await screen.findByText("Connecting to the board…");
+    // Канал открывается в эффекте страницы — ждём сокет, а не только текст.
+    const socket = await waitFor(() => FakeSocket.last());
     act(() => {
-      boardServer.accept(FakeSocket.last());
+      boardServer.accept(socket);
     });
     const user = userEvent.setup();
 
