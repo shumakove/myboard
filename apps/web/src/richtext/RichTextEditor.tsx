@@ -333,11 +333,12 @@ export function RichTextEditor({
       onMouseDown={(event) => {
         // BUG-016: нажатие на поля объекта вокруг текста (у документа они широкие;
         // на телефоне сюда приходит и касание, создавшее документ) не уводит фокус.
+        // Поле ищется по DOM: касание приходит сразу после создания редактора.
         const target = event.target;
+        const field = hostRef.current?.querySelector(".ql-editor");
         if (
           target instanceof Node &&
-          quill !== null &&
-          !quill.root.contains(target) &&
+          field?.contains(target) !== true &&
           !(target instanceof HTMLInputElement)
         ) {
           event.preventDefault();

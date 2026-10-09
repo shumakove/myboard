@@ -87,6 +87,36 @@ function neighborsOf(
     .flatMap((o) => boundsOf([o]) ?? []);
 }
 
+/**
+ * BUG-016 (TXT-02, UI-04): область касания углового маркера — 44×44 и закрывает флажок
+ * списка дел у края выделенного блока. Нажатие на маркер без движения размер не меняет —
+ * оно достаётся флажку под маркером.
+ */
+function checkUnder(press: CanvasPress): void {
+  const canvas =
+    press.target instanceof Element
+      ? press.target.closest(".board-canvas")
+      : null;
+  if (canvas === null) return;
+  const origin = canvas.getBoundingClientRect();
+  const x = origin.left + press.screen.x;
+  const y = origin.top + press.screen.y;
+  const boxes = canvas.querySelectorAll<HTMLInputElement>(
+    '.scene-object input[type="checkbox"]',
+  );
+  const checkbox = [...boxes].find((box) => {
+    const rect = box.getBoundingClientRect();
+    return (
+      rect.width > 0 &&
+      x >= rect.left &&
+      x <= rect.right &&
+      y >= rect.top &&
+      y <= rect.bottom
+    );
+  });
+  checkbox?.click();
+}
+
 /** Жест, который ничего не меняет: заблокированный объект не двигается (CVS-19). */
 function still(click?: () => void): Gesture {
   const noop = () => undefined;
@@ -188,13 +218,18 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
             c.scene,
             selected.map((o) => o.id),
           ).filter((o) => o.type !== GROUP_TYPE);
-          return resizeGesture(
-            c.objects,
-            selected,
-            leaves,
-            handle as Corner,
-            c.actor,
-          );
+          return {
+            ...resizeGesture(
+              c.objects,
+              selected,
+              leaves,
+              handle as Corner,
+              c.actor,
+            ),
+            click: () => {
+              checkUnder(press);
+            },
+          };
         }
         if (leafId !== null) {
           const objectId = selectionTarget(c.scene, leafId, c.selection);

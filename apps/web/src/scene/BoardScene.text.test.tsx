@@ -6,7 +6,7 @@ import { createBoardDocument } from "../realtime/boardDocument";
 import { Quill } from "../richtext/quill";
 import "../richtext/testQuill";
 import { createObject, objectText } from "./sceneObjects";
-import { click, element, renderScene, scene } from "./testScene";
+import { click, element, handle, renderScene, scene } from "./testScene";
 import { TEXT_STYLE_KEY } from "./textStyle";
 
 // T6.1: текст и документ (TXT-01…TXT-08) — через интерфейс сцены.
@@ -101,6 +101,24 @@ describe("TXT-02: список дел на холсте", () => {
       { insert: "\n", attributes: { list: "checked" } },
     ]);
     expect(screen.getByRole("checkbox", { name: "Done" })).toBeChecked();
+  });
+
+  it("BUG-016: касание маркера размера над флажком выделенного блока отмечает пункт", () => {
+    const { board, id } = boardWithTodo();
+    renderScene(board);
+    click(element(id), [30, 10]);
+    const checkbox = screen.getByRole("checkbox", { name: "Done" });
+    checkbox.getBoundingClientRect = () => new DOMRect(4, 4, 16, 16);
+    const before = scene(board)[0];
+    click(handle("nw"), [10, 10], { pointerType: "touch" });
+    expect(objectText(board.objects, id)?.toDelta()).toEqual([
+      { insert: "Milk" },
+      { insert: "\n", attributes: { list: "checked" } },
+    ]);
+    expect(scene(board)[0]).toMatchObject({
+      width: before?.width,
+      height: before?.height,
+    });
   });
 
   it("CVS-19: у заблокированного блока флажок не отмечается", () => {
