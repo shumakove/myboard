@@ -7,6 +7,7 @@ import {
 } from "../realtime/boardDocument";
 import type { CameraView } from "../realtime/messages";
 import { BoardScene } from "./BoardScene";
+import type { ComponentProps } from "react";
 import { BoardSettingsControls } from "./BoardSettingsControls";
 import { createObject, readScene, type SceneObject } from "./sceneObjects";
 
@@ -18,6 +19,10 @@ import { createObject, readScene, type SceneObject } from "./sceneObjects";
 export function renderScene(
   board: BoardDocument = createBoardDocument(),
   userName = "Alice",
+  props: Pick<
+    ComponentProps<typeof BoardScene>,
+    "focusObject" | "boardLink"
+  > = {},
 ) {
   const cameras: CameraView[] = [];
   function Harness() {
@@ -34,6 +39,7 @@ export function renderScene(
           onMove={setCamera}
           onPointer={() => undefined}
           onResize={() => undefined}
+          {...props}
         />
       </>
     );

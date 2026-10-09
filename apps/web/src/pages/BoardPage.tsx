@@ -9,6 +9,7 @@ import {
 import { useCurrentAccount } from "../account/accountContext";
 import { BoardLive } from "../realtime/BoardLive";
 import { ShareDialog } from "../sharing/ShareDialog";
+import { getShareLink } from "../sharing/sharingApi";
 import "../account/account.css";
 import { Button, buttonClass, FloatingPanel } from "../ui";
 
@@ -20,7 +21,7 @@ type BoardState =
 /**
  * `/boards/{id}` — своя доска (BRD-01 открывает её сразу после создания).
  * Чужая, удалённая и несуществующая доска одинаково «не найдена». Кнопка Share — ссылка
- * для участников (SHR-01, SHR-06). Документ доски синхронизируется по `/api/ws` (COL-01);
+ * для участников (SHR-01, SHR-06), из неё же — ссылка на объект (SHR-07). Документ доски синхронизируется по `/api/ws` (COL-01);
  * холст — T5.*.
  */
 export function BoardPage() {
@@ -77,6 +78,7 @@ export function BoardPage() {
             target={{ kind: "owner", boardId: state.board.id }}
             checkAccess={() => ownerHasAccess(state.board.id)}
             userName={account.status === "signedIn" ? account.name : undefined}
+            boardLink={() => shareUrl(state.board.id)}
           />
           {sharing && (
             <ShareDialog
@@ -90,6 +92,11 @@ export function BoardPage() {
       )}
     </main>
   );
+}
+
+/** SHR-07: ссылка на объект строится из действующей ссылки на доску. */
+async function shareUrl(boardId: string): Promise<string> {
+  return (await getShareLink(boardId)).url;
 }
 
 /** После разрыва канала: доска ещё своя и не удалена? Без сессии клиент уводит на /login. */

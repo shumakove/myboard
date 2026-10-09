@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   boardToScreen,
   centerOn,
+  focusOn,
   HOME,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -108,5 +109,24 @@ describe("камера холста", () => {
     const camera = pinch(HOME, [same, same], [same, { x: 20, y: 10 }], SIZE);
     expect(camera.zoom).toBe(1);
     expect(Number.isFinite(camera.x)).toBe(true);
+  });
+
+  it("CVS-08, SHR-07: переход к объекту — центр вида в его середине, масштаб 100 %", () => {
+    expect(focusOn({ x: 100, y: 200, width: 200, height: 100 }, SIZE)).toEqual({
+      x: 200,
+      y: 250,
+      zoom: 1,
+    });
+  });
+
+  it("CVS-08, SHR-07: крупный объект помещается в вид с полями", () => {
+    const view = focusOn({ x: 0, y: 0, width: 1408, height: 100 }, SIZE);
+    expect(view).toEqual({ x: 704, y: 50, zoom: 0.5 });
+  });
+
+  it("CVS-08, SHR-07: без размера вида — масштаб 100 %", () => {
+    expect(
+      focusOn({ x: 0, y: 0, width: 10, height: 10 }, { width: 0, height: 0 }),
+    ).toEqual({ x: 5, y: 5, zoom: 1 });
   });
 });

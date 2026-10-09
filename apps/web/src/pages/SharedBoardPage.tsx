@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type SubmitEvent } from "react";
-import { useParams } from "wouter";
+import { useParams, useSearch } from "wouter";
 import {
   joinSharedBoard,
   LINK_UNAVAILABLE,
@@ -9,6 +9,7 @@ import {
   type SharedBoard,
 } from "../sharing/sharingApi";
 import { BoardLive } from "../realtime/BoardLive";
+import { linkedObjectId, sharedBoardUrl } from "../sharing/objectLink";
 import "../account/account.css";
 import { Button, FloatingPanel, TextField } from "../ui";
 
@@ -22,10 +23,12 @@ type PageState =
  * `/b/{token}` — участник по ссылке без учётной записи (SHR-02): сначала имя на сессию
  * (SHR-03), затем доска. Отозванная и несуществующая ссылка — один отказ (SHR-05).
  * Документ доски синхронизируется по `/api/ws` с теми же правами, что у владельца
- * (COL-01, SHR-04); холст — T5.*; переход к объекту `?object={id}` — SHR-07, T5.5.
+ * (COL-01, SHR-04). `?object={id}` — ссылка на объект: после загрузки документа вид
+ * переходит к нему (SHR-07); с отозванным токеном — тот же отказ.
  */
 export function SharedBoardPage() {
   const { token } = useParams<{ token: string }>();
+  const objectId = linkedObjectId(useSearch());
   const [state, setState] = useState<PageState>({ status: "loading" });
 
   useEffect(() => {
@@ -110,6 +113,8 @@ export function SharedBoardPage() {
         checkAccess={() => participantHasAccess(token)}
         onClosed={recheck}
         userName={board.participant.name}
+        objectId={objectId}
+        boardLink={() => Promise.resolve(sharedBoardUrl(token))}
       />
     </main>
   );

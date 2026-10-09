@@ -32,6 +32,8 @@ export interface SceneObject extends Frame {
   parent: string | null;
   z: number;
   text: string;
+  /** Теги объекта (STK-03, KBN-02) — ищутся вместе с текстом (CVS-08). */
+  tags: string[];
   style: Partial<Record<StyleKey, string | number>>;
   /** Начало координат родителя на доске; `x`, `y` рамки — уже в координатах доски. */
   origin: Point;
@@ -101,13 +103,14 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       if (bounds === null) return; // пустая группа не рисуется
       frame = { ...bounds, rotation: 0 };
     }
-    const { id, type, parent, z, text, style, meta } = object;
+    const { id, type, parent, z, text, tags, style, meta } = object;
     scene.splice(at, 0, {
       id,
       type,
       parent,
       z,
       text,
+      tags,
       style,
       meta,
       ...frame,
@@ -177,10 +180,24 @@ function readObject(id: string, value: unknown): RawObject | null {
     rotation: isNumber(record.rotation) ? record.rotation : 0,
     z: isNumber(record.z) ? record.z : 0,
     text: typeof record.text === "string" ? record.text : "",
+    tags: readTags(record.tags),
     style,
     lockedSelf: record.locked === true,
     meta,
   };
+}
+
+/**
+ * Теги — `Y.Array` строк (после `toJSON` — массив) под ключом `tags`; одинаковые и
+ * пустые отбрасываются (docs/decisions.md, T5.5).
+ */
+function readTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const tags = value
+    .filter((tag): tag is string => typeof tag === "string")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== "");
+  return [...new Set(tags)];
 }
 
 export function isNumber(value: unknown): value is number {

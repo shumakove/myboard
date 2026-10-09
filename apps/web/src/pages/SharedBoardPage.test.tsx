@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, waitFor, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
@@ -7,11 +7,12 @@ import { board } from "../library/fakeLibraryServer";
 import { installFakeSharingServer } from "../sharing/fakeSharingServer";
 import { FakeBoardServer, FakeSocket } from "../realtime/fakeSocket";
 import { AppRoutes } from "../routes";
+import { createObject } from "../scene/sceneObjects";
 
 function openAt(path: string) {
   const location = memoryLocation({ path, record: true });
   render(
-    <Router hook={location.hook}>
+    <Router hook={location.hook} searchHook={location.searchHook}>
       <AppRoutes />
     </Router>,
   );
@@ -149,5 +150,64 @@ describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", (
     );
     expect(screen.queryByRole("status")).toBeNull();
     expect(FakeSocket.instances).toHaveLength(1);
+  });
+});
+
+describe("/b/{token}?object={id} — ссылка на объект (SHR-07)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it("SHR-07: после загрузки документа вид переходит к объекту и выделяет его", async () => {
+    guestServer({ "tok-1": "Kate" });
+    const boardServer = new FakeBoardServer();
+    const id = createObject(
+      boardServer.doc.getMap("objects"),
+      "sticky",
+      { x: 2000, y: -600 },
+      "Linked",
+    );
+    openAt(`/b/tok-1?object=${id}`);
+    await screen.findByText("You joined as Kate.");
+    // Канал открывается в эффекте страницы — ждём сокет, а не только текст.
+    const socket = await waitFor(() => FakeSocket.last());
+    act(() => {
+      boardServer.accept(socket);
+    });
+
+    const linked = document.querySelector(`[data-object-id="${id}"]`);
+    expect(linked).toHaveAttribute("aria-selected", "true");
+    // CVS-05 запоминает вид: центр — в середине стикера 200×200.
+    expect(
+      JSON.parse(localStorage.getItem("myboard.camera.b-1") ?? "null"),
+    ).toEqual({
+      x: 2100,
+      y: -500,
+      zoom: 1,
+    });
+  });
+
+  it("SHR-07: пока документ не получен, вид не трогается", async () => {
+    guestServer({ "tok-1": "Kate" });
+    openAt("/b/tok-1?object=abc");
+    await screen.findByText("You joined as Kate.");
+
+    expect(
+      screen.queryByText("The linked object is not on this board."),
+    ).toBeNull();
+  });
+
+  it("SHR-07: ссылка на объект с отозванным токеном — тот же отказ", async () => {
+    guestServer({ "tok-old": "Kate" });
+    openAt("/b/tok-old?object=abc");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This link is not available.",
+    );
+    expect(screen.queryByText("Roadmap")).toBeNull();
+    expect(
+      FakeSocket.instances.filter((s) => s.url.includes("tok-old")),
+    ).toEqual([]);
   });
 });

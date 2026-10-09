@@ -80,6 +80,8 @@ export function objectMenu(
     editText: (() => void) | null;
     /** Копия в системный буфер; `cut` — затем удалить. */
     copyToClipboard: (cut: boolean) => void;
+    /** SHR-07: ссылка на один выделенный объект. */
+    copyLink: (() => void) | null;
   },
 ): MenuItem[] {
   const count = commands.units.length;
@@ -96,6 +98,7 @@ export function objectMenu(
         }),
     ),
     ...item("Duplicate", commands.duplicate),
+    ...item("Copy link to object", actions.copyLink),
     ...item("Group", commands.group),
     ...item("Ungroup", commands.ungroup),
     ...item("Lock", commands.lock),
