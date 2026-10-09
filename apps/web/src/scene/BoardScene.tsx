@@ -21,8 +21,22 @@ import { ContextMenu, type MenuItem } from "./ContextMenu";
 import type { AreaDraft } from "./gestures";
 import { topmost } from "./groups";
 import type { Guide } from "./guides";
-import { typeSpec, type ObjectType } from "./objectTypes";
-import { AreaOverlay, GuidesOverlay, SceneLayer } from "./SceneLayer";
+import { ObjectPicker } from "../richtext/ObjectPicker";
+import { RichTextEditor } from "../richtext/RichTextEditor";
+import { objectLabel } from "./objectLabel";
+import { objectStyle } from "./objectStyle";
+import {
+  GROUP_TYPE,
+  isRichText,
+  typeSpec,
+  type ObjectType,
+} from "./objectTypes";
+import {
+  AreaOverlay,
+  GuidesOverlay,
+  SceneLayer,
+  type RichTextHandlers,
+} from "./SceneLayer";
 import { REDO_KEYS, UNDO_KEYS } from "./keymap";
 import { usePinnedTools } from "./pinnedTools";
 import { arrangeMenu, boardMenu, objectMenu } from "./sceneMenus";
@@ -32,8 +46,11 @@ import {
   objectText,
   readScene,
   touch,
+  transact,
   type SceneObject,
 } from "./sceneObjects";
+import { fittedHeight } from "./textHeight";
+import { loadTextStyle } from "./textStyle";
 import { SelectionBar } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
@@ -44,6 +61,7 @@ import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
 import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
+import { useTextFit } from "./useTextFit";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
@@ -69,7 +87,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * блокировка, CVS-20 буфер обмена и дублирование, CVS-21 удаление, CVS-22 автор и даты,
  * CVS-23 контекстное меню, MOB-03 долгое нажатие; T5.4 — CVS-07 отмена и повтор своих
  * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши; T5.5 — CVS-08 поиск
- * по тексту и тегам, SHR-07 ссылка на объект и переход к нему.
+ * по тексту и тегам, SHR-07 ссылка на объект и переход к нему; T6.1 — TXT-01…TXT-08
+ * текст и документ с форматированием.
  */
 export function BoardScene({
   board,
@@ -126,6 +145,10 @@ export function BoardScene({
   const [searching, setSearching] = useState(false);
   const [linkFor, setLinkFor] = useState<string | null>(null);
   const [linkMissing, setLinkMissing] = useState(false);
+  /** TXT-06: открыт выбор объекта для ссылки документа — куда вернуть выбор. */
+  const [picker, setPicker] = useState<{
+    done: (id: string | null) => void;
+  } | null>(null);
 
   /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
   const goTo = useCallback(
@@ -183,6 +206,8 @@ export function BoardScene({
         placement(type, at, settings.gridStep),
         "",
         actor,
+        // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом.
+        type === "text" ? loadTextStyle() : {},
       );
       setSelection([id]);
       return readScene(objects).find((o) => o.id === id) ?? null;
@@ -190,6 +215,7 @@ export function BoardScene({
     [objects, settings.gridStep, actor],
   );
 
+  const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
     scene,
@@ -199,6 +225,7 @@ export function BoardScene({
     gridStep: settings.gridStep,
     pastePoint,
     onRemoved: stopEditing,
+    onTextLayout: fitText,
   });
   const { units, editable } = commands;
 
@@ -288,6 +315,38 @@ export function BoardScene({
           editText(single.id);
         }
       : null;
+
+  const label = useCallback((id: string) => objectLabel(scene, id), [scene]);
+  const richHandlers: RichTextHandlers = {
+    // TXT-02: отметка пункта списка дел прямо на холсте, без редактора.
+    onCheck: (id, end, checked) => {
+      const text = objectText(objects, id);
+      const map = objectMap(objects, id);
+      if (text === null || map === null || end >= text.length) return;
+      transact(objects, () => {
+        text.format(end, 1, { list: checked ? "checked" : "unchecked" });
+        touch(map, actor);
+      });
+    },
+    // TXT-06: ссылка документа ведёт к объекту.
+    onOpenObject: (id) => {
+      goTo(id);
+    },
+    objectLabel: label,
+  };
+
+  /** Своя правка текста: отметка «изменил» и высота блока под содержимое. */
+  function onRichEdit(object: SceneObject, height: number) {
+    const map = objectMap(objects, object.id);
+    if (map === null) return;
+    touch(map, actor);
+    const current = map.get("height");
+    const next =
+      typeof current === "number"
+        ? fittedHeight(object.type, current, height)
+        : null;
+    if (next !== null) map.set("height", next);
+  }
 
   function menuItems(current: Menu): MenuItem[] {
     switch (current.kind) {
@@ -424,8 +483,26 @@ export function BoardScene({
             objects={scene}
             selected={new Set(selectedIds)}
             editing={editing?.id ?? null}
+            rich={richHandlers}
           />
-          {editedObject && editing && (
+          {editedObject && editing && isRichText(editedObject.type) && (
+            <RichTextEditor
+              key={editedObject.id}
+              type={editedObject.type}
+              text={editing.text}
+              style={objectStyle(editedObject)}
+              camera={camera}
+              objectLabel={label}
+              onEdit={(height) => {
+                onRichEdit(editedObject, height);
+              }}
+              onDone={stopEditing}
+              onPickObject={(done) => {
+                setPicker({ done });
+              }}
+            />
+          )}
+          {editedObject && editing && !isRichText(editedObject.type) && (
             <TextEditor
               key={editedObject.id}
               object={editedObject}
@@ -443,7 +520,10 @@ export function BoardScene({
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
-          selected={units}
+          // Пока правят форматированный текст, над ним — панель редактора, а не выделения.
+          selected={
+            editedObject !== null && isRichText(editedObject.type) ? [] : units
+          }
           onFilter={(type) => {
             setSelection(units.filter((o) => o.type === type).map((o) => o.id));
           }}
@@ -497,6 +577,21 @@ export function BoardScene({
           />
         )}
       </div>
+      {picker !== null && (
+        <ObjectPicker
+          objects={scene
+            .filter((o) => o.type !== GROUP_TYPE && o.id !== editing?.id)
+            .map((o) => ({ id: o.id, label: label(o.id) ?? o.id }))}
+          onPick={(id) => {
+            setPicker(null);
+            picker.done(id);
+          }}
+          onClose={() => {
+            setPicker(null);
+            picker.done(null);
+          }}
+        />
+      )}
       {linkFor !== null && boardLink !== undefined && (
         <ObjectLinkDialog
           objectId={linkFor}

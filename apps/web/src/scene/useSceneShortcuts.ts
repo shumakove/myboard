@@ -1,6 +1,12 @@
 import { useEffect, useRef } from "react";
 import { isTypingTarget } from "../canvas/keyboard";
-import { CLIPBOARD_MIME, clipText, loadClip, parseClip } from "./clipboard";
+import {
+  CLIPBOARD_MIME,
+  clipHtml,
+  clipText,
+  loadClip,
+  parseClip,
+} from "./clipboard";
 import { historyKey, toolKey } from "./keymap";
 import type { ToolId } from "./tools";
 import type { UndoHistory } from "./undoHistory";
@@ -47,7 +53,9 @@ export interface ShortcutActions {
  *   (объекты — своим типом данных, текст — простым текстом), Ctrl/⌘+D — дубликат.
  *   Если браузер не прислал событие буфера (сочетание из средства автоматизации),
  *   работает копия в браузере;
- * - CVS-09: простой текст из буфера становится текстовым объектом.
+ * - CVS-09: простой текст из буфера становится текстовым объектом;
+ * - TXT-07: копия текста — ещё и HTML с форматированием для внешних редакторов;
+ * - TXT-08: HTML внешнего документа — текстовый объект с базовым форматированием.
  */
 export function useSceneShortcuts(
   commands: SceneCommands,
@@ -117,8 +125,11 @@ export function useSceneShortcuts(
       const clip = cut ? (commands.cut?.() ?? null) : commands.copy();
       if (clip === null) return;
       event.preventDefault();
+      const label = (id: string) => commands.objectLabel(id) ?? "";
       event.clipboardData?.setData(CLIPBOARD_MIME, JSON.stringify(clip));
-      event.clipboardData?.setData("text/plain", clipText(clip));
+      event.clipboardData?.setData("text/plain", clipText(clip, label));
+      const html = clipHtml(clip, label);
+      if (html !== "") event.clipboardData?.setData("text/html", html);
     }
 
     function paste(event: ClipboardEvent) {
@@ -127,10 +138,11 @@ export function useSceneShortcuts(
       const data = event.clipboardData;
       const clip = parseClip(data?.getData(CLIPBOARD_MIME));
       const text = data?.getData("text/plain").trim() ?? "";
-      if (clip === null && !text) return;
+      const html = data?.getData("text/html") ?? "";
+      if (clip === null && !text && !html) return;
       event.preventDefault();
       if (clip !== null) commands.paste(clip);
-      else commands.pasteText(text);
+      else commands.pasteText(text, html);
     }
 
     window.addEventListener("keydown", keydown);

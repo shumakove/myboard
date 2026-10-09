@@ -25,15 +25,22 @@ import {
 } from "./groups";
 import { renumber, reorder, type LayerOp } from "./layers";
 import { setLocked, unlockAll } from "./lock";
-import { GROUP_TYPE, type StyleKey } from "./objectTypes";
+import { htmlToDelta } from "../richtext/html";
+import { plainText } from "../richtext/delta";
+import { objectLabel } from "./objectLabel";
+import { GROUP_TYPE, isRichText, type StyleKey } from "./objectTypes";
 import {
   createObject,
+  objectMap,
   patchObjects,
   readScene,
+  transact,
   writeFields,
   type ObjectPatch,
   type SceneObject,
 } from "./sceneObjects";
+import { estimateHeight } from "./textHeight";
+import { loadTextStyle, rememberTextStyle } from "./textStyle";
 import { placement } from "./tools";
 
 /** Команды над выделенным; `null` — команда сейчас недоступна. */
@@ -46,7 +53,11 @@ export interface SceneCommands {
   copy: () => Clip | null;
   cut: (() => Clip | null) | null;
   paste: (clip: Clip, at?: Point) => void;
-  pasteText: (text: string) => void;
+  /**
+   * CVS-09: текст из буфера — новый текстовый блок; TXT-08: при HTML внешнего документа —
+   * с базовым форматированием.
+   */
+  pasteText: (text: string, html?: string) => void;
   duplicate: (() => void) | null;
   align: ((op: AlignOp) => void) | null;
   distribute: ((axis: Axis) => void) | null;
@@ -57,6 +68,8 @@ export interface SceneCommands {
   unlock: (() => void) | null;
   unlockAll: (() => void) | null;
   setStyle: (key: StyleKey, value: string | number) => void;
+  /** Подпись объекта по id (ссылки документа, TXT-06); `null` — объекта нет. */
+  objectLabel: (id: string) => string | null;
 }
 
 export interface CommandContext {
@@ -71,6 +84,8 @@ export interface CommandContext {
   pastePoint: () => Point;
   /** Вызывается после удаления (закрыть редактор текста). */
   onRemoved: () => void;
+  /** Вид текста этих объектов изменён без редактора — подогнать высоту (BUG-011). */
+  onTextLayout?: (ids: readonly string[]) => void;
 }
 
 /**
@@ -89,6 +104,7 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
     gridStep,
     pastePoint,
     onRemoved,
+    onTextLayout,
   } = context;
   return useMemo(() => {
     const { objects } = board;
@@ -157,9 +173,23 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
           ),
         );
       },
-      pasteText: (text) => {
+      pasteText: (text, html = "") => {
         const at = placement("text", pastePoint(), gridStep);
-        select([createObject(objects, "text", at, text, actor)]);
+        // TXT-05: новый текст — с последним выбранным размером и цветом шрифта.
+        const style = loadTextStyle();
+        const delta = html === "" ? null : htmlToDelta(html);
+        if (delta === null || plainText(delta).trim() === "") {
+          select([createObject(objects, "text", at, text, actor, style)]);
+          return;
+        }
+        let id = "";
+        transact(objects, () => {
+          id = createObject(objects, "text", at, delta, actor, style);
+          objectMap(objects, id)?.set("height", estimateHeight(delta, style));
+        });
+        select([id]);
+        // Оценка не знает переносов строк — точную высоту даёт отрисовка.
+        onTextLayout?.([id]);
       },
       duplicate: when(units.length > 0, () => {
         const current = readScene(objects);
@@ -230,7 +260,25 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         const patches = new Map<SceneObject, ObjectPatch>();
         for (const object of editable) patches.set(object, { [key]: value });
         patchObjects(objects, patches, actor);
+        onTextLayout?.(
+          editable.filter((o) => isRichText(o.type)).map((o) => o.id),
+        );
+        // TXT-05: размер и цвет шрифта текста запоминаются для следующего блока.
+        if (editable.some((o) => o.type === "text")) {
+          rememberTextStyle(key, value);
+        }
       },
+      objectLabel: (id) => objectLabel(scene, id),
     };
-  }, [board, scene, selection, select, actor, gridStep, pastePoint, onRemoved]);
+  }, [
+    board,
+    scene,
+    selection,
+    select,
+    actor,
+    gridStep,
+    pastePoint,
+    onRemoved,
+    onTextLayout,
+  ]);
 }

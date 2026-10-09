@@ -130,6 +130,27 @@ describe("CVS-08: поиск по доске", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("search")).toBeNull();
   });
+
+  it("BUG-010: Escape закрывает поиск и при фокусе на результате или Close, выделение остаётся", async () => {
+    const user = userEvent.setup();
+    const { board, plan } = boardWithObjects();
+    renderScene(board);
+
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    await user.type(searchBox(), "release");
+    await user.tab();
+    await user.tab();
+    expect(results()[0]).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("search")).toBeNull();
+    // Переход к результату по Tab не выделял; выделение доски Escape панели не трогает.
+    click(element(plan), [10, 10]);
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    screen.getByRole("button", { name: "Close" }).focus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("search")).toBeNull();
+    expect(isSelected(plan)).toBe(true);
+  });
 });
 
 describe("SHR-07: ссылка на объект", () => {

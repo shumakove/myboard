@@ -1,7 +1,10 @@
+import { useState } from "react";
 import {
+  MORE_TEXT_KEYS,
   STYLE_KEYS,
   styleKeysOf,
   typeName,
+  typeSpec,
   type StyleKey,
 } from "./objectTypes";
 import type { ObjectMeta, SceneObject } from "./sceneObjects";
@@ -22,7 +25,9 @@ export type BarAction = (() => void) | null;
  * - CVS-20: меню More — копирование, вырезание, дублирование (и на телефоне, где нет
  *   контекстного меню);
  * - CVS-21: удаление выделенного;
- * - CVS-22: автор и даты одного выделенного объекта.
+ * - CVS-22: автор и даты одного выделенного объекта;
+ * - TXT-01: у текста и документа шрифт, начертание, выравнивание, интервал и фон —
+ *   под кнопкой Text style (панель остаётся в одну строку).
  */
 export function SelectionBar({
   selected,
@@ -50,6 +55,7 @@ export function SelectionBar({
   onArrange: ((button: HTMLElement) => void) | null;
   onMore: (button: HTMLElement) => void;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
   if (selected.length === 0) return null;
   const counts = new Map<string, number>();
   for (const object of selected) {
@@ -90,38 +96,41 @@ export function SelectionBar({
           ))}
         </span>
       )}
-      {shared.map((key) => {
-        const values = new Set(selected.map((o) => o.style[key]));
-        const [only] = values;
-        const current =
-          values.size === 1 && only !== undefined ? String(only) : MIXED;
-        const { label, options } = STYLE_KEYS[key];
-        return (
-          <SelectField
+      {shared
+        .filter((key) => !MORE_TEXT_KEYS.includes(key))
+        .map((key) => (
+          <StyleSelect
             key={key}
-            label={label}
-            className="selection-style"
-            value={current}
-            onChange={(event) => {
-              const option = options.find(
-                (o) => String(o.value) === event.target.value,
-              );
-              if (option) onStyle(key, option.value);
-            }}
-          >
-            {current === MIXED && (
-              <option value={MIXED} disabled>
-                Mixed
-              </option>
-            )}
-            {options.map((option) => (
-              <option key={String(option.value)} value={String(option.value)}>
-                {option.label}
-              </option>
+            styleKey={key}
+            selected={selected}
+            onStyle={onStyle}
+          />
+        ))}
+      {shared.some((key) => MORE_TEXT_KEYS.includes(key)) && (
+        <Button
+          variant="ghost"
+          aria-expanded={moreOpen}
+          onClick={() => {
+            setMoreOpen((open) => !open);
+          }}
+        >
+          Text style
+        </Button>
+      )}
+      {moreOpen && (
+        <span role="group" aria-label="Text style" className="selection-more">
+          {shared
+            .filter((key) => MORE_TEXT_KEYS.includes(key))
+            .map((key) => (
+              <StyleSelect
+                key={key}
+                styleKey={key}
+                selected={selected}
+                onStyle={onStyle}
+              />
             ))}
-          </SelectField>
-        );
-      })}
+        </span>
+      )}
       <BarButton label="Edit text" action={onEditText} />
       {onArrange && (
         <Button
@@ -150,6 +159,52 @@ export function SelectionBar({
       </Button>
       {selected.length === 1 && single && <ObjectInfo meta={single.meta} />}
     </FloatingPanel>
+  );
+}
+
+/**
+ * CVS-11: список значений свойства у всех выделенных; разные значения — Mixed. У объекта
+ * без записанного значения показывается значение его типа.
+ */
+function StyleSelect({
+  styleKey: key,
+  selected,
+  onStyle,
+}: {
+  styleKey: StyleKey;
+  selected: readonly SceneObject[];
+  onStyle: (key: StyleKey, value: string | number) => void;
+}) {
+  const values = new Set(
+    selected.map((o) => o.style[key] ?? typeSpec(o.type)?.style[key]),
+  );
+  const [only] = values;
+  const current =
+    values.size === 1 && only !== undefined ? String(only) : MIXED;
+  const { label, options } = STYLE_KEYS[key];
+  return (
+    <SelectField
+      label={label}
+      className="selection-style"
+      value={current}
+      onChange={(event) => {
+        const option = options.find(
+          (o) => String(o.value) === event.target.value,
+        );
+        if (option) onStyle(key, option.value);
+      }}
+    >
+      {current === MIXED && (
+        <option value={MIXED} disabled>
+          Mixed
+        </option>
+      )}
+      {options.map((option) => (
+        <option key={String(option.value)} value={String(option.value)}>
+          {option.label}
+        </option>
+      ))}
+    </SelectField>
   );
 }
 

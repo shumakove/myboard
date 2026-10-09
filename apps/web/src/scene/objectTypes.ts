@@ -1,12 +1,31 @@
 /**
- * Типы объектов сцены, которые ставит T5.2, и их свойства (CVS-09, CVS-11, CVS-14).
- * Остальные типы из раздела объектов требований добавляют задачи T6.*, T7.* — тем же
- * описанием.
+ * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
+ * (T5.2), документ (T6.1, TXT-06). Остальные типы из раздела объектов требований
+ * добавляют задачи T6.*, T7.* — тем же описанием.
  */
-export type ObjectType = "sticky" | "shape" | "text";
+export type ObjectType = "sticky" | "shape" | "text" | "document";
 
-/** Свойства оформления, которые меняются в панели выделения (CVS-11). */
-export type StyleKey = "fill" | "stroke" | "color" | "fontSize";
+/**
+ * Свойства оформления, которые меняются в панели выделения (CVS-11). Текст и документ:
+ * шрифт, размер, цвет, начертание, выравнивание, межстрочный интервал и фон (TXT-01).
+ */
+export type StyleKey =
+  | "fill"
+  | "stroke"
+  | "fontFamily"
+  | "fontSize"
+  | "color"
+  | "fontStyle"
+  | "align"
+  | "lineHeight"
+  | "background";
+
+/** Типы с форматированным текстом (TXT-01…TXT-08): редактор и показ — `richtext/`. */
+export const RICH_TEXT_TYPES: readonly string[] = ["text", "document"];
+
+export function isRichText(type: string): boolean {
+  return RICH_TEXT_TYPES.includes(type);
+}
 
 export interface StyleOption {
   value: string | number;
@@ -53,7 +72,32 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     width: 240,
     height: 60,
     rotatable: true,
-    style: { color: "#1f2937", fontSize: 24 },
+    style: {
+      fontFamily: "sans",
+      fontSize: 24,
+      color: "#1f2937",
+      fontStyle: "normal",
+      align: "left",
+      lineHeight: 1.25,
+      background: "transparent",
+    },
+  },
+  document: {
+    type: "document",
+    label: "Document",
+    plural: "documents",
+    width: 480,
+    height: 360,
+    rotatable: false,
+    style: {
+      fontFamily: "sans",
+      fontSize: 16,
+      color: "#1f2937",
+      fontStyle: "normal",
+      align: "left",
+      lineHeight: 1.5,
+      background: "#ffffff",
+    },
   },
 };
 
@@ -85,6 +129,26 @@ const COLORS: StyleOption[] = [
   { value: "#1f2937", label: "Black" },
 ];
 
+/** TXT-01: шрифты текста — ключ в документе, набор шрифтов — в `FONT_STACKS`. */
+export const FONT_STACKS: Record<string, string> = {
+  sans: 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", Times, serif',
+  mono: 'ui-monospace, Menlo, Consolas, "Courier New", monospace',
+  hand: '"Comic Sans MS", "Marker Felt", "Segoe Print", cursive',
+};
+
+/**
+ * TXT-01: свойства текста, которые панель выделения показывает под кнопкой Text style,
+ * чтобы панель оставалась в одну строку.
+ */
+export const MORE_TEXT_KEYS: readonly StyleKey[] = [
+  "fontFamily",
+  "fontStyle",
+  "align",
+  "lineHeight",
+  "background",
+];
+
 /** Подпись и допустимые значения каждого свойства оформления. */
 export const STYLE_KEYS: Record<
   StyleKey,
@@ -92,13 +156,53 @@ export const STYLE_KEYS: Record<
 > = {
   fill: { label: "Fill", options: COLORS },
   stroke: { label: "Border", options: COLORS },
-  color: { label: "Text color", options: COLORS },
+  fontFamily: {
+    label: "Font",
+    options: [
+      { value: "sans", label: "Sans" },
+      { value: "serif", label: "Serif" },
+      { value: "mono", label: "Monospace" },
+      { value: "hand", label: "Handwritten" },
+    ],
+  },
   fontSize: {
     label: "Font size",
-    options: [12, 16, 24, 36, 48, 72].map((size) => ({
+    options: [12, 14, 16, 18, 24, 32, 36, 48, 64, 72].map((size) => ({
       value: size,
       label: String(size),
     })),
+  },
+  color: { label: "Text color", options: COLORS },
+  fontStyle: {
+    label: "Style",
+    options: [
+      { value: "normal", label: "Regular" },
+      { value: "bold", label: "Bold" },
+      { value: "italic", label: "Italic" },
+      { value: "bold-italic", label: "Bold italic" },
+      { value: "underline", label: "Underline" },
+      { value: "strike", label: "Strikethrough" },
+    ],
+  },
+  align: {
+    label: "Align",
+    options: [
+      { value: "left", label: "Left" },
+      { value: "center", label: "Center" },
+      { value: "right", label: "Right" },
+      { value: "justify", label: "Justify" },
+    ],
+  },
+  lineHeight: {
+    label: "Line spacing",
+    options: [1, 1.25, 1.5, 2, 2.5].map((value) => ({
+      value,
+      label: String(value),
+    })),
+  },
+  background: {
+    label: "Background",
+    options: [{ value: "transparent", label: "None" }, ...COLORS],
   },
 };
 

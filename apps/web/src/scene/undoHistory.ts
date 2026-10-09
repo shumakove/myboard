@@ -77,6 +77,22 @@ export class UndoHistory {
     if (this.open === 0) manager.captureTimeout = 0;
   }
 
+  /** Правка — в тот же шаг отмены, что и только что сделанная своя (подгонка высоты). */
+  amend(write: () => void): void {
+    const manager = this.manager;
+    if (manager === null) {
+      write();
+      return;
+    }
+    const timeout = manager.captureTimeout;
+    manager.captureTimeout = Number.POSITIVE_INFINITY;
+    try {
+      write();
+    } finally {
+      manager.captureTimeout = timeout;
+    }
+  }
+
   /** Состояние кнопок Undo/Redo — для `useSyncExternalStore`. */
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);

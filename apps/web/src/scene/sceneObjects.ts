@@ -1,9 +1,12 @@
 import * as Y from "yjs";
 import type { Point } from "../realtime/messages";
 import { boundsOf, type Frame } from "./geometry";
+import type { DeltaOp } from "../richtext/delta";
 import {
   GROUP_TYPE,
+  isRichText,
   OBJECT_TYPES,
+  STYLE_KEYS,
   type ObjectType,
   type StyleKey,
 } from "./objectTypes";
@@ -32,6 +35,11 @@ export interface SceneObject extends Frame {
   parent: string | null;
   z: number;
   text: string;
+  /**
+   * Текст и документ (TXT-01…TXT-08): содержимое `Y.Text` с форматированием — дельта;
+   * у остальных типов `null`.
+   */
+  rich: DeltaOp[] | null;
   /** Теги объекта (STK-03, KBN-02) — ищутся вместе с текстом (CVS-08). */
   tags: string[];
   style: Partial<Record<StyleKey, string | number>>;
@@ -103,13 +111,14 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       if (bounds === null) return; // пустая группа не рисуется
       frame = { ...bounds, rotation: 0 };
     }
-    const { id, type, parent, z, text, tags, style, meta } = object;
+    const { id, type, parent, z, text, rich, tags, style, meta } = object;
     scene.splice(at, 0, {
       id,
       type,
       parent,
       z,
       text,
+      rich,
       tags,
       style,
       meta,
@@ -160,7 +169,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     return null;
   }
   const style: SceneObject["style"] = {};
-  for (const key of ["fill", "stroke", "color", "fontSize"] as const) {
+  for (const key of Object.keys(STYLE_KEYS) as StyleKey[]) {
     const v = record[key];
     if (typeof v === "string" || isNumber(v)) style[key] = v;
   }
@@ -180,11 +189,19 @@ function readObject(id: string, value: unknown): RawObject | null {
     rotation: isNumber(record.rotation) ? record.rotation : 0,
     z: isNumber(record.z) ? record.z : 0,
     text: typeof record.text === "string" ? record.text : "",
+    rich: isRichText(type) ? richContent(value, record.text) : null,
     tags: readTags(record.tags),
     style,
     lockedSelf: record.locked === true,
     meta,
   };
+}
+
+/** Дельта текста объекта: `Y.Text` с форматированием или простая строка записи JSON. */
+function richContent(value: unknown, text: unknown): DeltaOp[] {
+  const field: unknown = value instanceof Y.Map ? value.get("text") : undefined;
+  if (field instanceof Y.Text) return field.toDelta() as DeltaOp[];
+  return typeof text === "string" && text !== "" ? [{ insert: text }] : [];
 }
 
 /**
@@ -243,14 +260,17 @@ export function touch(
 
 /**
  * CVS-09: новый объект типа `type` с левым верхним углом в точке `at` (верхний уровень).
- * `actor` — имя автора (CVS-22). Возвращает id объекта.
+ * `text` — строка или, у текста и документа, дельта с форматированием (TXT-08);
+ * `actor` — имя автора (CVS-22); `style` — оформление поверх значений типа (TXT-05).
+ * Возвращает id объекта.
  */
 export function createObject(
   objects: Y.Map<unknown>,
   type: ObjectType,
   at: Point,
-  text = "",
+  text: string | readonly DeltaOp[] = "",
   actor = "",
+  style: Partial<Record<StyleKey, string | number>> = {},
 ): string {
   const spec = OBJECT_TYPES[type];
   const id = newObjectId();
@@ -264,9 +284,14 @@ export function createObject(
     object.set("height", spec.height);
     object.set("rotation", 0);
     object.set("z", topZ(objects));
-    for (const [key, value] of Object.entries(spec.style))
+    for (const [key, value] of Object.entries({
+      ...spec.style,
+      ...style,
+    }))
       object.set(key, value);
-    object.set("text", new Y.Text(text));
+    const content = new Y.Text(typeof text === "string" ? text : undefined);
+    object.set("text", content);
+    if (typeof text !== "string") content.applyDelta([...text]);
     for (const [key, value] of Object.entries(creationMeta(actor)))
       object.set(key, value);
     objects.set(id, object);
