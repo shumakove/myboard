@@ -49,6 +49,7 @@ import {
   transact,
   type SceneObject,
 } from "./sceneObjects";
+import { fittedHeight } from "./textHeight";
 import { loadTextStyle } from "./textStyle";
 import { SelectionBar } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
@@ -60,6 +61,7 @@ import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
 import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
+import { useTextFit } from "./useTextFit";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
@@ -213,6 +215,7 @@ export function BoardScene({
     [objects, settings.gridStep, actor],
   );
 
+  const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
     scene,
@@ -222,6 +225,7 @@ export function BoardScene({
     gridStep: settings.gridStep,
     pastePoint,
     onRemoved: stopEditing,
+    onTextLayout: fitText,
   });
   const { units, editable } = commands;
 
@@ -337,13 +341,11 @@ export function BoardScene({
     if (map === null) return;
     touch(map, actor);
     const current = map.get("height");
-    const grow = object.type === "document";
-    if (
-      typeof current === "number" &&
-      (grow ? height > current : Math.abs(height - current) >= 1)
-    ) {
-      map.set("height", height);
-    }
+    const next =
+      typeof current === "number"
+        ? fittedHeight(object.type, current, height)
+        : null;
+    if (next !== null) map.set("height", next);
   }
 
   function menuItems(current: Menu): MenuItem[] {

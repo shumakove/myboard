@@ -1,6 +1,11 @@
 import type * as Y from "yjs";
 import type { DeltaOp } from "./delta";
-import { INLINE_FORMATS, type Quill } from "./quill";
+import {
+  type Delta,
+  INLINE_FORMATS,
+  minimalChange,
+  type Quill,
+} from "./quill";
 
 /** Атрибуты, которые чужая вставка сбрасывает явно, если у неё их нет. */
 const CLEARED: Record<string, null> = Object.fromEntries(
@@ -31,10 +36,12 @@ export function bindQuill(
     quill.updateContents(delta as never, "api");
   };
 
-  const toText = (delta: { ops: DeltaOp[] }, _old: unknown, source: string) => {
+  const toText = (delta: Delta, old: Delta, source: string) => {
     if (source !== "user") return;
+    const ops = minimalChange(delta, old);
+    if (ops.length === 0) return;
     const write = () => {
-      text.applyDelta(delta.ops);
+      text.applyDelta(ops);
       onEdit?.();
     };
     // Наблюдатели `Y.Text` вызываются в конце транзакции — флаг держится до него.

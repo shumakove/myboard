@@ -28,7 +28,7 @@ import { setLocked, unlockAll } from "./lock";
 import { htmlToDelta } from "../richtext/html";
 import { plainText } from "../richtext/delta";
 import { objectLabel } from "./objectLabel";
-import { GROUP_TYPE, type StyleKey } from "./objectTypes";
+import { GROUP_TYPE, isRichText, type StyleKey } from "./objectTypes";
 import {
   createObject,
   objectMap,
@@ -84,6 +84,8 @@ export interface CommandContext {
   pastePoint: () => Point;
   /** Вызывается после удаления (закрыть редактор текста). */
   onRemoved: () => void;
+  /** Вид текста этих объектов изменён без редактора — подогнать высоту (BUG-011). */
+  onTextLayout?: (ids: readonly string[]) => void;
 }
 
 /**
@@ -102,6 +104,7 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
     gridStep,
     pastePoint,
     onRemoved,
+    onTextLayout,
   } = context;
   return useMemo(() => {
     const { objects } = board;
@@ -185,6 +188,8 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
           objectMap(objects, id)?.set("height", estimateHeight(delta, style));
         });
         select([id]);
+        // Оценка не знает переносов строк — точную высоту даёт отрисовка.
+        onTextLayout?.([id]);
       },
       duplicate: when(units.length > 0, () => {
         const current = readScene(objects);
@@ -255,6 +260,9 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         const patches = new Map<SceneObject, ObjectPatch>();
         for (const object of editable) patches.set(object, { [key]: value });
         patchObjects(objects, patches, actor);
+        onTextLayout?.(
+          editable.filter((o) => isRichText(o.type)).map((o) => o.id),
+        );
         // TXT-05: размер и цвет шрифта текста запоминаются для следующего блока.
         if (editable.some((o) => o.type === "text")) {
           rememberTextStyle(key, value);
@@ -262,5 +270,15 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
       },
       objectLabel: (id) => objectLabel(scene, id),
     };
-  }, [board, scene, selection, select, actor, gridStep, pastePoint, onRemoved]);
+  }, [
+    board,
+    scene,
+    selection,
+    select,
+    actor,
+    gridStep,
+    pastePoint,
+    onRemoved,
+    onTextLayout,
+  ]);
 }

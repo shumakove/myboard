@@ -29,3 +29,18 @@ export function estimateHeight(
   );
   return Math.ceil(Math.max(1, lines) * size + TEXT_PADDING);
 }
+
+/**
+ * Новая высота текста или документа под измеренное содержимое, `null` — менять не нужно.
+ * Текстовый блок следует за текстом в обе стороны; документ только растёт — его высоту
+ * можно задать больше содержимого (TXT-06).
+ */
+export function fittedHeight(
+  type: string,
+  current: number,
+  measured: number,
+): number | null {
+  const fits =
+    type === "document" ? measured <= current : Math.abs(measured - current) < 1;
+  return fits ? null : measured;
+}

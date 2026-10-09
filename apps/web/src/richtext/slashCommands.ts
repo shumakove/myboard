@@ -106,3 +106,13 @@ export function slashMatches(
     )
     .map(({ id, label }) => ({ id, label }));
 }
+
+/**
+ * TXT-04: «/» в `index` открывает меню в начале строки или после пробела. Начало строки
+ * считается по строке Quill: перед ней может стоять блок без текста (разделитель,
+ * BUG-013), у которого `getText` пустой.
+ */
+export function afterBreak(quill: Quill, index: number): boolean {
+  const [, offset] = quill.getLine(index);
+  return offset === 0 || /\s/.test(quill.getText(index - 1, 1));
+}

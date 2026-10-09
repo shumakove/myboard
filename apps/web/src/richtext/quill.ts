@@ -1,4 +1,4 @@
-import Quill from "quill/core";
+import Quill, { type Delta } from "quill/core";
 import { BlockEmbed } from "quill/blots/block";
 import Embed from "quill/blots/embed";
 import Bold from "quill/formats/bold";
@@ -9,6 +9,7 @@ import Link from "quill/formats/link";
 import ListItem, { ListContainer } from "quill/formats/list";
 import Strike from "quill/formats/strike";
 import Underline from "quill/formats/underline";
+import type { DeltaOp } from "./delta";
 
 /**
  * Редактор форматированного текста — Quill поверх обычного поля `contenteditable`
@@ -108,4 +109,14 @@ export function createQuill(
   });
 }
 
+/**
+ * BUG-014: правка поля как минимальная разница «было → стало». Quill со старым
+ * выделением описывает ввод заменой всего выделенного текста; в `Y.Text` такая замена
+ * удалила бы и чужие символы, а отмена (CVS-07) вернула бы их дублем.
+ */
+export function minimalChange(change: Delta, before: Delta): DeltaOp[] {
+  return before.diff(before.compose(change)).ops as DeltaOp[];
+}
+
+export { Delta } from "quill/core";
 export { Quill };

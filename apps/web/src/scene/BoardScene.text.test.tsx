@@ -1,8 +1,9 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { createBoardDocument } from "../realtime/boardDocument";
+import { Quill } from "../richtext/quill";
 import "../richtext/testQuill";
 import { createObject, objectText } from "./sceneObjects";
 import { click, element, renderScene, scene } from "./testScene";
@@ -255,5 +256,98 @@ describe("TXT-03, TXT-04: редактор текста", () => {
     }
     fireEvent.keyDown(field, { key: "Escape" });
     expect(screen.queryByRole("textbox", { name: "Object text" })).toBeNull();
+  });
+});
+
+describe("TXT-04, TXT-06: меню «/» в документе", () => {
+  /** Документ с разделителем: редактор открыт, курсор — в пустой строке после него. */
+  async function documentAfterDivider() {
+    const user = userEvent.setup();
+    const board = createBoardDocument();
+    const id = createObject(board.objects, "document", { x: 0, y: 0 }, [
+      { insert: "Intro\n" },
+      { insert: { divider: true } },
+      { insert: "\n" },
+    ]);
+    renderScene(board);
+    click(element(id), [10, 10]);
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    const field = screen.getByRole("textbox", { name: "Object text" });
+    const quill = Quill.find(field.parentElement as HTMLElement) as Quill;
+    return { quill, board, id };
+  }
+
+  it("BUG-013: «/» в пустой строке сразу после разделителя открывает меню", async () => {
+    const { quill } = await documentAfterDivider();
+    act(() => {
+      quill.setSelection(7, 0, "user");
+      quill.insertText(7, "/", "user");
+      quill.setSelection(8, 0, "user");
+    });
+    expect(screen.getByRole("menu", { name: "Insert block" })).toBeVisible();
+  });
+
+  it("«/» внутри слова меню не открывает", async () => {
+    const { quill } = await documentAfterDivider();
+    act(() => {
+      quill.insertText(5, "/", "user");
+      quill.setSelection(6, 0, "user");
+    });
+    expect(screen.queryByRole("menu", { name: "Insert block" })).toBeNull();
+  });
+});
+
+describe("TXT-01, TXT-08 BUG-011: рамка блока следует за текстом", () => {
+  // jsdom не считает раскладку: высота показа текста — 3 строки по размеру шрифта;
+  // поля текстового блока — 4 px сверху и снизу (scene.css).
+  let restore: (() => void) | null = null;
+  beforeEach(() => {
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetHeight",
+    );
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (!this.classList.contains("rich-text")) return 0;
+        const box = this.closest<HTMLElement>(".scene-object");
+        return 3 * (parseFloat(box?.style.fontSize ?? "") || 16);
+      },
+    });
+    restore = () => {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, "offsetHeight", original);
+      }
+    };
+  });
+  afterEach(() => {
+    restore?.();
+  });
+
+  it("после смены размера шрифта высота — под текст; отмена возвращает и размер, и высоту", async () => {
+    const user = userEvent.setup();
+    const board = createBoardDocument();
+    const id = createObject(board.objects, "text", { x: 0, y: 0 }, "Words");
+    renderScene(board);
+    const before = scene(board)[0]?.height;
+    click(element(id), [10, 10]);
+    const bar = screen.getByRole("toolbar", { name: "Selection" });
+    await user.selectOptions(within(bar).getByLabelText("Font size"), "72");
+    expect(scene(board)[0]?.height).toBe(3 * 72 + 8);
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(scene(board)[0]).toMatchObject({ height: before });
+    expect(scene(board)[0]?.style.fontSize).not.toBe(72);
+  });
+
+  it("вставленный на холст HTML получает высоту под отрисованный текст", () => {
+    const board = createBoardDocument();
+    renderScene(board);
+    clipboardEvent("paste", {
+      "text/html": "<h1>Title</h1><p>Body</p>",
+      "text/plain": "Title Body",
+    });
+    const [created] = scene(board);
+    const size = Number(created?.style.fontSize);
+    expect(created?.height).toBe(3 * size + 8);
   });
 });

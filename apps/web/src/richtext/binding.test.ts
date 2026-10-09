@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { bindQuill } from "./binding";
+import { Delta } from "./quill";
 import { mountQuill } from "./testQuill";
 
 afterEach(() => {
@@ -63,6 +64,56 @@ describe("COL-01: редактор и Y.Text объекта", () => {
     expect(a.getText("t").toJSON()).toBe("YYmiddleXX");
     expect(quillA.getText()).toBe("YYmiddleXX\n");
     expect(quillB.getText()).toBe("YYmiddleXX\n");
+  });
+
+  it("BUG-014: правка поля, которую Quill описал заменой всего текста, пишется в Y.Text минимально", () => {
+    const doc = new Y.Doc();
+    const text = doc.getText("t");
+    text.insert(0, "base");
+    const quill = mountQuill();
+    bindQuill(quill, text);
+    let deleted = 0;
+    text.observe((event) => {
+      for (const op of event.delta) deleted += op.delete ?? 0;
+    });
+    // Так Quill описывает первый символ, если считает выделенным весь текст.
+    quill.updateContents(new Delta().insert("base ").delete(4), "user");
+    expect(text.toJSON()).toBe("base ");
+    expect(deleted).toBe(0);
+  });
+
+  it("CVS-07 BUG-014: отмена своей правки после правки другого участника убирает только свою", () => {
+    const owner = new Y.Doc();
+    owner.getText("t").insert(0, "base");
+    const guest = new Y.Doc();
+    Y.applyUpdate(guest, Y.encodeStateAsUpdate(owner));
+    const sync = (from: Y.Doc, to: Y.Doc) => {
+      Y.applyUpdate(
+        to,
+        Y.encodeStateAsUpdate(from, Y.encodeStateVector(to)),
+        "remote",
+      );
+    };
+    // Отмена владельца — только его транзакции (origin `null`), как у доски.
+    const undo = new Y.UndoManager(owner.getText("t"));
+    const ownerQuill = mountQuill();
+    const unbindOwner = bindQuill(ownerQuill, owner.getText("t"));
+    ownerQuill.updateContents(new Delta().insert("base mine").delete(4), "user");
+    unbindOwner();
+    sync(owner, guest);
+    const guestQuill = mountQuill();
+    const unbindGuest = bindQuill(guestQuill, guest.getText("t"));
+    guestQuill.updateContents(
+      new Delta().insert("theirs base mine").delete(9),
+      "user",
+    );
+    unbindGuest();
+    sync(guest, owner);
+    expect(owner.getText("t").toJSON()).toBe("theirs base mine");
+    undo.undo();
+    sync(owner, guest);
+    expect(owner.getText("t").toJSON()).toBe("theirs base");
+    expect(guest.getText("t").toJSON()).toBe("theirs base");
   });
 
   it("после отписки поле и Y.Text больше не связаны", () => {

@@ -8,16 +8,18 @@ import {
 import type * as Y from "yjs";
 import { Button, Menu, MenuItem, TextField } from "../ui";
 import { bindQuill } from "./binding";
-import type { DeltaOp } from "./delta";
+import { contentHeight } from "./measure";
 import {
   createQuill,
+  type Delta,
   DOCUMENT_FORMATS,
+  minimalChange,
   setObjectLabel,
   TEXT_FORMATS,
   type Quill,
 } from "./quill";
 import { applyShortcut, insertedAt } from "./shortcuts";
-import { SLASH_COMMANDS, slashMatches } from "./slashCommands";
+import { afterBreak, SLASH_COMMANDS, slashMatches } from "./slashCommands";
 import "./richText.css";
 
 /** Меню «/»: где стоит «/», что набрано после него, выбранный пункт, место на экране. */
@@ -111,16 +113,8 @@ export function RichTextEditor({
     root.setAttribute("aria-multiline", "true");
     root.setAttribute("aria-label", "Object text");
 
-    const measure = () => {
-      const box = getComputedStyle(wrapper);
-      return Math.ceil(
-        root.offsetHeight +
-          parseFloat(box.paddingTop || "0") +
-          parseFloat(box.paddingBottom || "0"),
-      );
-    };
     const unbind = bindQuill(editor, text, () => {
-      latest.current.onEdit(measure());
+      latest.current.onEdit(contentHeight(wrapper, root));
     });
 
     const setMenu = (next: Slash | null) => {
@@ -166,17 +160,13 @@ export function RichTextEditor({
       }
     };
 
-    const onText = (
-      delta: { ops: DeltaOp[] },
-      _old: unknown,
-      source: string,
-    ) => {
+    const onText = (delta: Delta, old: Delta, source: string) => {
       if (source !== "user") return;
-      if (applyShortcut(editor, delta.ops)) return;
-      const at = insertedAt(delta.ops, "/");
-      if (at !== null && slashRef.current === null) {
-        const before = at === 0 ? "\n" : editor.getText(at - 1, 1);
-        if (/\s/.test(before)) openSlash(at);
+      const ops = minimalChange(delta, old);
+      if (applyShortcut(editor, ops)) return;
+      const at = insertedAt(ops, "/");
+      if (at !== null && slashRef.current === null && afterBreak(editor, at)) {
+        openSlash(at);
       }
     };
     const onChange = () => {
