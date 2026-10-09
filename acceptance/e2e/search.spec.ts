@@ -709,3 +709,24 @@ test('UI-04 on a phone search and object link are reachable, targets are at leas
     await owner.close();
   }
 });
+
+test('UI-03 BUG-010 search panel closes with Escape when focus is on its button, not in the field', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  test.fail(true, 'BUG-010: Escape закрывает панель поиска только из поля ввода');
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    const page = owner.page;
+    await seed(page, owner.boardId, { 'qa-home': HOME, 'qa-far': FAR_TEXT });
+    await search(page, 'release', false);
+    await expect(results(page)).toHaveCount(1);
+    await results(page).first().focus();
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toBeHidden({ timeout: 3000 });
+    await search(page, 'release', false);
+    await panel(page).getByRole('button', { name: 'Close', exact: true }).focus();
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toBeHidden({ timeout: 3000 });
+  } finally {
+    await owner.close();
+  }
+});
