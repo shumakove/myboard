@@ -38,6 +38,25 @@ export function centerOn(camera: CameraView, point: Point): CameraView {
   return { x: point.x, y: point.y, zoom: camera.zoom };
 }
 
+/** Поля вокруг объекта, к которому переходит вид, экранные px. */
+export const FOCUS_MARGIN = 48;
+
+/**
+ * Вид на прямоугольник доски (переход к объекту — CVS-08, SHR-07): его центр — в центре
+ * вида, масштаб 100 %, а если прямоугольник с полями не помещается — меньше.
+ */
+export function focusOn(rect: Rect, size: Size): CameraView {
+  const fit = Math.min(
+    (size.width - 2 * FOCUS_MARGIN) / rect.width,
+    (size.height - 2 * FOCUS_MARGIN) / rect.height,
+  );
+  return {
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+    zoom: clampZoom(Number.isFinite(fit) && fit > 0 ? Math.min(1, fit) : 1),
+  };
+}
+
 /** Видимая часть доски. */
 export function viewRect(camera: CameraView, size: Size): Rect {
   const width = size.width / camera.zoom;

@@ -394,3 +394,87 @@
   font-family: var(--font-family);
   font-size: var(--font-size-sm);
 }
+
+/* CVS-08: панель поиска — справа сверху над холстом; список результатов прокручивается. */
+.board-search {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--layer-panel);
+  display: grid;
+  gap: var(--space-1);
+  width: min(320px, calc(100% - 2 * var(--space-2)));
+  padding: var(--space-2);
+  font-size: var(--font-size-md);
+}
+
+.board-search-row {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.board-search-row .ui-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.board-search-count {
+  margin: 0;
+  padding: 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.board-search-results {
+  display: grid;
+  gap: var(--space-0);
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* Результат — несколько строк: тип, отрывок текста, совпавшие теги. */
+.board-search-hit {
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding-block: var(--space-1);
+  text-align: left;
+  white-space: normal;
+}
+
+.board-search-hit[aria-current="true"] {
+  background: var(--color-accent-soft);
+}
+
+.board-search-type {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.board-search-text {
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-regular);
+}
+
+.board-search-tags {
+  color: var(--color-accent-pressed);
+  font-size: var(--font-size-sm);
+}
+
+/* SHR-07: ссылка на объект, которого на доске больше нет. */
+.board-notice {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--layer-panel);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(100% - 2 * var(--space-2));
+  margin: 0;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  font-size: var(--font-size-md);
+}

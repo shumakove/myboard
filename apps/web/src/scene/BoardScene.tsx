@@ -9,11 +9,13 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
-import { screenToBoard, type Size } from "../canvas/camera";
+import { focusOn, screenToBoard, type Size } from "../canvas/camera";
 import type { WheelMode } from "../canvas/wheel";
 import type { BoardDocument } from "../realtime/boardDocument";
 import type { CameraView, Point } from "../realtime/messages";
+import { ObjectLinkDialog } from "../sharing/ObjectLinkDialog";
 import { isDark, useBoardSettings } from "./boardSettings";
+import { BoardSearch } from "./BoardSearch";
 import { loadClip, type Clip } from "./clipboard";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import type { AreaDraft } from "./gestures";
@@ -36,7 +38,7 @@ import { SelectionBar } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
 import { ToolPanel } from "./ToolPanel";
-import { Button } from "../ui";
+import { Button, FloatingPanel } from "../ui";
 import { placement, type ToolId } from "./tools";
 import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
@@ -66,7 +68,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * и распределение, CVS-16 направляющие, CVS-17 группы, CVS-18 порядок слоёв, CVS-19
  * блокировка, CVS-20 буфер обмена и дублирование, CVS-21 удаление, CVS-22 автор и даты,
  * CVS-23 контекстное меню, MOB-03 долгое нажатие; T5.4 — CVS-07 отмена и повтор своих
- * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши.
+ * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши; T5.5 — CVS-08 поиск
+ * по тексту и тегам, SHR-07 ссылка на объект и переход к нему.
  */
 export function BoardScene({
   board,
@@ -80,6 +83,8 @@ export function BoardScene({
   onResize,
   worldOverlay,
   stageOverlay,
+  focusObject = null,
+  boardLink,
 }: {
   board: BoardDocument;
   camera: CameraView;
@@ -95,6 +100,10 @@ export function BoardScene({
   worldOverlay?: ReactNode;
   /** Поверх холста (миникарта, слежение). */
   stageOverlay?: ReactNode;
+  /** SHR-07: объект из ссылки — вид переходит к нему, как только документ загружен. */
+  focusObject?: string | null;
+  /** SHR-07: действующая ссылка на доску; без неё пункта Copy link to object нет. */
+  boardLink?: () => Promise<string>;
 }) {
   const { objects } = board;
   const actor = userName;
@@ -113,6 +122,30 @@ export function BoardScene({
   const pointer = useRef<Point | null>(null);
   const { history, canUndo, canRedo } = useUndoHistory(board);
   const { pinned, update: updatePinned } = usePinnedTools();
+  const viewport = useRef<Size>({ width: 0, height: 0 });
+  const [searching, setSearching] = useState(false);
+  const [linkFor, setLinkFor] = useState<string | null>(null);
+  const [linkMissing, setLinkMissing] = useState(false);
+
+  /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
+  const goTo = useCallback(
+    (id: string): boolean => {
+      const target = readScene(objects).find((o) => o.id === id);
+      if (target === undefined) return false;
+      setSelection([id]);
+      onMove(() => focusOn(target, viewport.current));
+      return true;
+    },
+    [objects, onMove],
+  );
+
+  // SHR-07: переход по ссылке — один раз на объект из ссылки.
+  const linkedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusObject === null || linkedRef.current === focusObject) return;
+    linkedRef.current = focusObject;
+    setLinkMissing(!goTo(focusObject));
+  }, [focusObject, goTo]);
 
   // Объект, удалённый другим участником, пропадает из выделения сам.
   const selected = useMemo(
@@ -266,6 +299,14 @@ export function BoardScene({
           copyToClipboard: (cut) => {
             copyToClipboard(commands, cut);
           },
+          copyLink:
+            boardLink !== undefined &&
+            single !== undefined &&
+            units.length === 1
+              ? () => {
+                  setLinkFor(single.id);
+                }
+              : null,
         });
       case "canvas":
         return boardMenu(commands, current.board, current.clip, {
@@ -319,6 +360,17 @@ export function BoardScene({
           <Button
             variant="ghost"
             className="tool-button"
+            title="Find objects by text or tag."
+            aria-pressed={searching}
+            onClick={() => {
+              setSearching((open) => !open);
+            }}
+          >
+            Search
+          </Button>
+          <Button
+            variant="ghost"
+            className="tool-button"
             title="Paste the last copied objects in the center of the view."
             onClick={() => {
               const clip = loadClip();
@@ -363,7 +415,10 @@ export function BoardScene({
             pointer.current = point;
             onPointer(point);
           }}
-          onResize={onResize}
+          onResize={(size) => {
+            viewport.current = size;
+            onResize(size);
+          }}
         >
           <SceneLayer
             objects={scene}
@@ -411,6 +466,28 @@ export function BoardScene({
           }}
         />
         {stageOverlay}
+        {searching && (
+          <BoardSearch
+            scene={scene}
+            onGoTo={goTo}
+            onClose={() => {
+              setSearching(false);
+            }}
+          />
+        )}
+        {linkMissing && (
+          <FloatingPanel role="status" className="board-notice">
+            The linked object is not on this board.
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setLinkMissing(false);
+              }}
+            >
+              Dismiss
+            </Button>
+          </FloatingPanel>
+        )}
         {menu && (
           <ContextMenu
             label={MENU_LABELS[menu.kind]}
@@ -420,6 +497,15 @@ export function BoardScene({
           />
         )}
       </div>
+      {linkFor !== null && boardLink !== undefined && (
+        <ObjectLinkDialog
+          objectId={linkFor}
+          boardLink={boardLink}
+          onClose={() => {
+            setLinkFor(null);
+          }}
+        />
+      )}
     </div>
   );
 }

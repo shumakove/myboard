@@ -33,12 +33,18 @@ export function BoardWorkspace({
   board,
   presence,
   userName = "",
+  focusObject = null,
+  boardLink,
 }: {
   boardId: string;
   board: BoardDocument;
   presence: BoardPresence;
   /** Имя из сессии — пока сервер не прислал присутствие (автор правок, CVS-22). */
   userName?: string;
+  /** SHR-07: объект из ссылки, когда документ загружен. */
+  focusObject?: string | null;
+  /** SHR-07: действующая ссылка на доску — для ссылки на объект. */
+  boardLink?: () => Promise<string>;
 }) {
   const { peers } = usePresence(presence);
   const [camera, setCamera] = usePersistentCamera(boardId);
@@ -112,6 +118,8 @@ export function BoardWorkspace({
           camera={camera}
           wheelMode={wheelMode}
           userName={selfName}
+          focusObject={focusObject}
+          boardLink={boardLink}
           stageStyle={
             followed ? { outlineColor: peerColor(followed.peer) } : undefined
           }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BoardWorkspace } from "../collab/BoardWorkspace";
 import type { ConnectionStatus } from "./boardConnection";
 import { useBoardConnection, type BoardTarget } from "./useBoardConnection";
@@ -14,7 +14,8 @@ const STATUS_TEXT: Record<ConnectionStatus, string> = {
 /**
  * Совместная работа на доске: держит канал документа (COL-01), показывает состояние связи,
  * холст с камерой (CVS-01…CVS-05), курсоры участников и список присутствующих
- * (COL-02…COL-04, COL-09) и сцену с объектами (T5.2).
+ * (COL-02…COL-04, COL-09) и сцену с объектами (T5.2). Объект из ссылки (SHR-07)
+ * передаётся сцене после первой сверки документа с сервером: раньше его ещё нет.
  */
 export function BoardLive({
   boardId,
@@ -22,6 +23,8 @@ export function BoardLive({
   checkAccess,
   onClosed,
   userName,
+  objectId = null,
+  boardLink,
 }: {
   /** Id доски — ключ запомненного вида камеры (CVS-05). */
   boardId: string;
@@ -30,8 +33,14 @@ export function BoardLive({
   onClosed?: () => void;
   /** Имя из сессии: владельцу — имя учётки, участнику — введённое имя (CVS-22). */
   userName?: string;
+  /** SHR-07: `?object={id}` ссылки. */
+  objectId?: string | null;
+  /** SHR-07: действующая ссылка на доску — для ссылки на объект. */
+  boardLink?: () => Promise<string>;
 }) {
   const { board, presence, status } = useBoardConnection(target, checkAccess);
+  const [loaded, setLoaded] = useState(false);
+  if (status === "online" && !loaded) setLoaded(true);
 
   useEffect(() => {
     if (status === "closed") onClosed?.();
@@ -49,6 +58,8 @@ export function BoardLive({
           board={board}
           presence={presence}
           userName={userName}
+          focusObject={loaded ? objectId : null}
+          boardLink={boardLink}
         />
       )}
     </>
