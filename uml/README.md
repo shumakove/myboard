@@ -35,7 +35,7 @@
 | T2.1, T2.2 | `data-model.md`, `components.md` |
 | T3.1 | `data-model.md`, `components.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
 | T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` (с T4.3 — корзина); T4.1 также `components.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` (закрытие канала при сбросе ссылки и отзыве доступа); T4.2 также `components.md`, `sequences/presence.md`, `sequences/link-reset.md` (присутствие и курсоры); T4.3 также `components.md` (модуль `history`, сжатие в `Hub`), `deployment.md` (`SNAPSHOT_INTERVAL_SECONDS`) |
-| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`); T5.2 также `states/board-object.md` (создание, правки и удаление из интерфейса); T5.3 также `states/board-object.md` (блокировка, группы, вставка); T5.6 — `components.md` (модуль `ui`, тема, раскладка экранов), `board-document.md` (`topZ`, BUG-008); T5.4 также `states/board-object.md` (отмена и повтор своих правок) |
+| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`); T5.2 также `states/board-object.md` (создание, правки и удаление из интерфейса); T5.3 также `states/board-object.md` (блокировка, группы, вставка); T5.6 — `components.md` (модуль `ui`, тема, раскладка экранов), `board-document.md` (`topZ`, BUG-008); T5.4 также `states/board-object.md` (отмена и повтор своих правок); T5.5 также `sequences/link-join.md` (ссылка на объект `?object={id}`) |
 | T7.* | `data-model.md`, `board-document.md`, `sequences/media-upload.md` |
 | T8.1 | `board-document.md` |
 | T8.2 | `data-model.md`, `sequences/history-restore.md` |
@@ -50,12 +50,12 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa (`SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309) |
-| [components.md](components.md) | клиент: T5.4, e2d1150; сервер: T5.1, 34125f1 |
+| [components.md](components.md) | клиент: T5.5, 044e3c2; сервер: T5.1, 34125f1 |
 | [data-model.md](data-model.md) | T4.3, 7477309 |
-| [board-document.md](board-document.md) | T5.4, e2d1150 (`topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
+| [board-document.md](board-document.md) | T5.5, 044e3c2 (`tags`; отмена — T5.4, e2d1150; `topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
 | [ws-protocol.md](ws-protocol.md) | T4.3, 7477309 |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
-| [sequences/link-join.md](sequences/link-join.md) | T5.1, 34125f1 |
+| [sequences/link-join.md](sequences/link-join.md) | T5.5, 044e3c2 (ссылка на объект; вход — T5.1, 34125f1) |
 | [sequences/link-reset.md](sequences/link-reset.md) | T4.2, 1e65608 |
 | [sequences/sync.md](sequences/sync.md) | T4.3, 7477309 |
 | [sequences/presence.md](sequences/presence.md) | T5.1, 34125f1 |
