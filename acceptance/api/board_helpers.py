@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import uuid
 from datetime import datetime
@@ -74,7 +75,7 @@ def age_board(board_id: str, days: int) -> None:
     uuid.UUID(board_id)
     sql = f"UPDATE boards SET updated_at = now() - interval '{int(days)} days' WHERE id = '{board_id}'"
     subprocess.run(
-        ["docker", "exec", "myboard-qa-postgres-1", "psql", "-U", "myboard", "-d", "myboard", "-c", sql],
+        ["docker", "exec", f"{os.environ.get('QA_COMPOSE_PROJECT') or 'myboard-qa'}-postgres-1", "psql", "-U", "myboard", "-d", "myboard", "-c", sql],
         check=True,
         capture_output=True,
     )

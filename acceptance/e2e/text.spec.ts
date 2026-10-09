@@ -6,7 +6,7 @@ import type { Browser, Locator, Page } from '@playwright/test';
 import * as Y from 'yjs';
 import { test, expect } from './fixtures';
 import { canvas, docSeenByLateClient, openGuest, openOwner, profileOpts, type Opts } from './camera';
-import { boxOf, centerOf, obj, objectIds, onCanvas, seed, selectionBar, tool, tools, type Obj } from './scene';
+import { boxOf, centerOf, Finger, handle, obj, objectIds, onCanvas, seed, selectionBar, tool, tools, type Obj } from './scene';
 import { hsl, hueDist, rgba, signature, transparent } from './ui';
 
 // На macOS Home/End в поле ввода не двигают курсор: начало и конец строки — ⌘←/⌘→.
@@ -14,6 +14,9 @@ const MAC = process.platform === 'darwin';
 const HOME = MAC ? 'Meta+ArrowLeft' : 'Home';
 const END = MAC ? 'Meta+ArrowRight' : 'End';
 const SHIFT_HOME = MAC ? 'Shift+Meta+ArrowLeft' : 'Shift+Home';
+// начало и конец всего поля (строка может переноситься)
+const DOC_START = MAC ? 'Meta+ArrowUp' : 'Control+Home';
+const DOC_END = MAC ? 'Meta+ArrowDown' : 'Control+End';
 
 type Fx = { baseURL?: string; viewport: Opts['viewport']; hasTouch: boolean; isMobile: boolean; userAgent?: string; deviceScaleFactor?: number };
 const desktopOnly = (isMobile: boolean) => test.skip(isMobile, 'мышь и клавиатура — профиль desktop');
@@ -46,10 +49,6 @@ async function place(page: Page, toolName: string, fx: number, fy: number, isMob
   const p = await onCanvas(page, fx, fy);
   if (isMobile) await page.touchscreen.tap(p.x, p.y);
   else await page.mouse.click(p.x, p.y);
-  if (isMobile && toolName === 'Document' && !(await editor(page).isVisible({ timeout: 2000 }).catch(() => false))) {
-    // BUG-016: на телефоне документ после касания не открывает редактор — проверяется отдельным тестом
-    await selectionBar(page).getByRole('button', { name: 'Edit text', exact: true }).tap();
-  }
   await expect(editor(page)).toBeVisible();
   let id = '';
   await expect(async () => {
@@ -292,8 +291,8 @@ test('TXT-01 link participant creates and formats a text block like the owner', 
 
 test('TXT-01 TXT-08 BUG-011 block frame follows the text after a larger font size and after pasting rich text onto the canvas', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-011: высота текстового блока не пересчитывается после смены размера шрифта в панели и после вставки HTML на холст');
-  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx);
+  const owner = await openOwner(browser, o);
   try {
     const page = owner.page;
     const id = await place(page, 'Text', 0.3, 0.3);
@@ -307,6 +306,17 @@ test('TXT-01 TXT-08 BUG-011 block frame follows the text after a larger font siz
       return { frame: r.height, content: c.height };
     });
     expect.soft(fit.content, `текст ${fit.content}px помещается в рамку ${fit.frame}px`).toBeLessThanOrEqual(fit.frame + 2);
+    // высоту пересчитывает сменивший размер (ограничение handoff) — второй клиент видит ту же рамку
+    const guest = await guestOf(browser, o, owner.token);
+    try {
+      await expect(async () => {
+        const g = await obj(guest.page, id).evaluate((e) => ({ frame: e.getBoundingClientRect().height, content: (e.querySelector('.rich-text') ?? e).getBoundingClientRect().height }));
+        expect(g.content, `у участника текст ${g.content}px в рамке ${g.frame}px`).toBeLessThanOrEqual(g.frame + 2);
+        expect(g.frame, 'рамка выросла и у участника').toBeGreaterThan(fit.frame / 2);
+      }).toPass({ timeout: 10_000 });
+    } finally {
+      await guest.close();
+    }
     // вставка внешнего HTML на холст
     await copyExternal(page, EXTERNAL);
     await page.bringToFront();
@@ -566,7 +576,6 @@ test('TXT-04 TXT-06 slash menu in a document offers divider and link to object',
 
 test('TXT-04 slash menu near the bottom edge is fully visible and not covered by other panels', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-012: меню «/» у нижнего края холста уходит за край окна');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     const page = owner.page;
@@ -592,9 +601,53 @@ test('TXT-04 slash menu near the bottom edge is fully visible and not covered by
   }
 });
 
+/** Поставить документ в точку холста и проверить, что кнопки панели Text formatting в окне и не перекрыты; документ удаляется. */
+async function formattingBarVisible(page: Page, fx: number, fy: number) {
+  const vw = page.viewportSize()!.width;
+  const vh = page.viewportSize()!.height;
+  await place(page, 'Document', fx, fy);
+  await expect(fmtBar(page)).toBeVisible();
+  for (const b of await fmtBar(page).getByRole('button').all()) {
+    const bb = await boxOf(b);
+    const name = (await b.getAttribute('aria-label')) ?? (await b.textContent());
+    const at = `(${fx}, ${fy}): ${Math.round(bb.x)},${Math.round(bb.y)} ${Math.round(bb.width)}×${Math.round(bb.height)}`;
+    expect.soft(bb.y >= 0 && bb.x >= 0 && bb.x + bb.width <= vw && bb.y + bb.height <= vh, `кнопка «${name}» в окне ${at}`).toBe(true);
+    const c = centerOf(bb);
+    const own = await b.evaluate((el, [x, y]) => {
+      const e = document.elementFromPoint(x, y);
+      return !!e && (e === el || el.contains(e)) ? true : `${e?.tagName}.${e?.className} «${(e?.getAttribute('aria-label') ?? '').slice(0, 30)}»`;
+    }, [c.x, c.y] as const);
+    expect.soft(own === true, `кнопка «${name}» не перекрыта ${at}: ${own}`).toBe(true);
+  }
+  await exitEdit(page);
+  await page.keyboard.press('Delete');
+  await expect(page.locator('[data-object-id][data-type="document"]')).toHaveCount(0);
+}
+
+test('TXT-04 BUG-012 formatting bar of a document at the top edge of the canvas is not covered by other panels', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    // документ у верхнего края холста: поле частично или целиком над краем и прямо под краем
+    for (const [fx, fy] of [[0.3, 0.03], [0.5, 0.03], [0.85, 0.03], [0.3, 0.3], [0.85, 0.3]] as const) await formattingBarVisible(owner.page, fx, fy);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('TXT-04 BUG-017 formatting bar of a document in the top left corner of the canvas is not covered by the tool and view panels', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  test.fail(true, 'BUG-017: у документа, заходящего под панель Tools у верхнего края, панель Text formatting над полем — за окном и под панелью View');
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    await formattingBarVisible(owner.page, 0.1, 0.3);
+  } finally {
+    await owner.close();
+  }
+});
+
 test('TXT-04 BUG-013 slash on the empty line right after a divider opens the insert menu', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-013: «/» в пустой строке сразу после разделителя не открывает меню');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     const page = owner.page;
@@ -1133,6 +1186,45 @@ test('CVS-07 COL-01 BUG-014 undo after editing a shared text removes only own ty
   }
 });
 
+test('CVS-07 COL-01 BUG-014 undo and redo of own typing in the middle of a shared text keep the other client typing; the server copy agrees', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx);
+  const owner = await openOwner(browser, o);
+  const guest = await guestOf(browser, o, owner.token);
+  try {
+    const id = await place(owner.page, 'Text', 0.3, 0.3);
+    await owner.page.keyboard.type('alpha omega');
+    await exitEdit(owner.page);
+    await clickEmpty(owner.page);
+    await expect(obj(guest.page, id)).toContainText('alpha omega');
+    // владелец: вставка в середину строки
+    await openEditorOn(owner.page, id);
+    await owner.page.keyboard.press(DOC_START);
+    for (let i = 0; i < 'alpha'.length; i++) await owner.page.keyboard.press('ArrowRight');
+    await owner.page.keyboard.type(' beta');
+    await exitEdit(owner.page);
+    await clickEmpty(owner.page);
+    await expect(obj(guest.page, id)).toContainText('alpha beta omega');
+    // участник: в конец и в начало
+    await openEditorOn(guest.page, id);
+    await guest.page.keyboard.press(DOC_END);
+    await guest.page.keyboard.type(' zeta');
+    await guest.page.keyboard.press(DOC_START);
+    await guest.page.keyboard.type('pre ');
+    await exitEdit(guest.page);
+    await expect(obj(owner.page, id)).toContainText('pre alpha beta omega zeta');
+    await tools(owner.page).getByRole('button', { name: 'Undo', exact: true }).click();
+    for (const p of [owner.page, guest.page]) await expect(obj(p, id)).toHaveText('pre alpha omega zeta');
+    await untilObject(owner.page, `board=${owner.boardId}`, id, (x) => expect(x.text.trim()).toBe('pre alpha omega zeta'));
+    await tools(owner.page).getByRole('button', { name: 'Redo', exact: true }).click();
+    for (const p of [owner.page, guest.page]) await expect(obj(p, id)).toHaveText('pre alpha beta omega zeta');
+    await untilObject(owner.page, `board=${owner.boardId}`, id, (x) => expect(x.text.trim()).toBe('pre alpha beta omega zeta'));
+  } finally {
+    await guest.close();
+    await owner.close();
+  }
+});
+
 // ---------- CVS-24 / ARCH ----------
 
 test('CVS-24 TXT-06 Document is in All tools, can be pinned and creates a document; Text is pinned by default', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
@@ -1183,7 +1275,6 @@ test('ARCH editing text sends no HTTP requests to /api (only the board channel) 
 
 test('MOB-06 TXT-02 TXT-06 BUG-016 on a phone a new document opens its editor at once and a selected block keeps its first checkbox tappable', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
-  test.fail(true, 'BUG-016: на телефоне документ не открывает редактор после касания; маркер размера закрывает флажок первой строки');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     const page = owner.page;
@@ -1205,9 +1296,34 @@ test('MOB-06 TXT-02 TXT-06 BUG-016 on a phone a new document opens its editor at
   }
 });
 
+test('MOB-06 TXT-02 BUG-016 on a phone dragging the corner handle over a checkbox resizes the block and does not check the item', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    const page = owner.page;
+    const id = await place(page, 'Text', 0.4, 0.4, true);
+    await page.keyboard.type('[] phone task');
+    await exitEdit(page);
+    await expect(obj(page, id)).toHaveAttribute('aria-selected', 'true');
+    const cb = obj(page, id).getByRole('checkbox', { name: 'Done' });
+    const before = await boxOf(obj(page, id));
+    const h = centerOf(await boxOf(handle(page, 'nw')));
+    const f = await Finger.of(page);
+    await f.down(h);
+    await f.moveTo(h, { x: h.x - 40, y: h.y - 40 }, 10);
+    await f.up();
+    await expect(async () => {
+      const after = await boxOf(obj(page, id));
+      expect(after.width, 'ширина выросла при перетаскивании маркера').toBeGreaterThan(before.width + 20);
+    }).toPass({ timeout: 3000 });
+    await expect(cb, 'перетаскивание маркера не отмечает флажок').not.toBeChecked();
+  } finally {
+    await owner.close();
+  }
+});
+
 test('UI-04 BUG-015 on a phone buttons of the text formatting bar are at least 44x44', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
-  test.fail(true, 'BUG-015: кнопки Bold/Italic/Underline/Strikethrough на телефоне уже 44 px');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     const page = owner.page;
