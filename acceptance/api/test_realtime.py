@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from pycrdt import Doc, Map, Text
+from websockets.exceptions import ConnectionClosed
 
 from admin_helpers import create_user
 from board_helpers import create_board, delete_board, get_board, recent_boards, ts, unique_title
@@ -556,3 +557,89 @@ def test_arch_t41_03_server_speaks_sync_step1_step2_update(
             guest.edit(_put_object("u", type="text"))
             owner.wait_for(_has("u"))
             assert owner.received[-1][1] == UPDATE
+
+
+# --- BUG-018: принятые сервером правки не теряются при закрытии соединения под нагрузкой ---------
+
+
+def _object_update(oid: str) -> bytes:
+    """Независимое обновление Yjs с одним объектом (как правка вкладки, которая сразу закроется)."""
+    doc = Doc()
+    objects_of(doc)[oid] = Map({"type": "sticky", "x": 0, "y": 0})
+    return frame(UPDATE, doc.get_update())
+
+
+def _drop_without_close_frame(ws: Any) -> None:
+    """Оборвать TCP без кадра закрытия (RST), как при перезагрузке вкладки за прокси."""
+    import socket
+    import struct
+
+    sock = ws.socket
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+    sock.close()
+
+
+def _in_parallel(count: int, work: Any) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=count) as pool:
+        for f in [pool.submit(work, n) for n in range(count)]:
+            f.result()
+
+
+def _late_objects(client: Client, path: str, expected: set[str], timeout: float = 5.0) -> set[str]:
+    """Объекты документа глазами нового клиента; ждать не дольше `timeout`, пока появятся все `expected`."""
+    deadline = time.monotonic() + timeout
+    while True:
+        with peer(client, path) as late:
+            late.pump(0.3)
+            have = set(late.snapshot())
+        if expected <= have or time.monotonic() > deadline:
+            return have
+        time.sleep(0.5)
+
+
+def test_col01_bug018_edits_sent_right_before_clean_close_are_kept_under_load(
+    board_user: Client, owner_path: str
+) -> None:
+    """Вкладка шлёт правку и сразу закрывается (8 соединений параллельно, по 15 раз): все правки на сервере."""
+    sent: set[str] = set()
+
+    def work(n: int) -> None:
+        for i in range(15):
+            oid = f"clean-{n}-{i}"
+            with board_user.websocket(owner_path) as ws:
+                ws.send(_object_update(oid))
+            sent.add(oid)
+
+    _in_parallel(8, work)
+    have = _late_objects(board_user, owner_path, sent)
+    assert sent <= have, f"потеряно {len(sent - have)} из {len(sent)}: {sorted(sent - have)[:10]}"
+
+
+def test_col01_bug018_burst_then_drop_without_close_frame_keeps_every_edit_under_load(
+    board_user: Client, owner_path: str
+) -> None:
+    """8 вкладок параллельно шлют по 60 правок подряд и обрываются без кадра закрытия; сразу входит
+    перезагруженная вкладка. Всё, что дошло до сервера по TCP, должно оказаться в документе."""
+    sent: set[str] = set()
+
+    def work(n: int) -> None:
+        try:
+            with board_user.websocket(owner_path) as ws:
+                for i in range(60):
+                    oid = f"burst-{n}-{i}"
+                    ws.send(_object_update(oid))
+                    sent.add(oid)
+                # кадры ушли из клиента (как у браузера: последний кадр за десятки мс до перезагрузки)
+                time.sleep(0.1)
+                _drop_without_close_frame(ws)
+        except (OSError, ConnectionClosed):  # закрытие уже оборванного сокета клиентом websockets
+            pass
+        # «перезагруженная вкладка» входит сразу
+        with peer(board_user, owner_path):
+            pass
+
+    _in_parallel(8, work)
+    have = _late_objects(board_user, owner_path, sent)
+    assert sent <= have, f"потеряно {len(sent - have)} из {len(sent)}: {sorted(sent - have)[:10]}"

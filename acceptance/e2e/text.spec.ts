@@ -637,7 +637,7 @@ test('TXT-04 BUG-012 formatting bar of a document at the top edge of the canvas 
 
 test('TXT-04 BUG-017 formatting bar of a document in the top left corner of the canvas is not covered by the tool and view panels', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-017: у документа, заходящего под панель Tools у верхнего края, панель Text formatting над полем — за окном и под панелью View');
+  // BUG-017 исправлен в T6.2 (20afafa): пометка test.fail снята, тест — в наборе навсегда
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     await formattingBarVisible(owner.page, 0.1, 0.3);
