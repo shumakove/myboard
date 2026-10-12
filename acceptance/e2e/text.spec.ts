@@ -1290,7 +1290,8 @@ test('ARCH editing text sends no HTTP requests to /api (only the board channel) 
     const api: string[] = [];
     page.on('request', (r) => {
       const u = new URL(r.url());
-      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
+      // фоновая проверка сессии ACC-05 (GET /api/session) идёт по таймеру и к правке не относится
+      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && u.pathname !== '/api/session' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
       expect(r.url()).not.toContain('localhost');
     });
     const id = await place(page, 'Text', 0.3, 0.3);

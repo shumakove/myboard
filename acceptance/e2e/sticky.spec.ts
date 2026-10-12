@@ -1047,7 +1047,8 @@ test('ARCH creating, editing and tagging sticky notes sends no HTTP requests to 
     const api: string[] = [];
     page.on('request', (r) => {
       const u = new URL(r.url());
-      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
+      // фоновая проверка сессии ACC-05 (GET /api/session) идёт по таймеру и к правке не относится
+      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && u.pathname !== '/api/session' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
       expect(r.url()).not.toContain('localhost');
     });
     const id = await placeSticky(page, 0.3, 0.3, 'Green');
