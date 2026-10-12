@@ -5,8 +5,9 @@
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,12 +17,19 @@ from app.library.service import touch_board
 from app.realtime.models import BoardUpdate
 
 
+class StoredUpdate(NamedTuple):
+    """Строка журнала: номер и обновление Yjs."""
+
+    seq: int
+    update: bytes
+
+
 @dataclass(frozen=True)
 class Journal:
     """Сохранённое состояние доски: снимок (если журнал сжимали) и обновления после него."""
 
     snapshot: bytes | None
-    updates: list[bytes]
+    updates: list[StoredUpdate]
     last_seq: int
 
 
@@ -49,7 +57,7 @@ async def load_journal(db: AsyncSession, board_id: uuid.UUID) -> Journal:
         )
     ).all()
     last_seq = rows[-1].seq if rows else 0
-    return Journal(snapshot, [row.update for row in rows], last_seq)
+    return Journal(snapshot, [StoredUpdate(row.seq, row.update) for row in rows], last_seq)
 
 
 async def append(db: AsyncSession, entries: Sequence[JournalEntry]) -> None:
@@ -62,10 +70,18 @@ async def append(db: AsyncSession, entries: Sequence[JournalEntry]) -> None:
     await db.commit()
 
 
-async def compact(db: AsyncSession, board_id: uuid.UUID, state: bytes, upto_seq: int) -> None:
-    """Пишет снимок `state` (в нём обновления до `upto_seq` включительно) и отрезает их."""
+async def compact(
+    db: AsyncSession,
+    board_id: uuid.UUID,
+    state: bytes,
+    upto_seq: int,
+    keep: Collection[int] = (),
+) -> None:
+    """Пишет снимок `state` и отрезает обновления до `upto_seq` включительно, кроме `keep` —
+    тех, что ещё не вошли в документ и потому не попали в снимок (BUG-018)."""
     snapshots.add_snapshot(db, board_id, state)
-    await db.execute(
-        delete(BoardUpdate).where(BoardUpdate.board_id == board_id, BoardUpdate.seq <= upto_seq)
-    )
+    cut = delete(BoardUpdate).where(BoardUpdate.board_id == board_id, BoardUpdate.seq <= upto_seq)
+    if keep:
+        cut = cut.where(BoardUpdate.seq.not_in(keep))
+    await db.execute(cut)
     await db.commit()

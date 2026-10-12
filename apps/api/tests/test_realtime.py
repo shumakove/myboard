@@ -941,3 +941,62 @@ def test_edits_before_corrupted_frame_are_kept_and_delivered(
 
     with _connect(client, f"board={board}", alice) as again:
         assert _sticker(again.doc)["x"] == 5
+
+
+def test_bug018_edit_waiting_for_missing_earlier_edit_survives_compaction(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    """COL-01, TXT-06: правка, пришедшая раньше той, от которой зависит (Yjs держит её
+    отложенной), не пропадает при сжатии журнала: когда недостающая правка доезжает,
+    доска собирается целиком."""
+    tab: Doc[Any] = Doc()
+    before = tab.get_state()
+    _add_sticker(tab)
+    created = tab.get_update(before)  # стикер создан, пока связи ещё не было
+    before = tab.get_state()
+    _sticker(tab)["text"].insert(5, " world")
+    typed = tab.get_update(before)
+
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.ws.send_bytes(create_update_message(typed))
+        owner.flush()
+        _compact_now(client)
+    # Доска выгружена и сжата; набранное ждёт в журнале своё начало.
+    with _connect(client, f"token={link}", kate) as guest:
+        guest.ws.send_bytes(create_update_message(created))
+        guest.flush()
+
+    with _connect(client, f"board={board}", alice) as reloaded:
+        assert str(_sticker(reloaded.doc)["text"]) == "Hello world"
+
+
+def test_bug018_edits_sent_while_board_is_loading_are_kept_after_drop(
+    alice: Cookies, board: str, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """COL-01, TXT-06: пока сервер под нагрузкой загружает доску, браузер уже шлёт правки и
+    рвёт соединение (перезагрузка). Ответ сервера в оборванное соединение не должен
+    стереть уже присланные кадры."""
+    load_journal = store.load_journal
+
+    async def slow_load(*args: Any) -> store.Journal:
+        await asyncio.sleep(1.0)
+        return await load_journal(*args)
+
+    monkeypatch.setattr(store, "load_journal", slow_load)
+    edits = 30
+    local: Doc[Any] = Doc()
+    objects = local.get("objects", type=Map)
+    headers = _cookie_header(alice)
+    with _live_server(settings) as url:
+        with ws_connect(f"{url}?board={board}", additional_headers=headers) as tab:
+            tab.send(create_sync_step1_message(local.get_state()))
+            for index in range(edits):
+                before = local.get_state()
+                objects[f"k{index}"] = index
+                tab.send(create_update_message(local.get_update(before)))
+                time.sleep(0.01)
+            _abort(tab.socket)
+        _eventually(lambda: _count(settings, "board_snapshots", board) == 1, timeout=30)
+
+    with TestClient(create_app(settings)) as client, _connect(client, f"board={board}", alice) as o:
+        assert _snapshot(o.doc) == {f"k{index}": index for index in range(edits)}

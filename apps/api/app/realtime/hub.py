@@ -85,9 +85,11 @@ class Hub:
             # Журнал не тронут: состояние доски цело, сжатие повторится позже.
             logger.exception("Snapshot of board %s failed", room.board_id)
 
-    async def _write_snapshot(self, board_id: uuid.UUID, state: bytes, upto_seq: int) -> None:
+    async def _write_snapshot(
+        self, board_id: uuid.UUID, state: bytes, upto_seq: int, keep: frozenset[int]
+    ) -> None:
         async with self._session_factory() as db:
-            await store.compact(db, board_id, state, upto_seq)
+            await store.compact(db, board_id, state, upto_seq, keep)
 
 
 def hub_of(connection: HTTPConnection) -> Hub:

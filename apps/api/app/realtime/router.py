@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import uuid
 from urllib.parse import urlsplit
 
 import anyio
@@ -54,15 +55,40 @@ async def board_socket(
         return
 
     await websocket.accept()
+    # BUG-018: сокет вычитывается сразу после accept, ещё до загрузки доски. Иначе кадры,
+    # присланные, пока доска грузится (под нагрузкой — секунды), лежат в буфере ядра, и
+    # первый же ответ сервера в соединение, уже оборванное перезагрузкой вкладки, их стирает.
+    inbox = Inbox()
+    reader = asyncio.create_task(_read(websocket, inbox))
+    try:
+        await _serve(
+            websocket,
+            inbox,
+            access.board_id,
+            Peer(websocket, name=access.name, guest=access.guest),
+            request,
+            factory,
+        )
+    finally:
+        reader.cancel()
+
+
+async def _serve(
+    websocket: WebSocket,
+    inbox: Inbox,
+    board_id: uuid.UUID,
+    peer: Peer,
+    request: AccessRequest,
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
     hub = hub_of(websocket)
-    peer = Peer(websocket, name=access.name, guest=access.guest)
-    room = await hub.join(access.board_id, peer)
+    room = await hub.join(board_id, peer)
     watcher = asyncio.create_task(_watch_access(peer, room, request, factory))
     try:
         # Вектор версии сервера: клиент в ответ досылает правки, которых нет у сервера.
         await peer.send(encode_sync(SyncKind.STEP1, room.state_vector()))
         await room.announce(peer)
-        await _receive(websocket, peer, room, hub)
+        await _receive(inbox, peer, room, hub)
     finally:
         watcher.cancel()
         # Выход доводится до конца, даже если задачу соединения отменили: иначе доска
@@ -81,25 +107,20 @@ def _same_origin(websocket: WebSocket) -> bool:
     return origin is None or urlsplit(origin).netloc == websocket.headers.get("host")
 
 
-async def _receive(websocket: WebSocket, peer: Peer, room: BoardRoom, hub: Hub) -> None:
+async def _receive(inbox: Inbox, peer: Peer, room: BoardRoom, hub: Hub) -> None:
     """Кадры применяются по порядку прихода; сокет вычитывает отдельная задача (BUG-018)."""
-    inbox = Inbox()
-    reader = asyncio.create_task(_read(websocket, inbox))
-    try:
-        while not peer.closed:
-            item = await inbox.get()
-            if isinstance(item, Closed):
-                if item.corrupted:
-                    await peer.close(INVALID_PAYLOAD)
-                return
-            try:
-                await _handle(item, inbox, peer, room, hub)
-            except ProtocolError:
-                # Повреждённое обновление закрывает только это соединение.
+    while not peer.closed:
+        item = await inbox.get()
+        if isinstance(item, Closed):
+            if item.corrupted:
                 await peer.close(INVALID_PAYLOAD)
-                return
-    finally:
-        reader.cancel()
+            return
+        try:
+            await _handle(item, inbox, peer, room, hub)
+        except ProtocolError:
+            # Повреждённое обновление закрывает только это соединение.
+            await peer.close(INVALID_PAYLOAD)
+            return
 
 
 async def _read(websocket: WebSocket, inbox: Inbox) -> None:
