@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from pycrdt import Doc, Map, MapEvent
@@ -38,8 +38,8 @@ EMPTY_UPDATE = b"\x00\x00"
 # Корень документа с удалёнными объектами: id -> { object, deletedAt, deletedBy }.
 TRASH = "trash"
 
-# Запись принятого обновления в журнал (и ленту действий).
-Persist = Callable[[JournalEntry], Awaitable[None]]
+# Запись принятых обновлений в журнал (и ленту действий) одной транзакцией.
+Persist = Callable[[Sequence[JournalEntry]], Awaitable[None]]
 # Запись снимка: (доска, полное состояние, последний вошедший в него номер журнала).
 WriteSnapshot = Callable[[uuid.UUID, bytes, int], Awaitable[None]]
 
@@ -107,24 +107,39 @@ class BoardRoom:
         except ValueError:
             raise ProtocolError("invalid state vector") from None
 
-    async def apply(self, update: bytes, sender: Peer, persist: Persist) -> None:
-        """Применяет, записывает и рассылает. Повреждённое обновление — `ProtocolError`,
-        документ и остальные соединения его не видят."""
-        if update == EMPTY_UPDATE:
-            return
+    async def apply(self, updates: Sequence[bytes], sender: Peer, persist: Persist) -> None:
+        """Применяет обновления по порядку, записывает их одной транзакцией и рассылает.
+
+        Повреждённое обновление — `ProtocolError`: документ и остальные соединения его
+        не видят, а принятые до него обновления записываются и рассылаются.
+        """
         async with self._lock:
-            self._trashed = []
-            try:
-                self._doc.apply_update(update)
-            except ValueError:
-                raise ProtocolError("invalid update") from None
-            self._seq += 1
-            # Автор удаления — имя из сессии соединения, а не поле `deletedBy` документа.
-            entry = JournalEntry(
-                self.board_id, self._seq, update, sender.name, tuple(self._trashed)
-            )
-            await persist(entry)
-            await self._broadcast(encode_sync(SyncKind.UPDATE, update), sender)
+            entries: list[JournalEntry] = []
+            error: ProtocolError | None = None
+            for update in updates:
+                if update == EMPTY_UPDATE:
+                    continue
+                try:
+                    entries.append(self._integrate(update, sender))
+                except ProtocolError as exc:
+                    error = exc
+                    break
+            if entries:
+                await persist(entries)
+                for entry in entries:
+                    await self._broadcast(encode_sync(SyncKind.UPDATE, entry.update), sender)
+            if error is not None:
+                raise error
+
+    def _integrate(self, update: bytes, sender: Peer) -> JournalEntry:
+        self._trashed = []
+        try:
+            self._doc.apply_update(update)
+        except ValueError:
+            raise ProtocolError("invalid update") from None
+        self._seq += 1
+        # Автор удаления — имя из сессии соединения, а не поле `deletedBy` документа.
+        return JournalEntry(self.board_id, self._seq, update, sender.name, tuple(self._trashed))
 
     async def compact(self, write: WriteSnapshot) -> bool:
         """Пишет снимок, если с прошлого сжатия были правки; `True` — снимок записан.

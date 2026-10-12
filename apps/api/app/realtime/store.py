@@ -52,12 +52,13 @@ async def load_journal(db: AsyncSession, board_id: uuid.UUID) -> Journal:
     return Journal(snapshot, [row.update for row in rows], last_seq)
 
 
-async def append(db: AsyncSession, entry: JournalEntry) -> None:
-    """Обновление, запись ленты и `boards.updated_at` (BRD-04) — одна транзакция."""
-    db.add(BoardUpdate(board_id=entry.board_id, seq=entry.seq, update=entry.update))
-    if entry.trashed:
-        events.add_objects_deleted(db, entry.board_id, entry.actor_name, entry.trashed)
-    await touch_board(db, entry.board_id)
+async def append(db: AsyncSession, entries: Sequence[JournalEntry]) -> None:
+    """Обновления одной доски, записи ленты и `boards.updated_at` (BRD-04) — одна транзакция."""
+    for entry in entries:
+        db.add(BoardUpdate(board_id=entry.board_id, seq=entry.seq, update=entry.update))
+        if entry.trashed:
+            events.add_objects_deleted(db, entry.board_id, entry.actor_name, entry.trashed)
+    await touch_board(db, entries[0].board_id)
     await db.commit()
 
 

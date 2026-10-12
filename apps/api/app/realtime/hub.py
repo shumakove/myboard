@@ -12,6 +12,7 @@
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -52,9 +53,9 @@ class Hub:
                 # Под блокировкой: новое подключение к доске прочитает уже сжатый журнал.
                 await self._compact(room)
 
-    async def persist(self, entry: JournalEntry) -> None:
+    async def persist(self, entries: Sequence[JournalEntry]) -> None:
         async with self._session_factory() as db:
-            await store.append(db, entry)
+            await store.append(db, entries)
 
     async def compact_all(self) -> None:
         """Сжимает журнал всех открытых досок, где были правки с прошлого снимка."""

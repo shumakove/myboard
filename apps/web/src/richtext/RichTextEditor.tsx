@@ -247,6 +247,7 @@ export function RichTextEditor({
     );
     setPlacement((current) =>
       current.toolbarBelow === next.toolbarBelow &&
+      Math.abs(current.toolbarShift - next.toolbarShift) < 1 &&
       current.menuAbove === next.menuAbove &&
       Math.abs(current.menuShift - next.menuShift) < 1
         ? current
@@ -375,6 +376,7 @@ export function RichTextEditor({
       <div
         ref={toolbarRef}
         className={`rich-toolbar ui-panel${placement.toolbarBelow ? " rich-toolbar--below" : ""}`}
+        style={{ left: placement.toolbarShift / zoom }}
         role="toolbar"
         aria-label="Text formatting"
         onMouseDown={(event) => {
