@@ -872,6 +872,36 @@ test('TXT-06 BUG-018 document edits are kept on the server when the linked objec
   }
 });
 
+test('TXT-06 BUG-018 text typed right after the board opens is kept after an immediate reload', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  // Проверка 2 T6.2: под нагрузкой сервер начинает читать соединение через секунды после его открытия;
+  // правки, набранные в это окно, пропадали навсегда (журнал отрезан пустым снимком).
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    const page = owner.page;
+    const lost: string[] = [];
+    for (let round = 0; round < 3; round++) {
+      const boardId = await owner.newBoard();
+      await page.goto(`/boards/${boardId}`);
+      await expect(canvas(page)).toBeVisible();
+      const id = await place(page, 'Text', 0.3, 0.3);
+      await page.keyboard.type('# Saved heading');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('[] task');
+      await exitEdit(page);
+      await page.waitForTimeout(500);
+      await page.reload();
+      await expect(canvas(page)).toBeVisible();
+      // запас на задержку под нагрузкой: правка должна появиться, а не просто прийти быстро
+      const shown = await obj(page, id).locator('h1', { hasText: 'Saved heading' }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      if (!shown) lost.push(`доска ${boardId}`);
+    }
+    expect(lost, 'набранный сразу после открытия доски текст есть после перезагрузки').toEqual([]);
+  } finally {
+    await owner.close();
+  }
+});
+
 // ---------- TXT-07 ----------
 
 test('TXT-07 selected text blocks are copied as rich HTML and plain text that an external editor accepts', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
