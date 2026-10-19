@@ -643,3 +643,73 @@ def test_col01_bug018_burst_then_drop_without_close_frame_keeps_every_edit_under
     _in_parallel(8, work)
     have = _late_objects(board_user, owner_path, sent)
     assert sent <= have, f"потеряно {len(sent - have)} из {len(sent)}: {sorted(sent - have)[:10]}"
+
+
+def _typing_frames(chars: str) -> list[bytes]:
+    """Создание текстового объекта и набор по символу — каждое обновление зависит от предыдущего,
+    как набор во вкладке браузера."""
+    author = Doc()
+    frames: list[bytes] = []
+    before = author.get_state()
+    with author.transaction():
+        objects_of(author)["typed"] = Map({"type": "text", "x": 0, "y": 0, "text": Text("")})
+    frames.append(frame(UPDATE, author.get_update(before)))
+    text = objects_of(author)["typed"]["text"]
+    for i, ch in enumerate(chars):
+        before = author.get_state()
+        with author.transaction():
+            text.insert(i, ch)
+        frames.append(frame(UPDATE, author.get_update(before)))
+    return frames
+
+
+def _late_text(client: Client, path: str) -> str:
+    with peer(client, path) as late:
+        late.pump(0.3)
+        typed = late.snapshot().get("typed") or {}
+        return str(typed.get("text", ""))
+
+
+def test_col01_bug018_typing_right_after_a_fresh_board_opens_survives_drop_under_load(
+    board_user: Client,
+) -> None:
+    """Окно проверки 2 BUG-018: доска ещё не загружена в память, вкладка сразу после рукопожатия
+    шлёт свой STEP1 и набор (цепочка зависимых обновлений), не дождавшись ни одного кадра сервера,
+    и обрывается без кадра закрытия; сразу входит перезагруженная вкладка. 8 потоков, 24 новые доски.
+    Весь набор — в документе сервера, и после сжатия (уход всех клиентов) тоже."""
+    chars = "Saved heading task"
+    boards = [create_board(board_user, unique_title()) for _ in range(24)]
+
+    def work(n: int) -> None:
+        for board in boards[n::8]:
+            path = channel_path(board=board["id"])
+            try:
+                with board_user.websocket(path) as ws:
+                    ws.send(frame(STEP1, Doc().get_state()))
+                    for data in _typing_frames(chars):
+                        ws.send(data)
+                    time.sleep(0.1)
+                    _drop_without_close_frame(ws)
+            except (OSError, ConnectionClosed):
+                pass
+            with peer(board_user, path):
+                pass
+
+    _in_parallel(8, work)
+
+    def lost() -> dict[str, str]:
+        result: dict[str, str] = {}
+        for board in boards:
+            path = channel_path(board=board["id"])
+            deadline = time.monotonic() + 5
+            while (got := _late_text(board_user, path)) != chars and time.monotonic() < deadline:
+                time.sleep(0.5)
+            if got != chars:
+                result[board["id"]] = got
+        return result
+
+    first = lost()
+    assert not first, f"набор потерян на {len(first)} из {len(boards)} досок: {first}"
+    time.sleep(2)  # сжатие после ухода всех клиентов
+    second = lost()
+    assert not second, f"после сжатия набор потерян на {len(second)} из {len(boards)} досок: {second}"
