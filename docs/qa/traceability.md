@@ -75,16 +75,16 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | TXT-01 | T6.1 | acceptance/e2e/text.spec.ts (TXT-01 *, BUG-011) | PASS |
 | TXT-02 | T6.1 | acceptance/e2e/text.spec.ts (TXT-02 *, desktop + mobile; BUG-016 ×2) | PASS |
 | TXT-03 | T6.1 | acceptance/e2e/text.spec.ts (TXT-03 shortcuts…) | PASS |
-| TXT-04 | T6.1 | acceptance/e2e/text.spec.ts (TXT-04 *, BUG-012, BUG-013, BUG-017) | PASS (BUG-017 исправлен в T6.2 20afafa, проверено; в `main` — после приёмки T6.2) |
+| TXT-04 | T6.1 | acceptance/e2e/text.spec.ts (TXT-04 *, BUG-012, BUG-013, BUG-017) | PASS (BUG-017 исправлен в T6.2 20afafa, проверено) |
 | TXT-05 | T6.1 | acceptance/e2e/text.spec.ts (TXT-05 …) | PASS |
-| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …, MOB-06 TXT-02 TXT-06 BUG-016, TXT-06 BUG-018) | FAIL (BUG-018 major, открыт: T6.2 проверка 2 — исходный сценарий проходит, но правки, набранные сразу после открытия доски, под нагрузкой теряются навсегда; тест «TXT-06 BUG-018 text typed right after the board opens…») |
+| TXT-06 | T6.1 | acceptance/e2e/text.spec.ts (TXT-06 *, CVS-24 TXT-06 …, MOB-06 TXT-02 TXT-06 BUG-016, TXT-06 BUG-018) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
 | TXT-07 | T6.1 | acceptance/e2e/text.spec.ts (TXT-07 …) | PASS |
 | TXT-08 | T6.1 | acceptance/e2e/text.spec.ts (TXT-08 *, BUG-011) | PASS |
-| STK-01 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-01 *, desktop + mobile) | PASS (T6.2 проверка 2: REJECTED по регрессии, BUG-018) |
-| STK-02 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-02 *) | PASS (T6.2 проверка 2: REJECTED по регрессии, BUG-018) |
-| STK-03 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-03 *, CVS-22, CVS-08, COL-01) | PASS (T6.2 проверка 2: REJECTED по регрессии, BUG-018) |
-| STK-04 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-04 *) | PASS (T6.2 проверка 2: REJECTED по регрессии, BUG-018) |
-| STK-05 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-05 *, desktop + mobile) | PASS (T6.2 проверка 2: REJECTED по регрессии, BUG-018) |
+| STK-01 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-01 *, desktop + mobile) | PASS (T6.2 проверка 3, ACCEPTED) |
+| STK-02 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-02 *) | PASS (T6.2 проверка 3, ACCEPTED) |
+| STK-03 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-03 *, CVS-22, CVS-08, COL-01) | PASS (T6.2 проверка 3, ACCEPTED) |
+| STK-04 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-04 *) | PASS (T6.2 проверка 3, ACCEPTED) |
+| STK-05 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-05 *, desktop + mobile) | PASS (T6.2 проверка 3, ACCEPTED) |
 | SHP-01 | T6.3 | — | не проверено |
 | SHP-02 | T6.3 | — | не проверено |
 | SHP-03 | T6.3 | — | не проверено |
@@ -156,13 +156,13 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | NTE-01 | T6.12 | — | не проверено |
 | NTE-02 | T6.12 | — | не проверено |
 | NTE-03 | T6.12 | — | не проверено |
-| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | FAIL (BUG-018 major: потеря правок при перезагрузке вкладки под нагрузкой; совместный ввод — PASS) |
+| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
 | COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS |
 | COL-05 | T8.1 | — | не проверено |
 | COL-06 | T8.1 | — | не проверено |
-| COL-07 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col07_* (основа: снимки, сжатие журнала, поздний клиент, перезапуск `api`) | основа PASS (T4.3); требование — T8.2 |
+| COL-07 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col07_* (основа: снимки, сжатие журнала, поздний клиент, перезапуск `api`; test_col07_bug018_* — сжатие не теряет отложенную правку) | основа PASS (T4.3); требование — T8.2 |
 | COL-08 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col08_* (основа: перенос в `trash`, `board_events` с именем из сессии) | основа PASS (T4.3); требование — T8.2 |
 | COL-09 | T4.2 | acceptance/api/test_presence.py::test_col09_*, acceptance/e2e/presence.spec.ts (COL-09, desktop + mobile) | PASS |
 | BAK-01 | T10.1 | — | не проверено |
