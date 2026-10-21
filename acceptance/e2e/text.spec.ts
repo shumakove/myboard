@@ -637,7 +637,7 @@ test('TXT-04 BUG-012 formatting bar of a document at the top edge of the canvas 
 
 test('TXT-04 BUG-017 formatting bar of a document in the top left corner of the canvas is not covered by the tool and view panels', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-017: у документа, заходящего под панель Tools у верхнего края, панель Text formatting над полем — за окном и под панелью View');
+  // BUG-017 исправлен в T6.2 (20afafa): пометка test.fail снята, тест — в наборе навсегда
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
   try {
     await formattingBarVisible(owner.page, 0.1, 0.3);
@@ -831,6 +831,72 @@ test('TXT-06 link to an object that was deleted shows it is missing and does not
     await page.waitForTimeout(800);
     const after = await boxOf(obj(page, id));
     expect(Math.abs(after.x - before.x) + Math.abs(after.y - before.y), 'вид не сдвинулся').toBeLessThan(2);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('TXT-06 BUG-018 document edits are kept on the server when the linked object is deleted and the page is reloaded right away', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    const page = owner.page;
+    const lost: string[] = [];
+    // дефект плавающий: три доски подряд, каждая — сборка документа и перезагрузка сразу после выхода из правки
+    for (let round = 0; round < 3; round++) {
+      const boardId = round === 0 ? owner.boardId : await owner.newBoard();
+      if (round > 0) {
+        await page.goto(`/boards/${boardId}`);
+        await expect(canvas(page)).toBeVisible();
+      }
+      await seed(page, boardId, { 'qa-far': FAR });
+      const id = await buildDocument(page);
+      // переход по ссылке, удаление объекта по Delete и сразу перезагрузка (как в «TXT-06 link to an object that was deleted»)
+      await obj(page, id).getByRole('button', { name: /Budget review/ }).click();
+      await expect(obj(page, 'qa-far')).toHaveAttribute('aria-selected', 'true');
+      await page.keyboard.press('Delete');
+      await expect(obj(page, 'qa-far')).toHaveCount(0);
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await expect(obj(page, id)).toBeVisible();
+      // то, что было на экране до перезагрузки, должно быть и после неё
+      await page.waitForTimeout(1500);
+      const shownAfter = { hr: await obj(page, id).locator('hr').count(), missing: await obj(page, id).getByText('Missing object').count() };
+      const d = await docObject(page, `board=${boardId}`, id);
+      const kinds = JSON.stringify(d?.delta ?? []);
+      if (!shownAfter.hr || !shownAfter.missing || !kinds.includes('objectLink') || !kinds.includes('divider')) lost.push(`доска ${round + 1}: на экране ${JSON.stringify(shownAfter)}, сервер ${kinds.slice(0, 200)}`);
+    }
+    expect(lost, 'ссылка на объект и разделитель, видимые до перезагрузки, есть в документе сервера').toEqual([]);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('TXT-06 BUG-018 text typed right after the board opens is kept after an immediate reload', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  // Проверка 2 T6.2: под нагрузкой сервер начинает читать соединение через секунды после его открытия;
+  // правки, набранные в это окно, пропадали навсегда (журнал отрезан пустым снимком).
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } as Fx));
+  try {
+    const page = owner.page;
+    const lost: string[] = [];
+    for (let round = 0; round < 3; round++) {
+      const boardId = await owner.newBoard();
+      await page.goto(`/boards/${boardId}`);
+      await expect(canvas(page)).toBeVisible();
+      const id = await place(page, 'Text', 0.3, 0.3);
+      await page.keyboard.type('# Saved heading');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('[] task');
+      await exitEdit(page);
+      await page.waitForTimeout(500);
+      await page.reload();
+      await expect(canvas(page)).toBeVisible();
+      // запас на задержку под нагрузкой: правка должна появиться, а не просто прийти быстро
+      const shown = await obj(page, id).locator('h1', { hasText: 'Saved heading' }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      if (!shown) lost.push(`доска ${boardId}`);
+    }
+    expect(lost, 'набранный сразу после открытия доски текст есть после перезагрузки').toEqual([]);
   } finally {
     await owner.close();
   }
@@ -1254,7 +1320,8 @@ test('ARCH editing text sends no HTTP requests to /api (only the board channel) 
     const api: string[] = [];
     page.on('request', (r) => {
       const u = new URL(r.url());
-      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
+      // фоновая проверка сессии ACC-05 (GET /api/session) идёт по таймеру и к правке не относится
+      if (u.pathname.startsWith('/api') && u.pathname !== '/api/ws' && u.pathname !== '/api/session' && r.resourceType() !== 'websocket') api.push(`${r.method()} ${u.pathname}`);
       expect(r.url()).not.toContain('localhost');
     });
     const id = await place(page, 'Text', 0.3, 0.3);

@@ -232,6 +232,59 @@ def test_col07_corrupted_update_stays_out_of_journal_and_snapshot(
         assert set(content(owner.doc)["objects"]) == {"ok", "ok2"}
 
 
+# --- BUG-018: сжатие не теряет правку, которая ждёт своё начало ------------------------------
+
+
+def _split_edit() -> tuple[bytes, bytes]:
+    """Правка в два обновления: создание стикера с текстом и дописывание в этот текст.
+    Второе без первого применить нельзя — так приходит набор вкладки, чьё начало ещё в пути."""
+    author = Doc()
+    before = author.get_state()
+    with author.transaction():
+        sticker("p", "start")(author)
+    start = author.get_update(before)
+    middle = author.get_state()
+    with author.transaction():
+        author.get("objects", type=Map)["p"]["text"].insert(5, " more")
+    return start, author.get_update(middle)
+
+
+def test_col07_bug018_edit_waiting_for_its_start_survives_compaction_and_restart(
+    board_user: Client,
+    guest: Client,
+    board: dict[str, Any],
+    owner_path: str,
+    guest_path: str,
+    interval: float,
+    clean_stack: str,
+) -> None:
+    """Сервер принял продолжение правки раньше её начала. Ни фоновый снимок, ни сжатие при уходе всех,
+    ни перезапуск api не должны выбросить продолжение: когда начало доезжает, текст полный."""
+    start, tail = _split_edit()
+    with peer(board_user, owner_path) as owner:
+        owner.edit(sticker("anchor", "kept"))
+        owner.send_raw(frame(UPDATE, tail))
+        owner.pump(0.3)
+        assert owner.is_open(), "продолжение правки сочтено повреждённым"
+        eventually(lambda: len(snapshots(board["id"])) >= 1, 3 * interval + 5, "фоновый снимок не снят")
+        time.sleep(interval + 1)  # ещё один цикл снимка с ожидающей правкой
+    time.sleep(1.5)  # сжатие при уходе всех клиентов
+    rows = snapshots(board["id"])
+    assert rows and "anchor" in content(doc_from(rows[-1]["state"]))["objects"], "снимок потерял принятую правку"
+    restart_api(clean_stack)
+    with peer(guest, guest_path) as late_author:
+        late_author.send_raw(frame(UPDATE, start))
+        late_author.pump(0.3)
+    deadline = time.monotonic() + 5
+    while True:
+        objects = _late_content(board_user, owner_path)["objects"]
+        if objects.get("p", {}).get("text") == "start more" or time.monotonic() > deadline:
+            break
+        time.sleep(0.5)
+    assert objects.get("p", {}).get("text") == "start more", f"продолжение правки потеряно: {objects}"
+    assert "anchor" in objects
+
+
 # --- COL-07 (основа): перезапуск api ----------------------------------------------------
 
 
