@@ -7,6 +7,7 @@
 """
 
 import asyncio
+import uuid
 from urllib.parse import urlsplit
 
 import anyio
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.realtime.access import AccessRequest, authorize
 from app.realtime.hub import ACCESS_REVOKED, Hub, hub_of
+from app.realtime.inbox import Closed, Inbox, is_update
 from app.realtime.protocol import (
     AwarenessMessage,
     ClientMessage,
@@ -53,15 +55,40 @@ async def board_socket(
         return
 
     await websocket.accept()
+    # BUG-018: сокет вычитывается сразу после accept, ещё до загрузки доски. Иначе кадры,
+    # присланные, пока доска грузится (под нагрузкой — секунды), лежат в буфере ядра, и
+    # первый же ответ сервера в соединение, уже оборванное перезагрузкой вкладки, их стирает.
+    inbox = Inbox()
+    reader = asyncio.create_task(_read(websocket, inbox))
+    try:
+        await _serve(
+            websocket,
+            inbox,
+            access.board_id,
+            Peer(websocket, name=access.name, guest=access.guest),
+            request,
+            factory,
+        )
+    finally:
+        reader.cancel()
+
+
+async def _serve(
+    websocket: WebSocket,
+    inbox: Inbox,
+    board_id: uuid.UUID,
+    peer: Peer,
+    request: AccessRequest,
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
     hub = hub_of(websocket)
-    peer = Peer(websocket, name=access.name, guest=access.guest)
-    room = await hub.join(access.board_id, peer)
+    room = await hub.join(board_id, peer)
     watcher = asyncio.create_task(_watch_access(peer, room, request, factory))
     try:
         # Вектор версии сервера: клиент в ответ досылает правки, которых нет у сервера.
         await peer.send(encode_sync(SyncKind.STEP1, room.state_vector()))
         await room.announce(peer)
-        await _receive(websocket, peer, room, hub)
+        await _receive(inbox, peer, room, hub)
     finally:
         watcher.cancel()
         # Выход доводится до конца, даже если задачу соединения отменили: иначе доска
@@ -80,29 +107,54 @@ def _same_origin(websocket: WebSocket) -> bool:
     return origin is None or urlsplit(origin).netloc == websocket.headers.get("host")
 
 
-async def _receive(websocket: WebSocket, peer: Peer, room: BoardRoom, hub: Hub) -> None:
+async def _receive(inbox: Inbox, peer: Peer, room: BoardRoom, hub: Hub) -> None:
+    """Кадры применяются по порядку прихода; сокет вычитывает отдельная задача (BUG-018)."""
     while not peer.closed:
-        message = await websocket.receive()
-        if message["type"] == "websocket.disconnect" or peer.closed:
+        item = await inbox.get()
+        if isinstance(item, Closed):
+            if item.corrupted:
+                await peer.close(INVALID_PAYLOAD)
             return
-        frame = message.get("bytes")
         try:
-            if frame is None:
-                raise ProtocolError("text frames are not accepted")
-            await _handle(decode(frame), peer, room, hub)
+            await _handle(item, inbox, peer, room, hub)
         except ProtocolError:
             # Повреждённое обновление закрывает только это соединение.
             await peer.close(INVALID_PAYLOAD)
             return
 
 
-async def _handle(message: ClientMessage, peer: Peer, room: BoardRoom, hub: Hub) -> None:
-    if isinstance(message, AwarenessMessage):
+async def _read(websocket: WebSocket, inbox: Inbox) -> None:
+    """Забирает кадры из сокета сразу по приходу, не дожидаясь их применения.
+
+    Поток всегда завершается элементом `Closed`, даже если чтение прервалось ошибкой.
+    """
+    corrupted = False
+    try:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            frame = message.get("bytes")
+            if frame is None:
+                raise ProtocolError("text frames are not accepted")
+            inbox.put(decode(frame))
+    except ProtocolError:
+        corrupted = True
+    finally:
+        inbox.put(Closed(corrupted))
+
+
+async def _handle(
+    message: ClientMessage, inbox: Inbox, peer: Peer, room: BoardRoom, hub: Hub
+) -> None:
+    if is_update(message):
+        # Накопившиеся подряд правки применяются и пишутся в журнал одной транзакцией:
+        # под нагрузкой сервер догоняет клиента, а не отстаёт на запись за правку.
+        await room.apply([message.payload, *inbox.take_updates()], peer, hub.persist)
+    elif isinstance(message, AwarenessMessage):
         await room.update_awareness(peer, message.state)
-    elif message.kind is SyncKind.STEP1:
-        await peer.send(encode_sync(SyncKind.STEP2, room.missing_since(message.payload)))
     else:
-        await room.apply(message.payload, peer, hub.persist)
+        await peer.send(encode_sync(SyncKind.STEP2, room.missing_since(message.payload)))
 
 
 async def _watch_access(

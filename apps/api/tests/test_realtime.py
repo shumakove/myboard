@@ -6,13 +6,18 @@
 cookie каждого браузера передаются явно.
 """
 
+import asyncio
 import json
+import socket
+import struct
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from pycrdt import (
     Decoder,
@@ -26,10 +31,12 @@ from pycrdt import (
 from sqlalchemy import create_engine, text
 from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
+from websockets.sync.client import connect as ws_connect
 
 from app.core.settings import Settings
 from app.main import create_app
 from app.realtime import router as realtime_router
+from app.realtime import store
 from app.realtime.hub import Hub
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
@@ -839,3 +846,157 @@ def test_presence_stays_out_of_snapshots(
     assert _snapshot(restored) == {"s1": {"type": "sticker", "x": 0, "text": "Hello"}}
     for marker in (b"cursor", b"following", b"watched-peer", b"Kate", b"Alice"):
         assert marker not in state
+
+
+# --- BUG-018: принятые правки не теряются при обрыве соединения под нагрузкой ----------
+
+
+@contextmanager
+def _live_server(settings: Settings) -> Iterator[str]:
+    """Настоящий Uvicorn на свободном порту: TestClient не передаёт кадры через TCP."""
+    config = uvicorn.Config(create_app(settings), host="127.0.0.1", port=0, log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        _eventually(lambda: server.started, timeout=15)
+        port = server.servers[0].sockets[0].getsockname()[1]
+        yield f"ws://127.0.0.1:{port}/api/ws"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=15)
+
+
+def _abort(raw: socket.socket) -> None:
+    """Обрыв TCP без закрытия WebSocket (RST) — так прокси рвёт соединение перезагруженной
+    вкладки."""
+    raw.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+    raw.close()
+
+
+def test_bug018_edits_sent_before_connection_drop_are_kept_under_load(
+    client: TestClient,
+    alice: Cookies,
+    board: str,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """COL-01, TXT-06: всё, что браузер успел отправить, сервер применяет и сохраняет, даже
+    если запись в базу медленная (нагрузка), а соединение рвётся сразу после последней правки.
+    """
+    write_journal = store.append
+
+    async def loaded_database(*args: Any) -> None:
+        await asyncio.sleep(0.03)
+        await write_journal(*args)
+
+    monkeypatch.setattr(store, "append", loaded_database)
+    edits = 40
+    local: Doc[Any] = Doc()
+    objects = local.get("objects", type=Map)
+    headers = _cookie_header(alice)
+    with (
+        _live_server(settings) as url,
+        ws_connect(f"{url}?board={board}", additional_headers=headers) as tab,
+    ):
+        tab.recv(timeout=5)  # вектор версии сервера (sync step 1)
+        # Правки идут по одной, как при наборе: запись каждой медленнее, чем приходит следующая.
+        for index in range(edits):
+            before = local.get_state()
+            objects[f"k{index}"] = index
+            tab.send(create_update_message(local.get_update(before)))
+            time.sleep(0.01)
+        _abort(tab.socket)
+        # Перезагруженная вкладка входит на доску: сервер пишет присутствие и в оборванное
+        # соединение, ошибка записи закрывает его транспорт.
+        with ws_connect(f"{url}?board={board}", additional_headers=headers) as reloaded_tab:
+            reloaded_tab.recv(timeout=5)
+            for x in range(5):
+                reloaded_tab.send(create_awareness_message({"cursor": {"x": x, "y": 0}}))
+                time.sleep(0.1)
+        # Доска выгружается и сжимается, когда соединение обработано до конца.
+        _eventually(lambda: _count(settings, "board_snapshots", board) == 1, timeout=30)
+
+    with _connect(client, f"board={board}", alice) as reloaded:
+        assert _snapshot(reloaded.doc) == {f"k{index}": index for index in range(edits)}
+
+
+def test_edits_before_corrupted_frame_are_kept_and_delivered(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    """Правки, пришедшие подряд перед повреждённым кадром, применяются, записываются и
+    доходят до остальных; закрывается только соединение отправителя."""
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.ws.send_bytes(guest.prepare(_add_sticker))
+        guest.ws.send_bytes(guest.prepare(lambda doc: _sticker(doc).__setitem__("x", 5)))
+        guest.ws.send_bytes(create_update_message(b"definitely not a yjs update"))
+        assert _closed_with(guest) == INVALID_PAYLOAD
+
+        owner.receive_update()
+        owner.receive_update()
+        assert _sticker(owner.doc)["x"] == 5
+
+    with _connect(client, f"board={board}", alice) as again:
+        assert _sticker(again.doc)["x"] == 5
+
+
+def test_bug018_edit_waiting_for_missing_earlier_edit_survives_compaction(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
+) -> None:
+    """COL-01, TXT-06: правка, пришедшая раньше той, от которой зависит (Yjs держит её
+    отложенной), не пропадает при сжатии журнала: когда недостающая правка доезжает,
+    доска собирается целиком."""
+    tab: Doc[Any] = Doc()
+    before = tab.get_state()
+    _add_sticker(tab)
+    created = tab.get_update(before)  # стикер создан, пока связи ещё не было
+    before = tab.get_state()
+    _sticker(tab)["text"].insert(5, " world")
+    typed = tab.get_update(before)
+
+    with _connect(client, f"board={board}", alice) as owner:
+        owner.ws.send_bytes(create_update_message(typed))
+        owner.flush()
+        _compact_now(client)
+    # Доска выгружена и сжата; набранное ждёт в журнале своё начало.
+    with _connect(client, f"token={link}", kate) as guest:
+        guest.ws.send_bytes(create_update_message(created))
+        guest.flush()
+
+    with _connect(client, f"board={board}", alice) as reloaded:
+        assert str(_sticker(reloaded.doc)["text"]) == "Hello world"
+
+
+def test_bug018_edits_sent_while_board_is_loading_are_kept_after_drop(
+    alice: Cookies, board: str, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """COL-01, TXT-06: пока сервер под нагрузкой загружает доску, браузер уже шлёт правки и
+    рвёт соединение (перезагрузка). Ответ сервера в оборванное соединение не должен
+    стереть уже присланные кадры."""
+    load_journal = store.load_journal
+
+    async def slow_load(*args: Any) -> store.Journal:
+        await asyncio.sleep(1.0)
+        return await load_journal(*args)
+
+    monkeypatch.setattr(store, "load_journal", slow_load)
+    edits = 30
+    local: Doc[Any] = Doc()
+    objects = local.get("objects", type=Map)
+    headers = _cookie_header(alice)
+    with _live_server(settings) as url:
+        with ws_connect(f"{url}?board={board}", additional_headers=headers) as tab:
+            tab.send(create_sync_step1_message(local.get_state()))
+            for index in range(edits):
+                before = local.get_state()
+                objects[f"k{index}"] = index
+                tab.send(create_update_message(local.get_update(before)))
+                time.sleep(0.01)
+            _abort(tab.socket)
+        _eventually(lambda: _count(settings, "board_snapshots", board) == 1, timeout=30)
+
+    with TestClient(create_app(settings)) as client, _connect(client, f"board={board}", alice) as o:
+        assert _snapshot(o.doc) == {f"k{index}": index for index in range(edits)}

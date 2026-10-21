@@ -26,8 +26,10 @@ import { RichTextEditor } from "../richtext/RichTextEditor";
 import { objectLabel } from "./objectLabel";
 import { objectStyle } from "./objectStyle";
 import {
+  AUTO_FONT_SIZE,
   GROUP_TYPE,
   isRichText,
+  TAGGED_TYPES,
   typeSpec,
   type ObjectType,
 } from "./objectTypes";
@@ -47,11 +49,24 @@ import {
   readScene,
   touch,
   transact,
+  writeFields,
   type SceneObject,
 } from "./sceneObjects";
+import {
+  createNextSticky,
+  loadStickyColor,
+  pullSticky,
+  rememberStickyColor,
+} from "./stickies";
+import { StickyPalette } from "./StickyPalette";
+import { addTag, removeTag } from "./tags";
 import { fittedHeight } from "./textHeight";
 import { loadTextStyle } from "./textStyle";
-import { SelectionBar } from "./SelectionBar";
+import {
+  SelectionBar,
+  type AuthorToggle,
+  type TagActions,
+} from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
 import { ToolPanel } from "./ToolPanel";
@@ -88,7 +103,7 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * CVS-23 контекстное меню, MOB-03 долгое нажатие; T5.4 — CVS-07 отмена и повтор своих
  * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши; T5.5 — CVS-08 поиск
  * по тексту и тегам, SHR-07 ссылка на объект и переход к нему; T6.1 — TXT-01…TXT-08
- * текст и документ с форматированием.
+ * текст и документ с форматированием; T6.2 — STK-01…STK-05 стикеры и стопка стикеров.
  */
 export function BoardScene({
   board,
@@ -136,6 +151,8 @@ export function BoardScene({
   const [editing, setEditing] = useState<{ id: string; text: Y.Text } | null>(
     null,
   );
+  /** STK-01: цвет следующего стикера или стопки — выбирается до постановки. */
+  const [stickyColor, setStickyColor] = useState(loadStickyColor);
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
@@ -180,8 +197,10 @@ export function BoardScene({
 
   const editText = useCallback(
     (id: string) => {
-      // CVS-19: текст заблокированного объекта не меняется.
-      if (readScene(objects).find((o) => o.id === id)?.locked !== false) return;
+      const target = readScene(objects).find((o) => o.id === id);
+      // CVS-19: текст заблокированного объекта не меняется; у стопки текста нет.
+      if (target?.locked !== false || typeSpec(target.type)?.editable !== true)
+        return;
       const text = objectText(objects, id);
       setEditing(text === null ? null : { id, text });
     },
@@ -193,26 +212,44 @@ export function BoardScene({
   const stopEditing = useCallback(() => {
     setEditing(null);
   }, []);
+  /** Конец правки этого объекта; правку другого (новый стикер по Tab) не трогает. */
+  const stopEditingOf = useCallback((id: string) => {
+    setEditing((current) => (current?.id === id ? null : current));
+  }, []);
   const pastePoint = useCallback(
     () => pointer.current ?? { x: camera.x, y: camera.y },
     [camera.x, camera.y],
   );
 
   const create = useCallback(
-    (type: ObjectType, at: Point): SceneObject | null => {
+    (type: ObjectType, at: Point, fill?: string): SceneObject | null => {
       const id = createObject(
         objects,
         type,
         placement(type, at, settings.gridStep),
         "",
         actor,
-        // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом.
-        type === "text" ? loadTextStyle() : {},
+        // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом;
+        // STK-01, STK-05: стикер и стопка — выбранного до постановки цвета.
+        type === "text"
+          ? loadTextStyle()
+          : type === "sticky" || type === "stack"
+            ? { fill: fill ?? stickyColor }
+            : {},
       );
       setSelection([id]);
       return readScene(objects).find((o) => o.id === id) ?? null;
     },
-    [objects, settings.gridStep, actor],
+    [objects, settings.gridStep, actor, stickyColor],
+  );
+
+  /** STK-05: стикер из стопки. */
+  const pull = useCallback(
+    (stack: SceneObject, at: Point): SceneObject | null => {
+      const id = pullSticky(objects, stack, at, actor);
+      return readScene(objects).find((o) => o.id === id) ?? null;
+    },
+    [objects, actor],
   );
 
   const fitText = useTextFit(objects, stageRef, history, actor);
@@ -242,6 +279,7 @@ export function BoardScene({
     setDraft,
     setGuides,
     create,
+    pull,
     openMenu: (next, at) => {
       setMenu(
         next.kind === "object"
@@ -275,21 +313,39 @@ export function BoardScene({
     history,
   });
 
-  /** CVS-09: инструмент отпустили над холстом — объект встаёт в эту точку. */
-  function drop(type: ObjectType, client: Point) {
+  /** Точка доски под точкой окна; `null` — не над холстом. */
+  function boardPointAt(client: Point): Point | null {
     const element = canvasRef.current;
-    if (element === null) return;
-    if (!isOverCanvas(element, client)) return;
+    if (element === null || !isOverCanvas(element, client)) return null;
     const rect = element.getBoundingClientRect();
-    create(
-      type,
-      screenToBoard(
-        { x: client.x - rect.left, y: client.y - rect.top },
-        camera,
-        { width: rect.width, height: rect.height },
-      ),
+    return screenToBoard(
+      { x: client.x - rect.left, y: client.y - rect.top },
+      camera,
+      { width: rect.width, height: rect.height },
     );
+  }
+
+  /**
+   * CVS-09: инструмент отпустили над холстом — объект встаёт в эту точку; STK-01: образец
+   * цвета — стикер этого цвета.
+   */
+  function drop(type: ObjectType, client: Point, fill?: string) {
+    const at = boardPointAt(client);
+    if (at === null) return;
+    create(type, at, fill);
     setTool("select");
+  }
+
+  /**
+   * STK-04: Tab в правке стикера — следующий стикер справа, сразу в правке. Его создание —
+   * отдельный шаг отмены между правками двух стикеров (CVS-07).
+   */
+  function nextSticky(from: SceneObject) {
+    history.end();
+    history.begin();
+    const id = createNextSticky(objects, from, actor);
+    setSelection([id]);
+    editText(id);
   }
 
   /** Меню у кнопки панели выделения — в координатах области холста. */
@@ -306,13 +362,38 @@ export function BoardScene({
   }
 
   const [single] = units;
+  const editableSingle =
+    units.length === 1 && single !== undefined && !single.locked
+      ? single
+      : null;
   const editSelected =
-    units.length === 1 &&
-    single !== undefined &&
-    !single.locked &&
-    typeSpec(single.type) !== undefined
+    editableSingle !== null && typeSpec(editableSingle.type)?.editable === true
       ? () => {
-          editText(single.id);
+          editText(editableSingle.id);
+        }
+      : null;
+  // STK-03: теги одного стикера или стопки и показ автора стикера.
+  const tagActions: TagActions | null =
+    editableSingle !== null && TAGGED_TYPES.includes(editableSingle.type)
+      ? {
+          values: editableSingle.tags,
+          add: (tag) => addTag(objects, editableSingle.id, tag, actor),
+          remove: (tag) => {
+            removeTag(objects, editableSingle.id, tag, actor);
+          },
+        }
+      : null;
+  const authorToggle: AuthorToggle | null =
+    editableSingle?.type === "sticky"
+      ? {
+          shown: editableSingle.showAuthor,
+          set: (shown) => {
+            writeFields(
+              objects,
+              new Map([[editableSingle.id, { showAuthor: shown }]]),
+              actor,
+            );
+          },
         }
       : null;
 
@@ -490,16 +571,26 @@ export function BoardScene({
               key={editedObject.id}
               type={editedObject.type}
               text={editing.text}
-              style={objectStyle(editedObject)}
+              style={editorStyle(editedObject)}
               camera={camera}
               objectLabel={label}
               onEdit={(height) => {
                 onRichEdit(editedObject, height);
               }}
-              onDone={stopEditing}
+              onDone={() => {
+                stopEditingOf(editedObject.id);
+              }}
               onPickObject={(done) => {
                 setPicker({ done });
               }}
+              {...(editedObject.type === "sticky" && {
+                autoFit:
+                  (editedObject.style.fontSize ?? AUTO_FONT_SIZE) ===
+                  AUTO_FONT_SIZE,
+                onTab: () => {
+                  nextSticky(editedObject);
+                },
+              })}
             />
           )}
           {editedObject && editing && !isRichText(editedObject.type) && (
@@ -544,7 +635,21 @@ export function BoardScene({
           onMore={(button) => {
             openMenuAt("object", button);
           }}
+          tags={tagActions}
+          author={authorToggle}
         />
+        {(tool === "sticky" || tool === "stack") && (
+          <StickyPalette
+            color={stickyColor}
+            onColor={(color) => {
+              setStickyColor(color);
+              rememberStickyColor(color);
+            }}
+            onDrop={(color, client) => {
+              drop("sticky", client, color);
+            }}
+          />
+        )}
         {stageOverlay}
         {searching && (
           <BoardSearch
@@ -603,6 +708,17 @@ export function BoardScene({
       )}
     </div>
   );
+}
+
+/**
+ * Вид поля правки поверх объекта. Стикер — с прозрачным фоном: под полем видны его цвет,
+ * теги и автор (STK-03).
+ */
+function editorStyle(object: SceneObject): CSSProperties {
+  const style = objectStyle(object);
+  return object.type === "sticky"
+    ? { ...style, background: "transparent", boxShadow: "none" }
+    : style;
 }
 
 /**

@@ -9,6 +9,7 @@ import Link from "quill/formats/link";
 import ListItem, { ListContainer } from "quill/formats/list";
 import Strike from "quill/formats/strike";
 import Underline from "quill/formats/underline";
+import History from "quill/modules/history";
 import type { DeltaOp } from "./delta";
 
 /**
@@ -49,8 +50,27 @@ class ObjectLinkBlot extends Embed {
   }
 }
 
+/**
+ * Отмена в поле (Ctrl/⌘+Z) — как в обычном поле ввода браузера: набор и удаление — разные
+ * шаги, даже если сделаны быстро подряд. У Quill по умолчанию всё за секунду — один шаг,
+ * и отмена стёртой буквы стирала бы весь только что набранный текст.
+ */
+class EditHistory extends History {
+  private lastKind: "insert" | "delete" | null = null;
+
+  override record(changeDelta: Delta, oldDelta: Delta): void {
+    const kind = changeDelta.ops.some((op) => op.delete !== undefined)
+      ? "delete"
+      : "insert";
+    if (kind !== this.lastKind) this.cutoff();
+    this.lastKind = kind;
+    super.record(changeDelta, oldDelta);
+  }
+}
+
 Quill.register(
   {
+    "modules/history": EditHistory,
     "formats/bold": Bold,
     "formats/italic": Italic,
     "formats/underline": Underline,

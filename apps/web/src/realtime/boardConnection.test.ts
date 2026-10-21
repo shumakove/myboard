@@ -129,6 +129,25 @@ describe("BoardConnection — синхронизация документа до
     expect(guest.statuses.at(-1)).toBe("online");
   });
 
+  it("BUG-018: правки, сделанные до открытия соединения, уходят сразу после открытия, без ответа сервера", () => {
+    const client = connect();
+    const socket = FakeSocket.last();
+    addSticker(client.board); // соединение ещё открывается
+    socket.open(); // сервер под нагрузкой: открыл, но ещё не прислал свой вектор
+    (sticker(client.board).get("text") as Y.Text).insert(5, " world");
+
+    // Вкладку перезагрузили: до сервера дошло только то, что уже отправлено.
+    const received = new Y.Doc();
+    for (const frame of socket.sent.map(decodeClientFrame)) {
+      if (frame.type === "sync" && frame.kind === SyncKind.Update) {
+        Y.applyUpdate(received, frame.payload);
+      }
+    }
+    expect(received.getMap("objects").toJSON()).toEqual({
+      s1: { type: "sticker", text: "Hello world" },
+    });
+  });
+
   it("без доступа после разрыва — closed и без переподключения", async () => {
     vi.useFakeTimers();
     const client = connect(() => Promise.resolve(false));

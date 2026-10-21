@@ -41,6 +41,8 @@ export interface SceneControls {
   setGuides: (guides: Guide[]) => void;
   /** Ставит объект и возвращает его (CVS-09). */
   create: (type: ObjectType, at: Point) => SceneObject | null;
+  /** STK-05: новый стикер из стопки центром в точке; возвращает его. */
+  pull: (stack: SceneObject, at: Point) => SceneObject | null;
   openMenu: (
     menu: { kind: "object" } | { kind: "canvas"; board: Point },
     at: Point,
@@ -135,7 +137,9 @@ function still(click?: () => void): Gesture {
  * - CVS-19: заблокированный объект выделяется, но не двигается;
  * - CVS-23: контекстное меню объекта и пустого места;
  * - MOB-03: касание пальцем по невыделенному объекту двигает вид; долгое нажатие выделяет
- *   объект (и даёт его тянуть) или начинает рамку на пустом месте.
+ *   объект (и даёт его тянуть) или начинает рамку на пустом месте;
+ * - STK-05: перетаскивание невыделенной стопки (и пальцем) вытягивает из неё новый
+ *   стикер, щелчок выделяет стопку, выделенную стопку тянут как обычный объект.
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -161,6 +165,35 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         onGuides: c.setGuides,
         actor: c.actor,
       });
+    };
+
+    /** STK-05: стикер появляется при первом движении и сразу едет за указателем. */
+    const pull = (stack: SceneObject, press: CanvasPress): Gesture => {
+      let inner: Gesture | null = null;
+      let pulled: SceneObject | null = null;
+      const begin = (): Gesture => {
+        if (inner === null) {
+          pulled = latest.current.pull(stack, press.board);
+          inner = pulled === null ? still() : move([pulled], press);
+        }
+        return inner;
+      };
+      return {
+        autoscroll: true,
+        move: (pointer) => {
+          begin().move(pointer);
+        },
+        end: (pointer) => {
+          begin().end(pointer);
+          if (pulled !== null) latest.current.select([pulled.id]);
+        },
+        cancel: () => {
+          inner?.cancel();
+        },
+        click: () => {
+          latest.current.select([stack.id]);
+        },
+      };
     };
 
     const area = (kind: AreaDraft["kind"], press: CanvasPress) => {
@@ -234,6 +267,10 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         if (leafId !== null) {
           const objectId = selectionTarget(c.scene, leafId, c.selection);
           const isSelected = c.selection.includes(objectId);
+          const stack = c.scene.find((o) => o.id === objectId);
+          if (stack?.type === "stack" && !isSelected && !press.shiftKey) {
+            return pull(stack, press);
+          }
           // MOB-03: короткое движение пальцем двигает вид, а не объект.
           if (press.pointerType === "touch" && !longPress && !isSelected) {
             return null;

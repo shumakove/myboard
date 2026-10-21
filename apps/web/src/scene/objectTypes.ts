@@ -1,9 +1,9 @@
 /**
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
- * (T5.2), документ (T6.1, TXT-06). Остальные типы из раздела объектов требований
- * добавляют задачи T6.*, T7.* — тем же описанием.
+ * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05). Остальные типы
+ * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
-export type ObjectType = "sticky" | "shape" | "text" | "document";
+export type ObjectType = "sticky" | "shape" | "text" | "document" | "stack";
 
 /**
  * Свойства оформления, которые меняются в панели выделения (CVS-11). Текст и документ:
@@ -20,12 +20,22 @@ export type StyleKey =
   | "lineHeight"
   | "background";
 
-/** Типы с форматированным текстом (TXT-01…TXT-08): редактор и показ — `richtext/`. */
-export const RICH_TEXT_TYPES: readonly string[] = ["text", "document"];
+/**
+ * Типы с форматированным текстом (TXT-01…TXT-08): редактор и показ — `richtext/`.
+ * Текст стикера — тоже `Y.Text` с атрибутами (T6.2).
+ */
+export const RICH_TEXT_TYPES: readonly string[] = [
+  "text",
+  "document",
+  "sticky",
+];
 
 export function isRichText(type: string): boolean {
   return RICH_TEXT_TYPES.includes(type);
 }
+
+/** STK-02: значение `fontSize` стикера «подгонять шрифт под размер стикера». */
+export const AUTO_FONT_SIZE = "auto";
 
 export interface StyleOption {
   value: string | number;
@@ -42,6 +52,8 @@ export interface ObjectTypeSpec {
   height: number;
   /** CVS-14: поворот предусмотрен. */
   rotatable: boolean;
+  /** У объекта есть свой текст (поле ввода по двойному щелчку и Edit text). */
+  editable: boolean;
   /** Свойства оформления и их значения у нового объекта. */
   style: Partial<Record<StyleKey, string | number>>;
 }
@@ -54,7 +66,9 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     width: 200,
     height: 200,
     rotatable: false,
-    style: { fill: "#fff176" },
+    editable: true,
+    // STK-02: размер шрифта — число или автоматический подгон под стикер.
+    style: { fill: "#fff176", fontSize: AUTO_FONT_SIZE },
   },
   shape: {
     type: "shape",
@@ -63,6 +77,7 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     width: 200,
     height: 120,
     rotatable: true,
+    editable: true,
     style: { fill: "#ffffff", stroke: "#1f2937" },
   },
   text: {
@@ -72,6 +87,7 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     width: 240,
     height: 60,
     rotatable: true,
+    editable: true,
     style: {
       fontFamily: "sans",
       fontSize: 24,
@@ -89,6 +105,7 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     width: 480,
     height: 360,
     rotatable: false,
+    editable: true,
     style: {
       fontFamily: "sans",
       fontSize: 16,
@@ -98,6 +115,17 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
       lineHeight: 1.5,
       background: "#ffffff",
     },
+  },
+  // STK-05: стопка — из неё вытягивают стикеры её цвета и с её тегами; своего текста нет.
+  stack: {
+    type: "stack",
+    label: "Sticky stack",
+    plural: "sticky stacks",
+    width: 200,
+    height: 200,
+    rotatable: false,
+    editable: false,
+    style: { fill: "#fff176" },
   },
 };
 
@@ -112,13 +140,16 @@ export function typeName(type: string, plural = false): string {
   return plural ? spec.plural : spec.label;
 }
 
+/** STK-03, STK-05: типы, у которых в интерфейсе правят теги. */
+export const TAGGED_TYPES: readonly string[] = ["sticky", "stack"];
+
 export function typeSpec(type: string): ObjectTypeSpec | undefined {
   return Object.hasOwn(OBJECT_TYPES, type)
     ? OBJECT_TYPES[type as ObjectType]
     : undefined;
 }
 
-const COLORS: StyleOption[] = [
+export const COLORS: StyleOption[] = [
   { value: "#fff176", label: "Yellow" },
   { value: "#ffb74d", label: "Orange" },
   { value: "#f48fb1", label: "Pink" },
@@ -128,6 +159,15 @@ const COLORS: StyleOption[] = [
   { value: "#ffffff", label: "White" },
   { value: "#1f2937", label: "Black" },
 ];
+
+/** STK-01: цвета стикера и стопки — палитра до постановки (без чёрного: текст тёмный). */
+export const STICKY_COLORS: StyleOption[] = COLORS.filter(
+  (color) => color.value !== "#1f2937",
+);
+
+const FONT_SIZES: StyleOption[] = [12, 14, 16, 18, 24, 32, 36, 48, 64, 72].map(
+  (size) => ({ value: size, label: String(size) }),
+);
 
 /** TXT-01: шрифты текста — ключ в документе, набор шрифтов — в `FONT_STACKS`. */
 export const FONT_STACKS: Record<string, string> = {
@@ -165,13 +205,7 @@ export const STYLE_KEYS: Record<
       { value: "hand", label: "Handwritten" },
     ],
   },
-  fontSize: {
-    label: "Font size",
-    options: [12, 14, 16, 18, 24, 32, 36, 48, 64, 72].map((size) => ({
-      value: size,
-      label: String(size),
-    })),
-  },
+  fontSize: { label: "Font size", options: FONT_SIZES },
   color: { label: "Text color", options: COLORS },
   fontStyle: {
     label: "Style",
@@ -213,4 +247,20 @@ export function styleKeysOf(type: string): StyleKey[] {
   return (Object.keys(STYLE_KEYS) as StyleKey[]).filter((key) =>
     Object.hasOwn(spec.style, key),
   );
+}
+
+/**
+ * Значения свойства для выделенных типов. STK-02: у стикеров размер шрифта — ещё и Auto;
+ * при смешанном выделении — только общие для всех значения.
+ */
+export function styleOptions(
+  key: StyleKey,
+  types: readonly string[],
+): StyleOption[] {
+  if (key === "fontSize" && types.length > 0) {
+    if (types.every((type) => type === "sticky")) {
+      return [{ value: AUTO_FONT_SIZE, label: "Auto" }, ...FONT_SIZES];
+    }
+  }
+  return STYLE_KEYS[key].options;
 }

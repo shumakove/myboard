@@ -12,6 +12,7 @@
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -52,9 +53,9 @@ class Hub:
                 # Под блокировкой: новое подключение к доске прочитает уже сжатый журнал.
                 await self._compact(room)
 
-    async def persist(self, entry: JournalEntry) -> None:
+    async def persist(self, entries: Sequence[JournalEntry]) -> None:
         async with self._session_factory() as db:
-            await store.append(db, entry)
+            await store.append(db, entries)
 
     async def compact_all(self) -> None:
         """Сжимает журнал всех открытых досок, где были правки с прошлого снимка."""
@@ -84,9 +85,11 @@ class Hub:
             # Журнал не тронут: состояние доски цело, сжатие повторится позже.
             logger.exception("Snapshot of board %s failed", room.board_id)
 
-    async def _write_snapshot(self, board_id: uuid.UUID, state: bytes, upto_seq: int) -> None:
+    async def _write_snapshot(
+        self, board_id: uuid.UUID, state: bytes, upto_seq: int, keep: frozenset[int]
+    ) -> None:
         async with self._session_factory() as db:
-            await store.compact(db, board_id, state, upto_seq)
+            await store.compact(db, board_id, state, upto_seq, keep)
 
 
 def hub_of(connection: HTTPConnection) -> Hub:

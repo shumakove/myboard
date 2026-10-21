@@ -46,6 +46,12 @@ export class BoardConnection {
   private attempt = 0;
   private status: ConnectionStatus = "connecting";
   private stopped = false;
+  /**
+   * Свои правки, сделанные, пока соединение не открыто (BUG-018). Уходят сразу после
+   * открытия, не дожидаясь вектора сервера: если вкладку перезагрузят раньше, чем сервер
+   * его пришлёт, начало правки иначе не дойдёт, а её продолжение повиснет у сервера.
+   */
+  private unsent: Uint8Array | null = null;
 
   constructor(options: BoardConnectionOptions) {
     this.options = options;
@@ -68,6 +74,10 @@ export class BoardConnection {
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
       this.send(socket, SyncKind.Step1, Y.encodeStateVector(this.options.doc));
+      if (this.unsent !== null) {
+        this.send(socket, SyncKind.Update, this.unsent);
+        this.unsent = null;
+      }
       this.options.presence?.attach((state) => {
         if (socket.readyState === SOCKET_OPEN) {
           socket.send(encodeAwareness(state));
@@ -118,10 +128,16 @@ export class BoardConnection {
   }
 
   private readonly sendLocalUpdate = (update: Uint8Array, origin: unknown) => {
-    // Чужие правки (origin — это соединение) обратно не отправляются. Без связи правка
-    // остаётся в документе и уйдёт в ответ на вектор сервера после переподключения.
-    if (origin === this || this.socket === null) return;
-    this.send(this.socket, SyncKind.Update, update);
+    // Чужие правки (origin — это соединение) обратно не отправляются.
+    if (origin === this) return;
+    if (this.socket?.readyState === SOCKET_OPEN) {
+      this.send(this.socket, SyncKind.Update, update);
+      return;
+    }
+    // Без связи правка копится и уйдёт при открытии соединения; ответ на вектор
+    // сервера после переподключения досылает то же самое — повтор Yjs не страшен.
+    this.unsent =
+      this.unsent === null ? update : Y.mergeUpdates([this.unsent, update]);
   };
 
   private send(socket: WebSocket, kind: SyncKind, payload: Uint8Array): void {

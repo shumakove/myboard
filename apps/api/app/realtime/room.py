@@ -15,10 +15,10 @@ import asyncio
 import contextlib
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from pycrdt import Doc, Map, MapEvent
+from pycrdt import Doc, Map, MapEvent, get_update
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.realtime.protocol import (
@@ -29,7 +29,7 @@ from app.realtime.protocol import (
     encode_presence,
     encode_sync,
 )
-from app.realtime.store import Journal, JournalEntry
+from app.realtime.store import Journal, JournalEntry, StoredUpdate
 
 # Обновление без изменений (пустые структуры и набор удалений) — так отвечает клиент,
 # у которого нет ничего нового. В журнал и рассылку оно не попадает.
@@ -38,10 +38,11 @@ EMPTY_UPDATE = b"\x00\x00"
 # Корень документа с удалёнными объектами: id -> { object, deletedAt, deletedBy }.
 TRASH = "trash"
 
-# Запись принятого обновления в журнал (и ленту действий).
-Persist = Callable[[JournalEntry], Awaitable[None]]
-# Запись снимка: (доска, полное состояние, последний вошедший в него номер журнала).
-WriteSnapshot = Callable[[uuid.UUID, bytes, int], Awaitable[None]]
+# Запись принятых обновлений в журнал (и ленту действий) одной транзакцией.
+Persist = Callable[[Sequence[JournalEntry]], Awaitable[None]]
+# Запись снимка: (доска, полное состояние, последний номер журнала, который можно отрезать,
+# номера, которые надо оставить в журнале).
+WriteSnapshot = Callable[[uuid.UUID, bytes, int, frozenset[int]], Awaitable[None]]
 
 
 class Peer:
@@ -81,9 +82,11 @@ class BoardRoom:
         self._doc: Doc[Any] = Doc()
         if journal.snapshot is not None:
             self._doc.apply_update(journal.snapshot)
-        for update in journal.updates:
-            self._doc.apply_update(update)
+        for stored in journal.updates:
+            self._doc.apply_update(stored.update)
         self._seq = journal.last_seq
+        # Строки журнала, ещё не отрезанные сжатием.
+        self._journal: list[StoredUpdate] = list(journal.updates)
         # Номер журнала, до которого включительно всё уже лежит в снимке. Обновления,
         # загруженные из журнала, в снимок ещё не вошли (их номера больше нуля).
         self._compacted_seq = 0
@@ -107,37 +110,67 @@ class BoardRoom:
         except ValueError:
             raise ProtocolError("invalid state vector") from None
 
-    async def apply(self, update: bytes, sender: Peer, persist: Persist) -> None:
-        """Применяет, записывает и рассылает. Повреждённое обновление — `ProtocolError`,
-        документ и остальные соединения его не видят."""
-        if update == EMPTY_UPDATE:
-            return
+    async def apply(self, updates: Sequence[bytes], sender: Peer, persist: Persist) -> None:
+        """Применяет обновления по порядку, записывает их одной транзакцией и рассылает.
+
+        Повреждённое обновление — `ProtocolError`: документ и остальные соединения его
+        не видят, а принятые до него обновления записываются и рассылаются.
+        """
         async with self._lock:
-            self._trashed = []
-            try:
-                self._doc.apply_update(update)
-            except ValueError:
-                raise ProtocolError("invalid update") from None
-            self._seq += 1
-            # Автор удаления — имя из сессии соединения, а не поле `deletedBy` документа.
-            entry = JournalEntry(
-                self.board_id, self._seq, update, sender.name, tuple(self._trashed)
-            )
-            await persist(entry)
-            await self._broadcast(encode_sync(SyncKind.UPDATE, update), sender)
+            entries: list[JournalEntry] = []
+            error: ProtocolError | None = None
+            for update in updates:
+                if update == EMPTY_UPDATE:
+                    continue
+                try:
+                    entries.append(self._integrate(update, sender))
+                except ProtocolError as exc:
+                    error = exc
+                    break
+            if entries:
+                await persist(entries)
+                self._journal.extend(StoredUpdate(e.seq, e.update) for e in entries)
+                for entry in entries:
+                    await self._broadcast(encode_sync(SyncKind.UPDATE, entry.update), sender)
+            if error is not None:
+                raise error
+
+    def _integrate(self, update: bytes, sender: Peer) -> JournalEntry:
+        self._trashed = []
+        try:
+            self._doc.apply_update(update)
+        except ValueError:
+            raise ProtocolError("invalid update") from None
+        self._seq += 1
+        # Автор удаления — имя из сессии соединения, а не поле `deletedBy` документа.
+        return JournalEntry(self.board_id, self._seq, update, sender.name, tuple(self._trashed))
 
     async def compact(self, write: WriteSnapshot) -> bool:
         """Пишет снимок, если с прошлого сжатия были правки; `True` — снимок записан.
 
         Состояние берётся под блокировкой комнаты: все принятые к этому моменту
         обновления уже записаны в журнал и войдут в снимок.
+
+        BUG-018: обновление, пришедшее раньше той правки, от которой зависит, Yjs держит
+        отложенным — в состояние документа (и в снимок) оно не входит. Такие строки
+        остаются в журнале, пока недостающая правка не доедет.
         """
         async with self._compaction_lock:
             async with self._lock:
                 if self._seq == self._compacted_seq:
                     return False
-                seq, state = self._seq, self._doc.get_update()
-            await write(self.board_id, state, seq)
+                seq, state, version = self._seq, self._doc.get_update(), self._doc.get_state()
+                waiting = frozenset(
+                    stored.seq
+                    for stored in self._journal
+                    if stored.seq <= seq and _has_unapplied(stored.update, version)
+                )
+                if all(stored.seq in waiting for stored in self._journal if stored.seq <= seq):
+                    # Отрезать нечего: всё, что вошло в документ, уже лежит в прошлом снимке.
+                    self._compacted_seq = seq
+                    return False
+            await write(self.board_id, state, seq, waiting)
+            self._journal = [s for s in self._journal if s.seq > seq or s.seq in waiting]
             self._compacted_seq = seq
             return True
 
@@ -182,3 +215,12 @@ class BoardRoom:
         for peer in list(self.peers):
             if peer is not sender:
                 await peer.send(frame)
+
+
+def _has_unapplied(update: bytes, version: bytes) -> bool:
+    """Есть ли в обновлении структуры, которых нет в документе с вектором версии `version`.
+
+    Разница обновления и вектора начинается с числа клиентов со структурами (varint):
+    ноль — все структуры обновления уже в документе.
+    """
+    return get_update(update, version)[0] != 0

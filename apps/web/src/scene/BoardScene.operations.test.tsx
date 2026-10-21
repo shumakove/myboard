@@ -448,7 +448,7 @@ describe("CVS-22: автор и даты", () => {
     const board = createBoardDocument();
     const id = createObject(
       board.objects,
-      "sticky",
+      "shape",
       { x: 0, y: 0 },
       "",
       "Alice",

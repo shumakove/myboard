@@ -3,18 +3,40 @@ import {
   MORE_TEXT_KEYS,
   STYLE_KEYS,
   styleKeysOf,
+  styleOptions,
   typeName,
   typeSpec,
   type StyleKey,
 } from "./objectTypes";
 import type { ObjectMeta, SceneObject } from "./sceneObjects";
-import { Button, FloatingPanel, SelectField } from "../ui";
+import {
+  Button,
+  FloatingPanel,
+  IconButton,
+  SelectField,
+  Switch,
+  TextField,
+} from "../ui";
 
 /** Значение, которое показывает список, если у выделенных оно разное. */
 const MIXED = "";
 
 /** Кнопка панели: подпись и действие; `null` — кнопки нет. */
 export type BarAction = (() => void) | null;
+
+/** STK-03: теги одного выделенного стикера или стопки. */
+export interface TagActions {
+  values: readonly string[];
+  /** `false` — тег пустой, не добавлен. */
+  add: (tag: string) => boolean;
+  remove: (tag: string) => void;
+}
+
+/** STK-03: показ имени автора на стикере. */
+export interface AuthorToggle {
+  shown: boolean;
+  set: (shown: boolean) => void;
+}
 
 /**
  * Панель выделения:
@@ -27,7 +49,9 @@ export type BarAction = (() => void) | null;
  * - CVS-21: удаление выделенного;
  * - CVS-22: автор и даты одного выделенного объекта;
  * - TXT-01: у текста и документа шрифт, начертание, выравнивание, интервал и фон —
- *   под кнопкой Text style (панель остаётся в одну строку).
+ *   под кнопкой Text style (панель остаётся в одну строку);
+ * - STK-02: размер шрифта стикера — число или Auto (подгон под стикер);
+ * - STK-03: теги стикера и стопки — под кнопкой Tags, показ автора — переключатель.
  */
 export function SelectionBar({
   selected,
@@ -41,6 +65,8 @@ export function SelectionBar({
   onUngroup,
   onArrange,
   onMore,
+  tags = null,
+  author = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -54,8 +80,11 @@ export function SelectionBar({
   /** Открыть меню у кнопки (элемент — для положения меню). */
   onArrange: ((button: HTMLElement) => void) | null;
   onMore: (button: HTMLElement) => void;
+  tags?: TagActions | null;
+  author?: AuthorToggle | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
   if (selected.length === 0) return null;
   const counts = new Map<string, number>();
   for (const object of selected) {
@@ -103,6 +132,7 @@ export function SelectionBar({
             key={key}
             styleKey={key}
             selected={selected}
+            types={types}
             onStyle={onStyle}
           />
         ))}
@@ -126,11 +156,34 @@ export function SelectionBar({
                 key={key}
                 styleKey={key}
                 selected={selected}
+                types={types}
                 onStyle={onStyle}
               />
             ))}
         </span>
       )}
+      {author && (
+        <Switch
+          label="Show author"
+          className="selection-switch"
+          checked={author.shown}
+          onChange={(event) => {
+            author.set(event.target.checked);
+          }}
+        />
+      )}
+      {tags && (
+        <Button
+          variant="ghost"
+          aria-expanded={tagsOpen}
+          onClick={() => {
+            setTagsOpen((open) => !open);
+          }}
+        >
+          Tags{tags.values.length > 0 ? ` (${String(tags.values.length)})` : ""}
+        </Button>
+      )}
+      {tags && tagsOpen && <TagEditor tags={tags} />}
       <BarButton label="Edit text" action={onEditText} />
       {onArrange && (
         <Button
@@ -169,10 +222,12 @@ export function SelectionBar({
 function StyleSelect({
   styleKey: key,
   selected,
+  types,
   onStyle,
 }: {
   styleKey: StyleKey;
   selected: readonly SceneObject[];
+  types: readonly string[];
   onStyle: (key: StyleKey, value: string | number) => void;
 }) {
   const values = new Set(
@@ -181,7 +236,8 @@ function StyleSelect({
   const [only] = values;
   const current =
     values.size === 1 && only !== undefined ? String(only) : MIXED;
-  const { label, options } = STYLE_KEYS[key];
+  const { label } = STYLE_KEYS[key];
+  const options = styleOptions(key, types);
   return (
     <SelectField
       label={label}
@@ -205,6 +261,54 @@ function StyleSelect({
         </option>
       ))}
     </SelectField>
+  );
+}
+
+/** STK-03: теги объекта — убрать каждый, добавить новый (Enter или Add). */
+function TagEditor({ tags }: { tags: TagActions }) {
+  const [draft, setDraft] = useState("");
+  return (
+    <span role="group" aria-label="Tags" className="selection-more">
+      {tags.values.length > 0 && (
+        <ul className="selection-tags">
+          {tags.values.map((tag) => (
+            <li key={tag} className="selection-tag">
+              {tag}
+              <IconButton
+                label={`Remove tag ${tag}`}
+                title={`Remove tag ${tag}`}
+                onClick={() => {
+                  tags.remove(tag);
+                }}
+              >
+                ×
+              </IconButton>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="selection-tag-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (tags.add(draft)) setDraft("");
+        }}
+      >
+        <TextField
+          label="Add tag"
+          className="ui-field--inline"
+          value={draft}
+          maxLength={40}
+          placeholder="tag"
+          onChange={(event) => {
+            setDraft(event.target.value);
+          }}
+        />
+        <Button type="submit" disabled={draft.trim().replace(/^#+/, "") === ""}>
+          Add
+        </Button>
+      </form>
+    </span>
   );
 }
 

@@ -5,6 +5,8 @@ import * as Y from "yjs";
 import { LONG_PRESS_MS } from "../canvas/BoardCanvas";
 import { HOME } from "../canvas/camera";
 import { createBoardDocument } from "../realtime/boardDocument";
+import { Quill } from "../richtext/quill";
+import { typeInto } from "../richtext/testQuill";
 import { createObject } from "./sceneObjects";
 import { linkedDocs } from "./testDocs";
 import {
@@ -44,7 +46,13 @@ describe("CVS-09: создание объектов", () => {
       "aria-pressed",
       "true",
     );
-    await user.type(screen.getByLabelText("Object text"), "Hello");
+    // Текст стикера — Y.Text с форматированием (T6.2): поле — редактор Quill.
+    const field = screen.getByRole("textbox", { name: "Object text" });
+    expect(field).toHaveFocus();
+    const quill = Quill.find(field.parentElement as HTMLElement) as Quill;
+    act(() => {
+      typeInto(quill, "Hello");
+    });
     const map = board.objects.get(sticky?.id ?? "") as Y.Map<unknown>;
     expect(map.get("text")).toBeInstanceOf(Y.Text);
     expect(String(map.get("text"))).toBe("Hello");
@@ -691,7 +699,8 @@ describe("COL-01: текст объекта правят двое", () => {
     const user = userEvent.setup();
     const [docA, docB] = linkedDocs();
     const board = createBoardDocument(docA);
-    const id = createObject(board.objects, "sticky", { x: 0, y: 0 }, "world");
+    // Простое поле ввода — у фигуры; текст стикера правится редактором Quill (T6.2).
+    const id = createObject(board.objects, "shape", { x: 0, y: 0 }, "world");
     renderScene(board);
     fireEvent.doubleClick(element(id), { clientX: 50, clientY: 50 });
     const field = screen.getByLabelText<HTMLTextAreaElement>("Object text");

@@ -25,30 +25,55 @@ export function fits(box: Box, area: Box, obstacles: readonly Box[]): boolean {
 }
 
 /**
- * Панель над полем `field` высотой `height`, а если там её не видно — под полем.
- * Возвращает `true`, если панель ставится под поле.
+ * Левый край ряда `[top, bottom)` шириной `width`, где он виден целиком: начиная с `left`
+ * (в пределах `area`) и правее, сразу за мешающими панелями. `null` — места в ряду нет.
  */
-export function toolbarBelow(
+function slideRight(
+  row: { top: number; bottom: number },
+  left: number,
+  width: number,
+  area: Box,
+  obstacles: readonly Box[],
+): number | null {
+  const start = Math.max(
+    area.left + GAP,
+    Math.min(left, area.right - GAP - width),
+  );
+  const candidates = [start, ...obstacles.map((o) => o.right + GAP)]
+    .filter((x) => x >= start && x + width <= area.right)
+    .sort((a, b) => a - b);
+  return (
+    candidates.find((x) =>
+      fits({ ...row, left: x, right: x + width }, area, obstacles),
+    ) ?? null
+  );
+}
+
+/**
+ * Панель над полем `field` высотой `height`, а если там её не видно — под полем. У левого
+ * края (BUG-017: поле под панелью инструментов) панель сдвигается вправо, в видимую часть.
+ * Возвращает сторону и сдвиг от левого края поля, px экрана.
+ */
+export function toolbarPlacement(
   field: Box,
   size: { width: number; height: number },
   area: Box,
   obstacles: readonly Box[],
-): boolean {
-  const top = field.top - GAP - size.height;
-  const above = {
-    top,
-    bottom: top + size.height,
-    left: field.left,
-    right: field.left + size.width,
-  };
-  if (fits(above, area, obstacles)) return false;
-  const below = {
-    top: field.bottom + GAP,
-    bottom: field.bottom + GAP + size.height,
-    left: field.left,
-    right: field.left + size.width,
-  };
-  return fits(below, area, obstacles);
+): { below: boolean; shift: number } {
+  const aboveTop = field.top - GAP - size.height;
+  const rows = [
+    { below: false, top: aboveTop, bottom: aboveTop + size.height },
+    {
+      below: true,
+      top: field.bottom + GAP,
+      bottom: field.bottom + GAP + size.height,
+    },
+  ];
+  for (const { below, ...row } of rows) {
+    const left = slideRight(row, field.left, size.width, area, obstacles);
+    if (left !== null) return { below, shift: left - field.left };
+  }
+  return { below: false, shift: 0 };
 }
 
 /**
@@ -86,6 +111,8 @@ export function menuPlacement(
 /** Где показать панель и меню редактора; меню — относительно курсора. */
 export interface EditorPlacement {
   toolbarBelow: boolean;
+  /** Сдвиг панели по горизонтали, px экрана. */
+  toolbarShift: number;
   menuAbove: boolean;
   /** Сдвиг меню по горизонтали, px экрана. */
   menuShift: number;
@@ -93,6 +120,7 @@ export interface EditorPlacement {
 
 export const DEFAULT_PLACEMENT: EditorPlacement = {
   toolbarBelow: false,
+  toolbarShift: 0,
   menuAbove: false,
   menuShift: 0,
 };
@@ -145,7 +173,14 @@ export function measurePlacement(
   const placement = { ...DEFAULT_PLACEMENT };
   if (toolbar !== null) {
     const rect = box(field.getBoundingClientRect());
-    placement.toolbarBelow = toolbarBelow(rect, size(toolbar), area, blocks);
+    const { below, shift } = toolbarPlacement(
+      rect,
+      size(toolbar),
+      area,
+      blocks,
+    );
+    placement.toolbarBelow = below;
+    placement.toolbarShift = shift;
   }
   if (menu !== null && caret !== null) {
     const { above, shift } = menuPlacement(caret, size(menu), area, blocks);

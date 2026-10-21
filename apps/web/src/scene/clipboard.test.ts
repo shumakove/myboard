@@ -194,4 +194,26 @@ describe("CVS-20: копирование и вставка объектов", ()
     saveClip(clip);
     expect(loadClip()).toEqual(clip);
   });
+
+  it("STK-03: теги и цвет стикера переносятся; у копии теги — свой Y.Array", () => {
+    const objects = board();
+    const a = createObject(objects, "sticky", { x: 0, y: 0 }, "Bug", "Alice", {
+      fill: "#f48fb1",
+    });
+    (objects.get(a) as Y.Map<unknown>).set("tags", Y.Array.from(["urgent"]));
+    const clip = copyObjects(objects, readScene(objects), [a]);
+    if (clip === null) throw new Error("нет копии");
+    const [copy] = pasteObjects(
+      objects,
+      JSON.parse(JSON.stringify(clip)) as typeof clip,
+      { kind: "at", point: { x: 500, y: 0 }, gridStep: 0 },
+      "Bob",
+    );
+    const map = objects.get(copy ?? "") as Y.Map<unknown>;
+    expect(map.get("tags")).toBeInstanceOf(Y.Array);
+    expect(readScene(objects).find((o) => o.id === copy)).toMatchObject({
+      tags: ["urgent"],
+      style: { fill: "#f48fb1" },
+    });
+  });
 });
