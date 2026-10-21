@@ -35,7 +35,7 @@
 | T2.1, T2.2 | `data-model.md`, `components.md` |
 | T3.1 | `data-model.md`, `components.md`, `sequences/link-join.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` |
 | T4.1…T4.3 | `ws-protocol.md`, `board-document.md`, `data-model.md`, `sequences/sync.md`, `states/board-object.md` (с T4.3 — корзина); T4.1 также `components.md`, `sequences/link-reset.md`, `states/share-link.md`, `states/session.md` (закрытие канала при сбросе ссылки и отзыве доступа); T4.2 также `components.md`, `sequences/presence.md`, `sequences/link-reset.md` (присутствие и курсоры); T4.3 также `components.md` (модуль `history`, сжатие в `Hub`), `deployment.md` (`SNAPSHOT_INTERVAL_SECONDS`) |
-| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`); T5.2 также `states/board-object.md` (создание, правки и удаление из интерфейса); T5.3 также `states/board-object.md` (блокировка, группы, вставка); T5.6 — `components.md` (модуль `ui`, тема, раскладка экранов), `board-document.md` (`topZ`, BUG-008); T5.4 также `states/board-object.md` (отмена и повтор своих правок); T5.5 также `sequences/link-join.md` (ссылка на объект `?object={id}`); T6.1 — `components.md` (модуль клиента `richtext`), `board-document.md` (тип `document`, `Y.Text` с атрибутами) |
+| T5.*, T6.* | `board-document.md` (типы объектов и их поля), `components.md` (модули холста и инструментов); T5.1 также `sequences/presence.md` (жесты камеры и слежение), `sequences/link-join.md` (`SharedBoard.id`); T5.2 также `states/board-object.md` (создание, правки и удаление из интерфейса); T5.3 также `states/board-object.md` (блокировка, группы, вставка); T5.6 — `components.md` (модуль `ui`, тема, раскладка экранов), `board-document.md` (`topZ`, BUG-008); T5.4 также `states/board-object.md` (отмена и повтор своих правок); T5.5 также `sequences/link-join.md` (ссылка на объект `?object={id}`); T6.1 — `components.md` (модуль клиента `richtext`), `board-document.md` (тип `document`, `Y.Text` с атрибутами); T6.2 также `states/board-object.md` (стикер по Tab и из стопки), а по BUG-018 — `ws-protocol.md`, `sequences/sync.md`, `data-model.md`, `board-document.md` (`BoardRoom`, отложенные обновления), `components.md` (сервер: `realtime.inbox`) |
 | T7.* | `data-model.md`, `board-document.md`, `sequences/media-upload.md` |
 | T8.1 | `board-document.md` |
 | T8.2 | `data-model.md`, `sequences/history-restore.md` |
@@ -50,16 +50,16 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa (`SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309) |
-| [components.md](components.md) | клиент: T6.1, 986b7b2; сервер: T5.1, 34125f1 |
-| [data-model.md](data-model.md) | T4.3, 7477309 |
-| [board-document.md](board-document.md) | T6.1, 986b7b2 (`document`, текст с атрибутами; `tags` — T5.5, 044e3c2; отмена — T5.4, e2d1150; `topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
-| [ws-protocol.md](ws-protocol.md) | T4.3, 7477309 |
+| [components.md](components.md) | T6.2, ce46d3f (клиент — стикеры, BUG-017, BUG-018; сервер — `realtime`, BUG-018; остальное сервера — T5.1, 34125f1) |
+| [data-model.md](data-model.md) | T6.2, ce46d3f (запись пачкой, `keep` при сжатии; таблицы — T4.3, 7477309) |
+| [board-document.md](board-document.md) | T6.2, ce46d3f (стикер, `stack`, теги `Y.Array`, `showAuthor`, отложенные обновления сервера; `document`, текст с атрибутами — T6.1, 986b7b2; `tags` — T5.5, 044e3c2; отмена — T5.4, e2d1150; `topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
+| [ws-protocol.md](ws-protocol.md) | T6.2, ce46d3f (порядок кадров, BUG-018; сообщения — T4.3, 7477309) |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
 | [sequences/link-join.md](sequences/link-join.md) | T5.5, 044e3c2 (ссылка на объект; вход — T5.1, 34125f1) |
 | [sequences/link-reset.md](sequences/link-reset.md) | T4.2, 1e65608 |
-| [sequences/sync.md](sequences/sync.md) | T4.3, 7477309 |
+| [sequences/sync.md](sequences/sync.md) | T6.2, ce46d3f (`Inbox`, пачки, `unsent`, `keep`; остальное — T4.3, 7477309) |
 | [sequences/presence.md](sequences/presence.md) | T5.1, 34125f1 |
 | [states/session.md](states/session.md) | сервер: T1.3, b53b509 (канал WebSocket — T4.1, 28e1b09); вкладка: T1.4, 6f59eaf; участник по ссылке: T4.1, 28e1b09 |
 | [states/share-link.md](states/share-link.md) | T4.1, 28e1b09 |
 | [states/user-account.md](states/user-account.md) | T1.3, b53b509 |
-| [states/board-object.md](states/board-object.md) | T5.4, e2d1150 (сервер — T4.3, 7477309) |
+| [states/board-object.md](states/board-object.md) | T6.2, ce46d3f (стикеры; отмена — T5.4, e2d1150; сервер — T4.3, 7477309) |

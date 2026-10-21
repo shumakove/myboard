@@ -1,6 +1,6 @@
 # Синхронизация документа
 
-Совместная правка доски (COL-01) по WebSocket `/api/ws`. Клиент — `BoardConnection` (`apps/web/src/realtime/boardConnection.ts`) внутри `useBoardConnection` / `BoardLive` на `/boards/:id` и `/b/:token`; сервер — `app.realtime.router.board_socket`, `Hub`, `BoardRoom`, `store`, `app.history` (снимки и лента, T4.3). Формат кадров — [ws-protocol.md](../ws-protocol.md).
+Совместная правка доски (COL-01) по WebSocket `/api/ws`. Клиент — `BoardConnection` (`apps/web/src/realtime/boardConnection.ts`) внутри `useBoardConnection` / `BoardLive` на `/boards/:id` и `/b/:token`; сервер — `app.realtime.router.board_socket`, `Inbox` (`app.realtime.inbox`, T6.2), `Hub`, `BoardRoom`, `store`, `app.history` (снимки и лента, T4.3). Формат кадров — [ws-protocol.md](../ws-protocol.md).
 
 ## Подключение и правка
 
@@ -10,6 +10,7 @@ sequenceDiagram
   participant A as Клиент A (BoardConnection)
   participant B as Клиент B
   participant R as realtime.router
+  participant I as Inbox + задача _read
   participant X as realtime.access
   participant H as Hub
   participant M as BoardRoom (pycrdt.Doc)
@@ -25,7 +26,10 @@ sequenceDiagram
   alt нет доступа
     R-->>A: close(1008) до accept → 403
   else BoardAccess(board_id, guest, name)
-    R->>R: accept, Peer(websocket, name, guest)
+    R->>R: accept
+    R->>I: create_task(_read(websocket, inbox)) — до загрузки доски (BUG-018)
+    Note over I: каждый кадр сразу: decode → inbox.put,<br/>конец потока — Closed(corrupted)
+    R->>R: _serve: Peer(websocket, name, guest)
     R->>H: join(board_id, peer)
     opt доска не открыта в процессе
       H->>S: load_journal(db, board_id)
@@ -33,44 +37,61 @@ sequenceDiagram
       S->>HI: snapshots.latest_state(db, board_id)
       HI->>DB: SELECT state FROM board_snapshots<br/>ORDER BY created_at DESC, id DESC LIMIT 1
       S->>DB: SELECT seq, update FROM board_updates ORDER BY seq
-      H->>M: BoardRoom(board_id, Journal(snapshot, updates, last_seq)):<br/>apply_update снимка и каждого обновления,<br/>_compacted_seq = 0, затем observe(trash)
+      H->>M: BoardRoom(board_id, Journal(snapshot, updates: StoredUpdate[], last_seq)):<br/>apply_update снимка и каждого обновления, _journal = updates,<br/>_compacted_seq = 0, затем observe(trash)
     end
     R->>R: create_task(_watch_access): authorize раз в 5 с
     R-->>A: sync STEP1(room.state_vector())
     R->>M: announce(peer): awareness остальных и presence всем (T4.2)
-    A->>R: sync STEP1(Y.encodeStateVector(doc))
+    A->>I: onopen: sync STEP1(Y.encodeStateVector(doc))
+    opt unsent — свои правки, сделанные без открытого сокета (BUG-018)
+      A->>I: sync UPDATE(unsent = Y.mergeUpdates(…)), unsent = null
+      Note over I,M: обрабатывается как UPDATE ниже, по порядку очереди
+    end
+    I->>R: _receive: inbox.get() → STEP1
     R->>M: missing_since(вектор A)
     R-->>A: sync STEP2(недостающее, на пустой вектор — полный снимок)
     A->>A: Y.applyUpdate(STEP2, origin = connection), status online
-    A->>R: sync STEP2(Y.encodeStateAsUpdate(doc, вектор сервера))
-    Note over R,M: пустое обновление 00 00 игнорируется,<br/>иначе — как UPDATE ниже
+    A->>I: sync STEP2(Y.encodeStateAsUpdate(doc, вектор сервера))
+    Note over R,M: пустое обновление 00 00 игнорируется,<br/>иначе — как UPDATE ниже (повтор unsent Yjs не меняет)
   end
 
   A->>A: локальная правка doc → on("update")
-  A->>R: sync UPDATE(update)
-  R->>M: apply(update, sender = A, hub.persist)
+  alt сокет OPEN
+    A->>I: sync UPDATE(update)
+  else сокет не открыт
+    A->>A: unsent = Y.mergeUpdates([unsent, update]) — уйдёт в onopen
+  end
+  I->>R: _receive: inbox.get() → UPDATE или STEP2
+  R->>I: take_updates() — правки, стоящие в очереди подряд
+  R->>M: apply([update, …], sender = A, hub.persist)
   activate M
   Note over M: asyncio.Lock: один порядок для всех соединений доски
-  M->>M: _trashed = [], _doc.apply_update(update)
-  Note over M: _on_trash_change: ключи trash с action add/update → _trashed
-  alt ValueError
-    M-->>R: ProtocolError
-    R-->>A: close(1007), документ и B не изменились
-  else принято
-    M->>M: _seq += 1
-    M->>H: persist(JournalEntry(board_id, seq, update, sender.name, trashed))
-    H->>S: append(db, entry)
-    S->>DB: INSERT board_updates (board_id, seq, update)
-    opt entry.trashed не пуст (удаление объектов, основа COL-08)
-      S->>HI: events.add_objects_deleted(db, board_id, actor_name, trashed)
-      HI->>DB: INSERT board_events (objects_deleted, {object_ids})
+  loop каждое обновление пачки (00 00 пропускается)
+    M->>M: _integrate: _trashed = [], _doc.apply_update(update), _seq += 1
+    Note over M: _on_trash_change: ключи trash с action add/update → _trashed
+    Note over M: ValueError → ProtocolError, остаток пачки не применяется
+  end
+  opt принято хотя бы одно
+    M->>H: persist([JournalEntry(board_id, seq, update, sender.name, trashed), …])
+    H->>S: append(db, entries)
+    loop каждая запись
+      S->>DB: INSERT board_updates (board_id, seq, update)
+      opt entry.trashed не пуст (удаление объектов, основа COL-08)
+        S->>HI: events.add_objects_deleted(db, board_id, actor_name, trashed)
+        HI->>DB: INSERT board_events (objects_deleted, {object_ids})
+      end
     end
     S->>L: touch_board(db, board_id)
     L->>DB: UPDATE boards SET updated_at = now()
     S->>DB: COMMIT
-    M-->>B: sync UPDATE(update) — всем peers, кроме отправителя
+    M->>M: _journal += StoredUpdate(seq, update)
+    M-->>B: sync UPDATE(update) по одному — всем peers, кроме отправителя
   end
   deactivate M
+  opt в пачке было повреждённое обновление
+    M-->>R: ProtocolError
+    R-->>A: close(1007): принятое до него записано и разослано, остальное B не видит
+  end
   B->>B: Y.applyUpdate(update, origin = connection) — обратно не отправляется
 ```
 
@@ -103,15 +124,21 @@ sequenceDiagram
   alt _seq == _compacted_seq (правок не было)
     M-->>H: False, снимок не пишется
   else были правки
-    M->>M: seq, state = _seq, _doc.get_update()
-    M->>H: _write_snapshot(board_id, state, seq)
-    H->>S: compact(db, board_id, state, upto_seq = seq)
-    S->>HI: add_snapshot(db, board_id, state)
-    HI->>DB: INSERT board_snapshots (board_id, state)
-    S->>DB: DELETE board_updates WHERE seq <= upto_seq
-    S->>DB: COMMIT
-    M->>M: _compacted_seq = seq
-    M-->>H: True
+    M->>M: seq, state, version = _seq, _doc.get_update(), _doc.get_state()
+    M->>M: waiting = seq строк _journal (≤ seq), где _has_unapplied(update, version)<br/>— отложенные обновления, их нет в state (BUG-018)
+    alt все строки ≤ seq отложены (отрезать нечего)
+      M->>M: _compacted_seq = seq
+      M-->>H: False, снимок не пишется
+    else
+      M->>H: _write_snapshot(board_id, state, seq, keep = waiting)
+      H->>S: compact(db, board_id, state, upto_seq = seq, keep)
+      S->>HI: add_snapshot(db, board_id, state)
+      HI->>DB: INSERT board_snapshots (board_id, state)
+      S->>DB: DELETE board_updates WHERE seq <= upto_seq AND seq NOT IN keep
+      S->>DB: COMMIT
+      M->>M: _journal — только seq > upto_seq и keep, _compacted_seq = seq
+      M-->>H: True
+    end
   end
   Note over H: SQLAlchemyError → logger.exception, журнал цел, повтор в следующий раз
 ```
@@ -128,7 +155,7 @@ sequenceDiagram
 
   R--xC: onclose (сеть, рестарт api, 1007, 4403)
   C->>U: onStatus(offline) — «Offline. Your changes will be sent…»<br/>(до первого STEP2 — остаётся connecting)
-  Note over C: правки без связи копятся в Y.Doc, не отправляются
+  Note over C: правки без связи копятся в Y.Doc и в unsent (BUG-018)
   C->>P: checkAccess()
   Note over P: владелец: getBoard(id) — 401/404 → false<br/>участник: openSharedBoard(token) — 404 или participant null → false<br/>сбой самой проверки → true
   alt false
@@ -138,7 +165,7 @@ sequenceDiagram
   else true
     C->>C: setTimeout(500, 1000, 2000, 4000, 8000, 8000… мс)
     C->>R: новый WebSocket, затем обмен STEP1/STEP2 как выше
-    Note over C,R: в ответ на STEP1 сервера уходят правки, сделанные без связи
+    Note over C,R: unsent уходит кадром UPDATE сразу после своего STEP1,<br/>в ответ на STEP1 сервера правки без связи уходят ещё раз в STEP2
     C->>U: onStatus(online), счётчик попыток сброшен
   end
 ```
@@ -148,5 +175,7 @@ sequenceDiagram
 - Снимки не удаляются; их просмотр и восстановление — T8.2.
 - Вместе с `sync` по тому же каналу идут `awareness` и `presence` (T4.2): они не применяются к документу и не пишутся в журнал — сценарий [presence.md](presence.md).
 - Ошибка отправки одному соединению (`Peer.send`) не прерывает рассылку остальным; разрыв замечает цикл приёма этого соединения.
+- Чтение сокета (T6.2, BUG-018): `_read` забирает кадры сразу по приходу, ещё до `hub.join`, — кадры, присланные, пока доска грузится или пока применяются предыдущие правки, не лежат в буфере ядра и не пропадают при обрыве соединения (перезагрузка вкладки за Caddy). Очередь `Inbox` не ограничена; размер кадра ограничивает Uvicorn. Записи ленты из одной пачки получают одно `created_at`.
+- Отложенная строка журнала, чьё начало не доедет никогда, остаётся в `board_updates` и применяется при каждой загрузке доски; снимок из одних отложенных правок не пишется, и пустой документ журнал не отрезает.
 
-Актуально на: T4.3, 7477309. Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке), COL-07 и COL-08 (основа: снимки, лента удалений).
+Актуально на: T6.2, ce46d3f (чтение сокета в `Inbox`, пачки правок, `unsent` клиента, отложенные строки при сжатии — BUG-018; остальное — T4.3, 7477309). Требования: COL-01, SHR-04 (канал), BRD-04 (`updated_at` при правке), COL-07 и COL-08 (основа: снимки, лента удалений).
