@@ -85,10 +85,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | STK-03 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-03 *, CVS-22, CVS-08, COL-01) | PASS (T6.2 проверка 3, ACCEPTED) |
 | STK-04 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-04 *) | PASS (T6.2 проверка 3, ACCEPTED) |
 | STK-05 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-05 *, desktop + mobile) | PASS (T6.2 проверка 3, ACCEPTED) |
-| SHP-01 | T6.3 | — | не проверено |
-| SHP-02 | T6.3 | — | не проверено |
-| SHP-03 | T6.3 | — | не проверено |
-| SHP-04 | T6.3 | — | не проверено |
+| SHP-01 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-01 *) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
+| SHP-02 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-02 *, CVS-07) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
+| SHP-03 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-03 *, COL-01) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
+| SHP-04 | T6.3, T6.4 | acceptance/e2e/shapes.spec.ts (SHP-04 *; UI-04 BUG-019) | PASS для текста, стикера и фигуры (T6.3 проверка 1); **линия — обязательный сценарий приёмки T6.4**: недавние цвета текста, стикера и фигуры не появляются в палитре линии, свой цвет линии — только в её недавних; BUG-019 (minor) |
 | CON-01 | T6.4 | — | не проверено |
 | CON-02 | T6.4 | — | не проверено |
 | CON-03 | T6.4 | — | не проверено |
