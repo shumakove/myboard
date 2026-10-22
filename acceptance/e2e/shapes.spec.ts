@@ -889,9 +889,9 @@ test('UI-04 MOB-06 on a phone the shape picker fits the screen with 44x44 target
   }
 });
 
+// BUG-019 исправлен в T6.3 (3986998): пометка test.fail снята, тест — в наборе навсегда
 test('UI-04 BUG-019 on a phone the custom color fields of the sticky note palette and of the Custom color group are at least 44x44', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
-  test.fail(true, 'BUG-019 открыт (minor): поля своего цвета 32×24 на телефоне');
   const owner = await openOwner(browser, optsOf({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   try {
     const page = owner.page;
