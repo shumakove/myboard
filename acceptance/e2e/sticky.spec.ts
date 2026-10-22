@@ -982,7 +982,8 @@ test('UI-04 MOB-06 on a phone a sticky note is placed by tap in the chosen color
       const b = await boxOf(root);
       expect.soft(b.x, `${what} в пределах экрана слева`).toBeGreaterThanOrEqual(-0.5);
       expect.soft(b.x + b.width, `${what} в пределах экрана справа`).toBeLessThanOrEqual(vw + 0.5);
-      for (const t of await root.locator('button, select, input, [role="switch"]').all()) {
+      // поле своего цвета (T6.3, SHP-04) меряет отдельный тест «UI-04 BUG-019 …» в shapes.spec.ts
+      for (const t of await root.locator('button, select, input:not([type="color"]), [role="switch"]').all()) {
         if (!(await t.isVisible())) continue;
         const tb = await boxOf(t);
         if (Math.round(tb.width) < 44 || Math.round(tb.height) < 44) small.push(`${what}: ${(await t.getAttribute('aria-label')) ?? (await t.textContent())?.trim()} ${Math.round(tb.width)}×${Math.round(tb.height)}`);

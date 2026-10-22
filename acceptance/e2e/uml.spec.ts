@@ -19,7 +19,7 @@ function mdFiles(dir: string): string[] {
 test('UML every mermaid block in uml/ parses without errors', async ({ page, isMobile }) => {
   test.skip(isMobile, 'не зависит от профиля');
   const blocks = mdFiles(umlDir).flatMap((f) =>
-    [...readFileSync(f, 'utf8').matchAll(/```mermaid\n([\s\S]*?)```/g)].map((m, i) => ({ where: `${relative(umlDir, f)}#${i + 1}`, code: m[1] })),
+    [...readFileSync(f, 'utf8').matchAll(/```mermaid\r?\n([\s\S]*?)```/g)].map((m, i) => ({ where: `${relative(umlDir, f)}#${i + 1}`, code: m[1] })),
   );
   expect(blocks.length, `блоки mermaid в ${umlDir}`).toBeGreaterThan(0);
   await page.setContent('<!doctype html><html><body></body></html>');
