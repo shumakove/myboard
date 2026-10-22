@@ -383,6 +383,12 @@
     width: auto;
     white-space: nowrap;
   }
+
+  /* BUG-019: поля своего цвета 44×44 не помещаются в строку — группа переносится в ширине панели. */
+  .selection-bar .selection-custom {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
 }
 
 .context-menu {
@@ -689,10 +695,10 @@
   outline-offset: -2px;
 }
 
-/* SHP-04: поле выбора своего цвета. */
+/* SHP-04: поле выбора своего цвета; UI-04, BUG-019: на телефоне — 44×44. */
 .selection-color input[type="color"] {
-  width: 32px;
-  height: 24px;
+  width: var(--control-size);
+  height: var(--control-size);
   padding: 0;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);

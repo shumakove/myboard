@@ -59,6 +59,19 @@ describe("UI-01, UI-02: единая светлая тема", () => {
     expect(tinted).toEqual([]);
   });
 
+  it("UI-04, BUG-019: поле выбора цвета — размера элемента управления (44×44 на телефоне)", () => {
+    const rules = Object.entries(sheets).flatMap(([path, css]) =>
+      [...css.matchAll(/([^{}]*input\[type="color"\][^{}]*)\{([^}]*)\}/g)].map(
+        (m) => ({ where: `${path}: ${(m[1] ?? "").trim()}`, body: m[2] ?? "" }),
+      ),
+    );
+    expect(rules.length).toBeGreaterThan(0);
+    for (const { where, body } of rules) {
+      expect(body, where).toMatch(/(?:^|[\s;])width:\s*var\(--control-size\)/);
+      expect(body, where).toMatch(/(?:^|[\s;])height:\s*var\(--control-size\)/);
+    }
+  });
+
   it("BUG-009: высоту кнопок задаёт только ui.css — тихие кнопки одной высоты везде", () => {
     const overrides = Object.entries(sheets)
       .filter(([path]) => path !== "/src/ui/ui.css")

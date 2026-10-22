@@ -159,7 +159,11 @@ export function SelectionBar({
         </Button>
       )}
       {colors && customOpen && colorKeys.length > 0 && (
-        <span role="group" aria-label="Custom color" className="selection-more">
+        <span
+          role="group"
+          aria-label="Custom color"
+          className="selection-more selection-custom"
+        >
           {colorKeys.map((key) => (
             <CustomColor
               key={key}
