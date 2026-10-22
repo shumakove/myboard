@@ -65,7 +65,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
 | CVS-24 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-24 *, desktop + mobile) | PASS |
 | CVS-25 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-25 *) | PASS |
-| CVS-26 | T6.4 | — | не проверено |
+| CVS-26 | T6.4 | acceptance/e2e/connectors.spec.ts (CVS-26 *, CON-01 CVS-26 *) | PASS |
 | MOB-01 | T11.1 | — | не проверено |
 | MOB-02 | T5.1, T5.2, T6.3 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile), acceptance/e2e/touch.spec.ts (BUG-020) | PASS (BUG-006 исправлен в 403f6f8, BUG-020 — в 3986998, проверено) |
 | MOB-03 | T5.2, T5.6 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено; BUG-007 исправлен в c5e2d74, проверено в T5.6 — жест у верха холста) |
@@ -88,14 +88,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | SHP-01 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-01 *) | PASS (T6.3, ACCEPTED проверкой 2) |
 | SHP-02 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-02 *, CVS-07) | PASS (T6.3, ACCEPTED проверкой 2) |
 | SHP-03 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-03 *, COL-01) | PASS (T6.3, ACCEPTED проверкой 2) |
-| SHP-04 | T6.3, T6.4 | acceptance/e2e/shapes.spec.ts (SHP-04 *; UI-04 BUG-019) | PASS для текста, стикера и фигуры (T6.3, ACCEPTED проверкой 2); **линия — обязательный сценарий приёмки T6.4**: недавние цвета текста, стикера и фигуры не появляются в палитре линии, свой цвет линии — только в её недавних; BUG-019 исправлен в 3986998, проверено |
-| CON-01 | T6.4 | — | не проверено |
-| CON-02 | T6.4 | — | не проверено |
-| CON-03 | T6.4 | — | не проверено |
-| CON-04 | T6.4 | — | не проверено |
-| CON-05 | T6.4 | — | не проверено |
-| CON-06 | T6.4 | — | не проверено |
-| CON-07 | T6.4 | — | не проверено |
+| SHP-04 | T6.3, T6.4 | acceptance/e2e/shapes.spec.ts (SHP-04 *; UI-04 BUG-019), acceptance/e2e/connectors.spec.ts (SHP-04 *) | PASS (текст, стикер, фигура — T6.3; линия — T6.4: недавние цвета текста, стикера и фигуры не в палитре линии, свой цвет линии — только в её недавних); BUG-019 исправлен в 3986998, проверено |
+| CON-01 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-01 *) | PASS |
+| CON-02 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-02 *, CVS-07 *) | PASS |
+| CON-03 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-03 *) | PASS (BUG-022 minor открыт) |
+| CON-04 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-04 *; CON-04 BUG-022 — test.fail) | PASS (BUG-022 minor открыт) |
+| CON-05 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-05 *) | PASS |
+| CON-06 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-06 *) | PASS |
+| CON-07 | T6.4 | acceptance/e2e/connectors.spec.ts (CON-07 *) | PASS |
 | DRW-01 | T6.5 | — | не проверено |
 | DRW-02 | T6.5 | — | не проверено |
 | DRW-03 | T6.5 | — | не проверено |
