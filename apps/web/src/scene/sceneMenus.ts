@@ -3,7 +3,8 @@ import type { AlignOp } from "./arrange";
 import type { Clip } from "./clipboard";
 import type { MenuItem } from "./ContextMenu";
 import type { LayerOp } from "./layers";
-import { OBJECT_TYPES, type ObjectType } from "./objectTypes";
+import { OBJECT_TYPES, type PlaceableType } from "./objectTypes";
+import { placeableTypes } from "./tools";
 import type { SceneCommands } from "./useSceneCommands";
 
 /** Пункты контекстных меню сцены (CVS-23) из доступных команд. */
@@ -117,7 +118,7 @@ export function boardMenu(
   at: Point,
   clip: Clip | null,
   actions: {
-    create: (type: ObjectType, at: Point) => void;
+    create: (type: PlaceableType, at: Point) => void;
     selectAll: () => void;
   },
 ): MenuItem[] {
@@ -129,9 +130,9 @@ export function boardMenu(
           commands.paste(clip, at);
         }),
     ),
-    ...Object.values(OBJECT_TYPES).flatMap((spec) =>
-      item(`Add ${spec.label.toLowerCase()} here`, () => {
-        actions.create(spec.type, at);
+    ...placeableTypes().flatMap((type) =>
+      item(`Add ${OBJECT_TYPES[type].label.toLowerCase()} here`, () => {
+        actions.create(type, at);
       }),
     ),
     ...item("Select all", actions.selectAll),

@@ -170,7 +170,13 @@ describe("CVS-24 закреплённые инструменты и полный
     renderScene();
     const list = await openList(user);
     await user.click(within(list).getByRole("switch", { name: "Pin Lasso" }));
-    expect(pinnedNames()).toEqual(["Select", "Sticky note", "Shape", "Text"]);
+    expect(pinnedNames()).toEqual([
+      "Select",
+      "Sticky note",
+      "Shape",
+      "Text",
+      "Pen",
+    ]);
 
     await user.click(within(list).getByRole("button", { name: "Lasso" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -194,11 +200,23 @@ describe("CVS-24 закреплённые инструменты и полный
     );
     await user.click(within(list).getByRole("switch", { name: "Pin Select" }));
     await user.click(within(list).getByRole("button", { name: "Done" }));
-    expect(pinnedNames()).toEqual(["Lasso", "Text", "Sticky note", "Shape"]);
+    expect(pinnedNames()).toEqual([
+      "Lasso",
+      "Text",
+      "Sticky note",
+      "Shape",
+      "Pen",
+    ]);
 
     first.unmount();
     renderScene();
-    expect(pinnedNames()).toEqual(["Lasso", "Text", "Sticky note", "Shape"]);
+    expect(pinnedNames()).toEqual([
+      "Lasso",
+      "Text",
+      "Sticky note",
+      "Shape",
+      "Pen",
+    ]);
   });
 
   it("закрепление возвращает инструмент в конец панели", async () => {
@@ -217,6 +235,7 @@ describe("CVS-24 закреплённые инструменты и полный
       "Sticky note",
       "Shape",
       "Text",
+      "Pen",
       "Select",
     ]);
   });

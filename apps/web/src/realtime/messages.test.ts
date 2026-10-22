@@ -32,7 +32,12 @@ describe("кадры sync /api/ws (тот же формат, что в apps/api/
 
 describe("кадры awareness и presence (COL-02…COL-04, COL-09)", () => {
   it("awareness клиента — тип 1 и JSON состояния", () => {
-    const state = { cursor: { x: 1, y: 2 }, camera: null, following: null };
+    const state = {
+      cursor: { x: 1, y: 2 },
+      camera: null,
+      following: null,
+      laser: null,
+    };
     const frame = encodeAwareness(state);
     const json = JSON.stringify(state);
     expect(Array.from(frame.slice(0, 2))).toEqual([1, json.length]);
@@ -68,6 +73,35 @@ describe("кадры awareness и presence (COL-02…COL-04, COL-09)", () => {
       state: { cursor: { x: "1" }, camera: { x: 0, y: 0, zoom: 0 }, extra: 1 },
     });
     expect(decodeMessage(frame)).toMatchObject({ state: {} });
+  });
+
+  it("DRW-05: след лазера — линии чисел; неверная форма отбрасывается", () => {
+    const awareness = (laser: unknown) =>
+      decodeMessage(
+        encodeServerJson(MessageType.Awareness, {
+          peer: "p1",
+          name: "Kate",
+          state: { laser },
+        }),
+      );
+    expect(
+      awareness([
+        [1, 2, 3, 4],
+        [5, 6],
+      ]),
+    ).toMatchObject({
+      state: {
+        laser: [
+          [1, 2, 3, 4],
+          [5, 6],
+        ],
+      },
+    });
+    expect(awareness(null)).toMatchObject({ state: { laser: null } });
+    const dropped = { type: "awareness", peer: "p1", name: "Kate", state: {} };
+    expect(awareness([[1, 2, 3]])).toEqual(dropped);
+    expect(awareness([["1", 2]])).toEqual(dropped);
+    expect(awareness("trail")).toEqual(dropped);
   });
 
   it("разбирает presence: свой id и список присутствующих", () => {

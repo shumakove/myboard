@@ -11,8 +11,8 @@ import type * as Y from "yjs";
 import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
 import { focusOn, screenToBoard, type Size } from "../canvas/camera";
 import type { WheelMode } from "../canvas/wheel";
-import type { BoardDocument } from "../realtime/boardDocument";
-import type { CameraView, Point } from "../realtime/messages";
+import { moveToTrash, type BoardDocument } from "../realtime/boardDocument";
+import type { CameraView, LaserTrail, Point } from "../realtime/messages";
 import { ObjectLinkDialog } from "../sharing/ObjectLinkDialog";
 import { isDark, useBoardSettings } from "./boardSettings";
 import { BoardSearch } from "./BoardSearch";
@@ -31,7 +31,7 @@ import {
   isRichText,
   TAGGED_TYPES,
   typeSpec,
-  type ObjectType,
+  type PlaceableType,
 } from "./objectTypes";
 import {
   AreaOverlay,
@@ -84,6 +84,7 @@ import type { LineActions } from "./LineControls";
 import {
   addLabel,
   createLine,
+  detachFrom,
   detachLine,
   isAttached,
   labelText,
@@ -100,7 +101,13 @@ import { ConnectOverlay, type LabelState } from "./LineView";
 import { labelPlace, labelTextStyle } from "./lineLayout";
 import { ToolPanel } from "./ToolPanel";
 import { Button, FloatingPanel } from "../ui";
-import { placement, type ToolId } from "./tools";
+import { drawTool, placement, type ToolId } from "./tools";
+import { DrawPanel } from "./DrawPanel";
+import { InkOverlay } from "./DrawingView";
+import type { InkDraft } from "./drawGestures";
+import { useDrawSettings } from "./drawSettings";
+import { useLaser } from "./laser";
+import { LaserView } from "./LaserView";
 import { useSceneCommands } from "./useSceneCommands";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
@@ -134,7 +141,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * по тексту и тегам, SHR-07 ссылка на объект и переход к нему; T6.1 — TXT-01…TXT-08
  * текст и документ с форматированием; T6.2 — STK-01…STK-05 стикеры и стопка стикеров;
  * T6.3 — SHP-01…SHP-04 наборы фигур, маркеры BPMN, оформление фигуры и недавние цвета;
- * T6.4 — CON-01…CON-07, CVS-26 соединительные линии, их подписи и привязка к объектам.
+ * T6.4 — CON-01…CON-07, CVS-26 соединительные линии, их подписи и привязка к объектам;
+ * T6.5 — DRW-01…DRW-06 перо, маркер, пресеты толщины, ластик, прямой штрих, лазер и
+ * масштаб штриха, MOB-04 отсев ладони (`BoardCanvas`), MOB-05 «стилус сразу рисует».
  */
 export function BoardScene({
   board,
@@ -150,6 +159,7 @@ export function BoardScene({
   stageOverlay,
   focusObject = null,
   boardLink,
+  onLaser,
 }: {
   board: BoardDocument;
   camera: CameraView;
@@ -169,6 +179,8 @@ export function BoardScene({
   focusObject?: string | null;
   /** SHR-07: действующая ссылка на доску; без неё пункта Copy link to object нет. */
   boardLink?: () => Promise<string>;
+  /** DRW-05: свой след лазера — в присутствие для остальных; `null` — следа нет. */
+  onLaser?: (trail: LaserTrail | null) => void;
 }) {
   const { objects } = board;
   const actor = userName;
@@ -192,6 +204,10 @@ export function BoardScene({
   const [hint, setHint] = useState<ConnectHint>(null);
   /** CON-03: выбранная (или открытая для ввода) подпись линии. */
   const [lineLabel, setLineLabel] = useState<LabelState | null>(null);
+  /** T6.5: настройки пера и маркера, штрих в работе и свой след лазера. */
+  const drawing = useDrawSettings();
+  const [ink, setInk] = useState<InkDraft | null>(null);
+  const laser = useLaser(onLaser ?? ignoreLaser);
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
@@ -272,7 +288,7 @@ export function BoardScene({
 
   const create = useCallback(
     (
-      type: ObjectType,
+      type: PlaceableType,
       at: Point,
       choice: { fill?: string; shape?: string } = {},
     ): SceneObject | null => {
@@ -323,6 +339,18 @@ export function BoardScene({
     [objects, actor],
   );
 
+  /** DRW-03: стёртые штрихи — в корзину; привязанные к ним линии остаются на месте. */
+  const erase = useCallback(
+    (ids: string[]) => {
+      board.doc.transact(() => {
+        detachFrom(objects, readScene(objects), new Set(ids), actor);
+        moveToTrash(board, ids, actor);
+      });
+      setSelection((current) => current.filter((id) => !ids.includes(id)));
+    },
+    [board, objects, actor],
+  );
+
   const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
@@ -366,6 +394,10 @@ export function BoardScene({
     editLabel: (line, label) => {
       setLineLabel({ line, label, editing: true });
     },
+    drawSettings: drawing.settings,
+    setInk,
+    erase,
+    laser,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -412,7 +444,7 @@ export function BoardScene({
    * цвета — стикер этого цвета.
    */
   function drop(
-    type: ObjectType,
+    type: PlaceableType,
     client: Point,
     choice?: { fill?: string; shape?: string },
   ) {
@@ -447,6 +479,7 @@ export function BoardScene({
     });
   }
 
+  const activeDrawTool = drawTool(tool);
   const [single] = units;
   const editableSingle =
     units.length === 1 && single !== undefined && !single.locked
@@ -776,6 +809,12 @@ export function BoardScene({
           <AreaOverlay draft={draft} />
           <GuidesOverlay guides={guides} />
           <ConnectOverlay hint={hint} />
+          <InkOverlay ink={ink} />
+          <LaserView
+            lines={laser.trail}
+            color={OWN_LASER_COLOR}
+            label="Your laser"
+          />
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
@@ -824,6 +863,20 @@ export function BoardScene({
             onDrop={(color, client) => {
               drop("sticky", client, { fill: color });
             }}
+          />
+        )}
+        {activeDrawTool !== null && (
+          <DrawPanel
+            tool={activeDrawTool}
+            settings={drawing.settings}
+            recent={recentColors.recent.drawing}
+            onTool={setTool}
+            onBrush={drawing.setBrush}
+            onCustomColor={(brush, color) => {
+              drawing.setBrush(brush, (current) => ({ ...current, color }));
+              recentColors.remember(["drawing"], color);
+            }}
+            onStylusDraws={drawing.setStylusDraws}
           />
         )}
         {tool === "shape" && (
@@ -896,6 +949,13 @@ export function BoardScene({
       )}
     </div>
   );
+}
+
+/** DRW-05: свой след лазера — красный; чужие — цветом участника. */
+const OWN_LASER_COLOR = "#ef4444";
+
+function ignoreLaser(): void {
+  // Без канала присутствия (тесты сцены) след виден только здесь.
 }
 
 /** CON-03: поле правки подписи линии — на месте подписи. */

@@ -293,7 +293,13 @@ describe("SHP-04: недавние свои цвета по категориям
     ).toBeInTheDocument();
     expect(
       JSON.parse(localStorage.getItem("myboard.recentColors") ?? ""),
-    ).toEqual({ text: [], sticky: ["#123456"], shape: [], line: [] });
+    ).toEqual({
+      text: [],
+      sticky: ["#123456"],
+      shape: [],
+      line: [],
+      drawing: [],
+    });
   });
 
   it("свой цвет фигуры и текста — каждый в своём списке", async () => {
@@ -319,7 +325,13 @@ describe("SHP-04: недавние свои цвета по категориям
 
     expect(
       JSON.parse(localStorage.getItem("myboard.recentColors") ?? ""),
-    ).toEqual({ text: ["#aa0000"], sticky: [], shape: ["#00aa00"], line: [] });
+    ).toEqual({
+      text: ["#aa0000"],
+      sticky: [],
+      shape: ["#00aa00"],
+      line: [],
+      drawing: [],
+    });
   });
 
   it("свой цвет до постановки стикера — в палитре стикеров, новый стикер этого цвета", async () => {

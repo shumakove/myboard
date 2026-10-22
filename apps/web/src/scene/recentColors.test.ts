@@ -24,6 +24,7 @@ describe("SHP-04: недавние свои цвета — отдельно по
       sticky: ["#123abc"],
       shape: [],
       line: [],
+      drawing: [],
     });
   });
 
@@ -71,6 +72,7 @@ describe("SHP-04: недавние свои цвета — отдельно по
       sticky: ["#abcdef"],
       shape: [],
       line: [],
+      drawing: [],
     });
   });
 

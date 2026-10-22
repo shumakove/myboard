@@ -3,11 +3,18 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
 /**
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
  * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
- * (`shapes.ts`, SHP-01, SHP-02). Остальные типы
+ * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01). Остальные типы
  * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType =
-  "sticky" | "shape" | "text" | "document" | "stack" | "line";
+  "sticky" | "shape" | "text" | "document" | "stack" | "line" | "drawing";
+
+/** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
+export type PlaceableType = Exclude<ObjectType, "drawing">;
+
+export function isPlaceable(type: ObjectType): type is PlaceableType {
+  return type !== "drawing";
+}
 
 /**
  * Свойства оформления, которые меняются в панели выделения (CVS-11). Текст и документ:
@@ -171,6 +178,18 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
       stroke: "#1f2937",
       strokeWidth: 2,
     },
+  },
+  // DRW-01, DRW-06: штрих пера или маркера — точки в рамке (`drawingShape.ts`); размер
+  // рамки растягивает штрих. Размер в документе задаёт сам штрих.
+  drawing: {
+    type: "drawing",
+    label: "Drawing",
+    plural: "drawings",
+    width: 1,
+    height: 1,
+    rotatable: true,
+    editable: false,
+    style: { stroke: "#1f2937", strokeWidth: 4 },
   },
 };
 

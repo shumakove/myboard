@@ -9,7 +9,8 @@
  * - `Update` — новая правка.
  *
  * `awareness` и `presence` (COL-02…COL-04, COL-09): `varuint длина | JSON в UTF-8`.
- * - `awareness` клиента — его состояние целиком (`AwarenessState`);
+ * - `awareness` клиента — его состояние целиком (`AwarenessState`), в том числе след
+ *   лазерной указки (DRW-05);
  * - `awareness` сервера — `{peer, name, state}`, имя — из сессии соединения;
  * - `presence` сервера — `{self, peers: [{peer, name}]}`: кто сейчас на доске.
  * В документ доски присутствие не попадает.
@@ -41,6 +42,12 @@ export interface CameraView extends Point {
   zoom: number;
 }
 
+/**
+ * DRW-05: след лазерной указки — линии плоскими массивами `[x0, y0, x1, y1, …]`
+ * в координатах доски. Временный: живёт только в присутствии.
+ */
+export type LaserTrail = number[][];
+
 /** Состояние присутствия этого клиента; сервер его не интерпретирует. */
 export interface AwarenessState {
   /** Курсор на доске (COL-02); `null` — указатель вне холста. */
@@ -49,6 +56,8 @@ export interface AwarenessState {
   camera: CameraView | null;
   /** За кем следит камера этого клиента (id соединения). */
   following: string | null;
+  /** DRW-05: след лазера; `null` — указкой не пользуются. */
+  laser: LaserTrail | null;
 }
 
 export interface PresencePeer {
@@ -154,7 +163,22 @@ function parseState(state: Record<string, unknown>): Partial<AwarenessState> {
   if (state.following === null || typeof state.following === "string") {
     parsed.following = state.following;
   }
+  if (state.laser === null || isTrail(state.laser)) {
+    parsed.laser = state.laser;
+  }
   return parsed;
+}
+
+function isTrail(value: unknown): value is LaserTrail {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (line) =>
+        Array.isArray(line) &&
+        line.length % 2 === 0 &&
+        line.every((n) => Number.isFinite(n)),
+    )
+  );
 }
 
 function isPoint(value: unknown): value is Point {

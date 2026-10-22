@@ -11,6 +11,7 @@ import {
   type LineShape,
 } from "./connectors";
 import type { DeltaOp } from "../richtext/delta";
+import { readDrawing, type DrawingShape } from "./drawingShape";
 import {
   GROUP_TYPE,
   isRichText,
@@ -70,6 +71,11 @@ export interface SceneObject extends Frame {
    * у остальных типов `null`. Рамка линии — описанный прямоугольник её точек.
    */
   line: LineShape | null;
+  /**
+   * Рисунок (T6.5): кисть и точки штриха в координатах рамки, растянутые под её размер
+   * (DRW-06); у остальных типов `null`.
+   */
+  drawing: DrawingShape | null;
 }
 
 /** Изменение рамки и оформления объекта; рамка — в координатах доски. */
@@ -143,7 +149,18 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
             object.style.lineStyle,
           );
     if (line !== null) frame = { ...pointsBounds(routeOf(line)), rotation: 0 };
-    const { id, type, parent, z, rich, tags, showAuthor, style, meta } = object;
+    const {
+      id,
+      type,
+      parent,
+      z,
+      rich,
+      tags,
+      showAuthor,
+      style,
+      meta,
+      drawing,
+    } = object;
     // CVS-08: линию находят по тексту её подписей.
     const text =
       line === null ? object.text : line.labels.map((l) => l.text).join("\n");
@@ -163,6 +180,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       offset: { x: frame.x - position.x, y: frame.y - position.y },
       locked: lockedNow,
       line,
+      drawing,
     });
   };
   for (const root of sorted(children.get(null))) {
@@ -261,6 +279,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     lockedSelf: record.locked === true,
     meta,
     lineData: type === "line" ? readLineData(record) : null,
+    drawing: type === "drawing" ? readDrawing(record, width, height) : null,
   };
 }
 

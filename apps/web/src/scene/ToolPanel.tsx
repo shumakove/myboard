@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Point } from "../realtime/messages";
-import type { ObjectType } from "./objectTypes";
+import type { PlaceableType } from "./objectTypes";
 import { ToolListDialog } from "./ToolListDialog";
 import { keyLabel, toolById, toolTitle, type ToolId } from "./tools";
 import { useDragToBoard } from "./useDragToBoard";
@@ -26,7 +26,7 @@ export function ToolPanel({
   onTool: (tool: ToolId) => void;
   onPinned: (change: (pinned: readonly ToolId[]) => ToolId[]) => void;
   /** Кнопку инструмента отпустили над точкой экрана (координаты окна). */
-  onDrop: (type: ObjectType, client: Point) => void;
+  onDrop: (type: PlaceableType, client: Point) => void;
   /** Действия доски после инструментов (в той же строке на телефоне). */
   children?: ReactNode;
 }) {

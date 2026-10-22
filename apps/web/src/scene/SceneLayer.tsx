@@ -15,6 +15,7 @@ import type { SceneObject } from "./sceneObjects";
 import { shapeKind, shapeMarker } from "./shapes";
 import { ShapeView } from "./ShapeView";
 import { LineView, type LabelState } from "./LineView";
+import { DrawingView } from "./DrawingView";
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
 export interface RichTextHandlers {
@@ -29,7 +30,8 @@ export interface RichTextHandlers {
  * в редакторе. Текст, документ и стикер — с форматированием (TXT-01…TXT-06). Стикер —
  * с автоподгоном шрифта, тегами и автором (STK-02, STK-03), стопка — с тегами (STK-05).
  * Фигура — контур SVG её вида с маркером BPMN и текстом (SHP-01…SHP-03). Линия —
- * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04).
+ * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04). Рисунок — штрих SVG
+ * (T6.5, DRW-01, DRW-06).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -106,6 +108,8 @@ function SceneObjectView({
         <ShapeView object={object} editing={editing} />
       ) : object.line ? (
         <LineView object={object} label={label} />
+      ) : object.drawing ? (
+        <DrawingView object={object} />
       ) : (
         !group && !editing && <ObjectContent object={object} rich={rich} />
       )}
