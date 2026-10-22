@@ -273,18 +273,15 @@ function labelsMap(map: Y.Map<unknown>): Y.Map<unknown> {
 
 /** Подпись из JSON (копия, старая запись) — `Y.Map` с текстом `Y.Text`. */
 export function labelValue(value: unknown): Y.Map<unknown> {
+  const fields: Record<string, unknown> =
+    typeof value === "object" && value !== null ? { ...value } : {};
+  const { text } = fields;
+  // Новый `Y.Map` не читается до записи в документ — текст ставится по исходным полям.
   const label = new Y.Map<unknown>();
-  if (typeof value === "object" && value !== null) {
-    for (const [key, field] of Object.entries(value)) {
-      label.set(
-        key,
-        key === "text"
-          ? new Y.Text(typeof field === "string" ? field : "")
-          : field,
-      );
-    }
+  for (const [key, field] of Object.entries(fields)) {
+    if (key !== "text") label.set(key, field);
   }
-  if (!(label.get("text") instanceof Y.Text)) label.set("text", new Y.Text());
+  label.set("text", new Y.Text(typeof text === "string" ? text : ""));
   return label;
 }
 

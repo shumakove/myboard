@@ -710,6 +710,9 @@
  * прозрачная полоса вдоль линии; наконечники и подписи выходят за рамку.
  */
 .scene-object.scene-line {
+  /* Горизонтальная или вертикальная линия — рамка не нулевая, элемент видим. */
+  min-width: 1px;
+  min-height: 1px;
   padding: 0;
   overflow: visible;
   pointer-events: none;
@@ -753,6 +756,8 @@
 /* CON-03, CON-04: подпись на линии — несколько строк, фон прерывает линию под текстом. */
 .line-label {
   position: absolute;
+  /* Над маркерами линии: подпись посередине закрывала бы маркер новой точки изгиба. */
+  z-index: 1;
   max-width: 320px;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
