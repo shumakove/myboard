@@ -67,7 +67,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-25 | T5.4 | acceptance/e2e/undo-tools.spec.ts (CVS-25 *) | PASS |
 | CVS-26 | T6.4 | — | не проверено |
 | MOB-01 | T11.1 | — | не проверено |
-| MOB-02 | T5.1, T5.2 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile) | PASS (BUG-006 исправлен в 403f6f8, проверено) |
+| MOB-02 | T5.1, T5.2, T6.3 | acceptance/e2e/camera.spec.ts (MOB-02, COL-04 MOB-02, «MOB-02 BUG-006 …»; mobile), acceptance/e2e/touch.spec.ts (BUG-020) | PASS (BUG-006 исправлен в 403f6f8, BUG-020 — в 3986998, проверено) |
 | MOB-03 | T5.2, T5.6 | acceptance/e2e/scene.spec.ts (MOB-03, mobile) | PASS (BUG-004 исправлен, проверено; BUG-007 исправлен в c5e2d74, проверено в T5.6 — жест у верха холста) |
 | MOB-04 | T6.5 | — | не проверено |
 | MOB-05 | T6.5 | — | не проверено |
@@ -85,10 +85,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | STK-03 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-03 *, CVS-22, CVS-08, COL-01) | PASS (T6.2 проверка 3, ACCEPTED) |
 | STK-04 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-04 *) | PASS (T6.2 проверка 3, ACCEPTED) |
 | STK-05 | T6.2 | acceptance/e2e/sticky.spec.ts (STK-05 *, desktop + mobile) | PASS (T6.2 проверка 3, ACCEPTED) |
-| SHP-01 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-01 *) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
-| SHP-02 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-02 *, CVS-07) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
-| SHP-03 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-03 *, COL-01) | PASS (T6.3 проверка 1; задача REJECTED из-за BUG-020 в регрессии) |
-| SHP-04 | T6.3, T6.4 | acceptance/e2e/shapes.spec.ts (SHP-04 *; UI-04 BUG-019) | PASS для текста, стикера и фигуры (T6.3 проверка 1); **линия — обязательный сценарий приёмки T6.4**: недавние цвета текста, стикера и фигуры не появляются в палитре линии, свой цвет линии — только в её недавних; BUG-019 (minor) |
+| SHP-01 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-01 *) | PASS (T6.3, ACCEPTED проверкой 2) |
+| SHP-02 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-02 *, CVS-07) | PASS (T6.3, ACCEPTED проверкой 2) |
+| SHP-03 | T6.3 | acceptance/e2e/shapes.spec.ts (SHP-03 *, COL-01) | PASS (T6.3, ACCEPTED проверкой 2) |
+| SHP-04 | T6.3, T6.4 | acceptance/e2e/shapes.spec.ts (SHP-04 *; UI-04 BUG-019) | PASS для текста, стикера и фигуры (T6.3, ACCEPTED проверкой 2); **линия — обязательный сценарий приёмки T6.4**: недавние цвета текста, стикера и фигуры не появляются в палитре линии, свой цвет линии — только в её недавних; BUG-019 исправлен в 3986998, проверено |
 | CON-01 | T6.4 | — | не проверено |
 | CON-02 | T6.4 | — | не проверено |
 | CON-03 | T6.4 | — | не проверено |
@@ -159,7 +159,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
-| COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS |
+| COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS (BUG-020 исправлен в T6.3 3986998, проверено) |
 | COL-05 | T8.1 | — | не проверено |
 | COL-06 | T8.1 | — | не проверено |
 | COL-07 | T4.3 (основа), T8.2 | acceptance/api/test_history.py::test_col07_* (основа: снимки, сжатие журнала, поздний клиент, перезапуск `api`; test_col07_bug018_* — сжатие не теряет отложенную правку) | основа PASS (T4.3); требование — T8.2 |
@@ -174,7 +174,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | UI-01 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile; с T5.4 — строго R = G = B) | PASS |
 | UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
 | UI-03 | T5.6, T5.4, T5.5 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape), acceptance/e2e/search.spec.ts (UI-01 UI-03 search panel…, UI-03 BUG-010), text.spec.ts (UI-01 UI-03 text formatting bar…, TXT-04 BUG-012/BUG-017) | PASS (BUG-009 исправлен в T5.4; BUG-010 исправлен в T6.1, проверено) |
-| UI-04 | T5.6, T5.4, T6.1 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile; BUG-015) | PASS (T6.1: BUG-015 исправлен) |
+| UI-04 | T5.6, T5.4, T6.1, T6.3 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile; BUG-015) | PASS (T6.1: BUG-015 исправлен; T6.3: BUG-019 исправлен; открыт BUG-021 minor — список администратора при сотнях учёток на телефоне) |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
 
