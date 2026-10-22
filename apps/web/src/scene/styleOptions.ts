@@ -22,6 +22,17 @@ export const COLOR_KEYS: readonly StyleKey[] = [
 
 export const RECENT_GROUP = "Recent colors";
 
+/** Подпись свойства в панели: обводка линии — её цвет и толщина (T6.4). */
+export function styleLabel(
+  key: StyleKey,
+  selected: readonly SceneObject[],
+): string {
+  const lines = selected.length > 0 && selected.every((o) => o.type === "line");
+  if (lines && key === "stroke") return "Line color";
+  if (lines && key === "strokeWidth") return "Line width";
+  return STYLE_KEYS[key].label;
+}
+
 /**
  * Свойства оформления объекта в порядке показа. У фигуры скругление — только у видов
  * с углами (SHP-03), маркер — только у фигур BPMN с маркерами (SHP-02).
@@ -68,6 +79,10 @@ export function styleOptions(
     return [{ value: AUTO_FONT_SIZE, label: "Auto" }, ...FONT_SIZES];
   }
   if (key === "marker") return markerOptions(selected);
+  // CON-01: у линии нет толщины «без линии».
+  if (key === "strokeWidth" && only("line")) {
+    return STYLE_KEYS.strokeWidth.options.filter((o) => o.value !== 0);
+  }
   if (!COLOR_KEYS.includes(key)) return STYLE_KEYS[key].options;
   const base =
     key === "fill" && only("shape")

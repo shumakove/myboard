@@ -23,6 +23,16 @@ import { GUIDE_SNAP_PX, type Guide } from "./guides";
 import type { ObjectType } from "./objectTypes";
 import { GROUP_TYPE, type SceneObject } from "./sceneObjects";
 import { toolById, type ToolId } from "./tools";
+import { projectOnto, routeOf } from "./connectors";
+import { addLabel, boardPoints, setPoints } from "./lineEdits";
+import {
+  drawLineGesture,
+  endGesture,
+  labelGesture,
+  pointGesture,
+  type ConnectHint,
+  type LineGestureContext,
+} from "./lineGestures";
 
 /** Что сцена даёт жестам. Значения читаются в момент жеста — всегда свежие. */
 export interface SceneControls {
@@ -48,20 +58,64 @@ export interface SceneControls {
     at: Point,
   ) => void;
   editText: (id: string) => void;
+  /** CVS-26: точки привязки объекта под концом линии, пока его тянут. */
+  setHint: (hint: ConnectHint) => void;
+  /** CON-03: выбрать подпись линии (её оформление — в панели выделения). */
+  pickLabel: (lineId: string, labelId: string) => void;
+  /** CON-03: открыть подпись линии для ввода текста. */
+  editLabel: (lineId: string, labelId: string) => void;
 }
 
 function hit(target: EventTarget | null): {
   objectId: string | null;
   handle: string | null;
+  label: string | null;
 } {
-  if (!(target instanceof Element)) return { objectId: null, handle: null };
+  if (!(target instanceof Element)) {
+    return { objectId: null, handle: null, label: null };
+  }
   return {
     objectId:
       target.closest("[data-object-id]")?.getAttribute("data-object-id") ??
       null,
     handle:
       target.closest("[data-handle]")?.getAttribute("data-handle") ?? null,
+    label:
+      target.closest("[data-label-id]")?.getAttribute("data-label-id") ?? null,
   };
+}
+
+/** Одна выделенная незаблокированная линия — её точки и подписи правят маркерами. */
+function editableLine(selected: readonly SceneObject[]): SceneObject | null {
+  const [only] = selected;
+  return selected.length === 1 && only?.type === "line" && !only.locked
+    ? only
+    : null;
+}
+
+/** Номер в имени маркера линии: `line-point-2` → 2. */
+function handleIndex(handle: string): number {
+  return Number(handle.slice(handle.lastIndexOf("-") + 1));
+}
+
+/**
+ * Маркеры выделенной линии (T6.4): концы (CVS-26, CON-05), точки изгиба и середины
+ * участков — новая точка изгиба (CON-01).
+ */
+function lineHandleGesture(
+  ctx: LineGestureContext,
+  line: SceneObject,
+  handle: string,
+): Gesture | null {
+  if (handle === "line-start") return endGesture(ctx, line, "start");
+  if (handle === "line-end") return endGesture(ctx, line, "end");
+  if (handle.startsWith("line-point-")) {
+    return pointGesture(ctx, line, handleIndex(handle), false);
+  }
+  if (handle.startsWith("line-add-")) {
+    return pointGesture(ctx, line, handleIndex(handle), true);
+  }
+  return null;
 }
 
 /** Объекты верхнего уровня: их выделяют рамка и лассо (группа — целиком). */
@@ -139,7 +193,11 @@ function still(click?: () => void): Gesture {
  * - MOB-03: касание пальцем по невыделенному объекту двигает вид; долгое нажатие выделяет
  *   объект (и даёт его тянуть) или начинает рамку на пустом месте;
  * - STK-05: перетаскивание невыделенной стопки (и пальцем) вытягивает из неё новый
- *   стикер, щелчок выделяет стопку, выделенную стопку тянут как обычный объект.
+ *   стикер, щелчок выделяет стопку, выделенную стопку тянут как обычный объект;
+ * - T6.4: инструмент Line рисует линию протяжкой (CON-01); у выделенной линии тянут концы
+ *   (привязка к объекту, Alt — без неё, CVS-26; Shift — любой угол, CON-05), точки изгиба
+ *   и подписи вдоль линии (CON-03); двойной щелчок по точке удаляет её (CON-06), по линии —
+ *   добавляет подпись.
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -196,6 +254,18 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       };
     };
 
+    const lineContext = (): LineGestureContext => {
+      const c = latest.current;
+      return {
+        objects: c.objects,
+        scene: c.scene,
+        zoom: c.zoom,
+        actor: c.actor,
+        setHint: c.setHint,
+        select: c.select,
+      };
+    };
+
     const area = (kind: AreaDraft["kind"], press: CanvasPress) => {
       const c = latest.current;
       const base = press.shiftKey ? [...c.selection] : [];
@@ -215,8 +285,13 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       start(press, longPress) {
         const c = latest.current;
         const tool = toolById(c.tool);
-        const { objectId: leafId, handle } = hit(press.target);
+        const { objectId: leafId, handle, label } = hit(press.target);
 
+        // CON-01: инструмент Line рисует линию протяжкой.
+        if (tool.kind === "create" && tool.id === "line") {
+          c.setTool("select");
+          return drawLineGesture(lineContext(), press);
+        }
         if (tool.kind === "create") {
           const created = c.create(tool.id, press.board);
           c.setTool("select");
@@ -232,6 +307,15 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         if (tool.kind === "lasso") return area("lasso", press);
 
         const selected = selectedObjects(c.selection);
+        const line = editableLine(selected);
+        if (line !== null && handle?.startsWith("line-")) {
+          return lineHandleGesture(lineContext(), line, handle);
+        }
+        if (line !== null && label !== null && leafId === line.id) {
+          return labelGesture(lineContext(), line, label, (id) => {
+            latest.current.pickLabel(line.id, id);
+          });
+        }
         if (handle !== null && selected.length > 0) {
           if (selected.some((o) => o.locked)) return still();
           if (handle === "rotate") {
@@ -319,11 +403,37 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
 
       doubleClick(press) {
         const c = latest.current;
-        const { objectId: leafId } = hit(press.target);
+        const { objectId: leafId, handle, label } = hit(press.target);
+        // CON-06: двойной щелчок по точке изгиба удаляет её.
+        const line = editableLine(selectedObjects(c.selection));
+        if (line !== null && handle?.startsWith("line-point-")) {
+          const points = boardPoints(line);
+          points.splice(handleIndex(handle), 1);
+          setPoints(c.objects, line, points, c.actor);
+          return;
+        }
         if (leafId === null) return;
         const inner = enterGroup(c.scene, leafId, c.selection);
-        if (inner !== null) c.select([inner]);
-        else c.editText(leafId);
+        if (inner !== null) {
+          c.select([inner]);
+          return;
+        }
+        const leaf = c.scene.find((o) => o.id === leafId);
+        if (leaf?.type === "line" && leaf.line !== null && !leaf.locked) {
+          // CON-03: двойной щелчок по подписи — правка, по линии — новая подпись.
+          c.select([leaf.id]);
+          const labelId =
+            label ??
+            addLabel(
+              c.objects,
+              leaf.id,
+              projectOnto(routeOf(leaf.line), press.board),
+              c.actor,
+            );
+          c.editLabel(leaf.id, labelId);
+          return;
+        }
+        c.editText(leafId);
       },
     };
   }, []);

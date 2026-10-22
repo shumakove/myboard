@@ -6,17 +6,22 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
  * (`shapes.ts`, SHP-01, SHP-02). Остальные типы
  * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
-export type ObjectType = "sticky" | "shape" | "text" | "document" | "stack";
+export type ObjectType =
+  "sticky" | "shape" | "text" | "document" | "stack" | "line";
 
 /**
  * Свойства оформления, которые меняются в панели выделения (CVS-11). Текст и документ:
  * шрифт, размер, цвет, начертание, выравнивание, межстрочный интервал и фон (TXT-01).
  * Фигура: вид и маркер BPMN (SHP-01, SHP-02), заливка, обводка и её толщина,
- * скругление углов, текст с межстрочным интервалом (SHP-03).
+ * скругление углов, текст с межстрочным интервалом (SHP-03). Линия: вид (прямая,
+ * ломаная, кривая) и наконечники концов (CON-01, CON-07), цвет и толщина.
  */
 export type StyleKey =
   | "shape"
   | "marker"
+  | "lineStyle"
+  | "startCap"
+  | "endCap"
   | "fill"
   | "stroke"
   | "strokeWidth"
@@ -149,6 +154,24 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     editable: false,
     style: { fill: "#fff176" },
   },
+  // CON-01: линия — концы и точки изгиба вместо рамки (`connectors.ts`); рамка на сцене
+  // вычисляется по её точкам, поэтому размер в документе — 0.
+  line: {
+    type: "line",
+    label: "Line",
+    plural: "lines",
+    width: 0,
+    height: 0,
+    rotatable: false,
+    editable: false,
+    style: {
+      lineStyle: "straight",
+      startCap: "none",
+      endCap: "arrow",
+      stroke: "#1f2937",
+      strokeWidth: 2,
+    },
+  },
 };
 
 /** Тип объекта-группы (CVS-17): рамка группы — описанный прямоугольник её объектов. */
@@ -211,6 +234,15 @@ export const MORE_TEXT_KEYS: readonly StyleKey[] = [
   "background",
 ];
 
+/** CON-01, CON-07: наконечники концов линии; None — без наконечника. */
+export const CAPS: StyleOption[] = [
+  { value: "none", label: "None" },
+  { value: "arrow", label: "Arrow" },
+  { value: "triangle", label: "Triangle" },
+  { value: "circle", label: "Circle" },
+  { value: "diamond", label: "Diamond" },
+];
+
 /** SHP-03: прозрачная заливка фигуры. */
 export const NO_COLOR: StyleOption = { value: "transparent", label: "None" };
 
@@ -229,6 +261,16 @@ export const STYLE_KEYS: Record<
   },
   // Значения маркера зависят от вида фигуры — см. `styleOptions.ts`.
   marker: { label: "Marker", options: [] },
+  lineStyle: {
+    label: "Line type",
+    options: [
+      { value: "straight", label: "Straight" },
+      { value: "elbow", label: "Elbow" },
+      { value: "curved", label: "Curved" },
+    ],
+  },
+  startCap: { label: "Start", options: CAPS },
+  endCap: { label: "End", options: CAPS },
   fill: { label: "Fill", options: COLORS },
   stroke: { label: "Border", options: COLORS },
   strokeWidth: {

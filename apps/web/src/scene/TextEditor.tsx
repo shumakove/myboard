@@ -13,11 +13,14 @@ export function TextEditor({
   object,
   text,
   style,
+  label = "Object text",
   onEdit,
   onDone,
 }: {
   object: SceneObject;
   text: Y.Text;
+  /** Название поля для чтения с экрана (подпись линии — Line label). */
+  label?: string;
   /** Положение и вид поля; по умолчанию — рамка объекта (у фигуры — область текста). */
   style?: CSSProperties;
   /** Отметка «изменил» (CVS-22) — в той же транзакции, что и правка текста. */
@@ -51,7 +54,7 @@ export function TextEditor({
     <textarea
       ref={ref}
       className={`scene-object scene-${object.type} scene-editor`}
-      aria-label="Object text"
+      aria-label={label}
       data-canvas-ignore=""
       style={style ?? objectStyle(object)}
       onInput={(event) => {

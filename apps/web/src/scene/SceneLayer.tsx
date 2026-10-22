@@ -14,6 +14,7 @@ import { frameStyle, objectStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
 import { shapeKind, shapeMarker } from "./shapes";
 import { ShapeView } from "./ShapeView";
+import { LineView, type LabelState } from "./LineView";
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
 export interface RichTextHandlers {
@@ -27,7 +28,8 @@ export interface RichTextHandlers {
  * Объекты сцены в порядке отрисовки (CVS-09, CVS-17); текст редактируемого объекта —
  * в редакторе. Текст, документ и стикер — с форматированием (TXT-01…TXT-06). Стикер —
  * с автоподгоном шрифта, тегами и автором (STK-02, STK-03), стопка — с тегами (STK-05).
- * Фигура — контур SVG её вида с маркером BPMN и текстом (SHP-01…SHP-03).
+ * Фигура — контур SVG её вида с маркером BPMN и текстом (SHP-01…SHP-03). Линия —
+ * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -35,11 +37,14 @@ export function SceneLayer({
   selected,
   editing,
   rich,
+  label = null,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
   editing: string | null;
   rich: RichTextHandlers;
+  /** CON-03: выбранная или редактируемая подпись линии. */
+  label?: LabelState | null;
 }) {
   return (
     <>
@@ -50,6 +55,7 @@ export function SceneLayer({
           selected={selected.has(object.id)}
           editing={editing === object.id}
           rich={rich}
+          label={label?.line === object.id ? label : null}
         />
       ))}
     </>
@@ -61,11 +67,13 @@ function SceneObjectView({
   selected,
   editing,
   rich,
+  label,
 }: {
   object: SceneObject;
   selected: boolean;
   editing: boolean;
   rich: RichTextHandlers;
+  label: LabelState | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const group = object.type === GROUP_TYPE;
@@ -96,6 +104,8 @@ function SceneObjectView({
     >
       {shape ? (
         <ShapeView object={object} editing={editing} />
+      ) : object.line ? (
+        <LineView object={object} label={label} />
       ) : (
         !group && !editing && <ObjectContent object={object} rich={rich} />
       )}

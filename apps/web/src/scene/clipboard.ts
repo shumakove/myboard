@@ -6,6 +6,8 @@ import { deltaToHtml } from "../richtext/html";
 import { boundsOf, snap } from "./geometry";
 import { topmost, withDescendants } from "./groups";
 import { isRichText } from "./objectTypes";
+import { readEnd, type LineEnd } from "./connectors";
+import { labelsValue } from "./lineEdits";
 import {
   creationMeta,
   isNumber,
@@ -66,10 +68,12 @@ export function copyObjects(
   const bounds = boundsOf(roots);
   if (bounds === null) return null;
   const rootIds = new Set(roots.map((o) => o.id));
-  const copied = withDescendants(
+  const items = withDescendants(
     scene,
     roots.map((o) => o.id),
-  ).flatMap((object) => {
+  );
+  const copiedIds = new Set(items.map((o) => o.id));
+  const copied = items.flatMap((object) => {
     const value = objects.get(object.id);
     const data: unknown = value instanceof Y.Map ? value.toJSON() : value;
     if (typeof data !== "object" || data === null) return [];
@@ -79,6 +83,10 @@ export function copyObjects(
     }
     const rich = richField(value, object.type);
     if (rich !== null) fields.text = rich;
+    if (object.line !== null) {
+      fields.start = clipEnd(object, "start", copiedIds);
+      fields.end = clipEnd(object, "end", copiedIds);
+    }
     const root = rootIds.has(object.id);
     if (root) {
       // Корень — в координатах доски: у группы это начало координат её объектов.
@@ -88,6 +96,30 @@ export function copyObjects(
     return [{ id: object.id, parent: root ? null : object.parent, fields }];
   });
   return { format: FORMAT, objects: copied, bounds };
+}
+
+/**
+ * Конец линии в копии (T6.4): на том месте, где он сейчас; привязка остаётся, только если
+ * объект привязки копируется вместе с линией (CVS-26).
+ */
+function clipEnd(
+  line: SceneObject,
+  name: "start" | "end",
+  copied: ReadonlySet<string>,
+): LineEnd {
+  const shape = line.line;
+  const end = name === "start" ? shape?.start : shape?.end;
+  const point = name === "start" ? shape?.path[0] : shape?.path.at(-1);
+  const position = { x: line.x - line.offset.x, y: line.y - line.offset.y };
+  const result: LineEnd = {
+    x: (point?.x ?? position.x) - position.x,
+    y: (point?.y ?? position.y) - position.y,
+  };
+  if (end?.object !== undefined && copied.has(end.object)) {
+    result.object = end.object;
+    result.anchor = end.anchor;
+  }
+  return result;
 }
 
 /** Дельта текста с форматированием; простой текст и прочие типы — `null`. */
@@ -226,7 +258,7 @@ export function pasteObjects(
       const map = new Y.Map<unknown>();
       for (const [key, value] of Object.entries(source.fields)) {
         if (SKIPPED.has(key)) continue;
-        map.set(key, fieldValue(key, value));
+        map.set(key, fieldValue(key, value, ids));
       }
       if (root) {
         map.set("x", Number(source.fields.x) + shift.x - parentAnchor.x);
@@ -242,15 +274,32 @@ export function pasteObjects(
   return roots;
 }
 
-/** Поле вставленного объекта: текст — `Y.Text`, теги — `Y.Array` (STK-03). */
-function fieldValue(key: string, value: unknown): unknown {
+/**
+ * Поле вставленного объекта: текст — `Y.Text`, теги — `Y.Array` (STK-03), подписи линии —
+ * `Y.Map` с текстом `Y.Text`, концы линии привязаны к вставленным копиям объектов (T6.4).
+ */
+function fieldValue(
+  key: string,
+  value: unknown,
+  ids: ReadonlyMap<string, string>,
+): unknown {
   if (key === "text") return textField(value);
+  if (key === "labels") return labelsValue(value);
+  if (key === "start" || key === "end") return pastedEnd(value, ids);
   if (key === "tags" && Array.isArray(value)) {
     const tags = new Y.Array<unknown>();
     tags.push(value.filter((tag) => typeof tag === "string"));
     return tags;
   }
   return value;
+}
+
+/** Конец линии копии: привязка — к вставленной копии объекта, иначе конец свободный. */
+function pastedEnd(value: unknown, ids: ReadonlyMap<string, string>): LineEnd {
+  const end = readEnd(value, { x: 0, y: 0 });
+  const target = end.object === undefined ? undefined : ids.get(end.object);
+  if (target === undefined) return { x: end.x, y: end.y };
+  return { ...end, object: target };
 }
 
 /** Текст вставленного объекта — `Y.Text` (с форматированием, если копия — дельта). */
