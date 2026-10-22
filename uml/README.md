@@ -50,9 +50,9 @@
 | Схема | Актуально на |
 | --- | --- |
 | [deployment.md](deployment.md) | T0.3, 03e00fa (`SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309) |
-| [components.md](components.md) | T6.2, ce46d3f (клиент — стикеры, BUG-017, BUG-018; сервер — `realtime`, BUG-018; остальное сервера — T5.1, 34125f1) |
+| [components.md](components.md) | T6.3, 0de9f87 (клиент — фигуры, BPMN, свои цвета, `touchmove` холста, BUG-019, BUG-020; стикеры — T6.2, ce46d3f, BUG-017, BUG-018; сервер — `realtime`, BUG-018; остальное сервера — T5.1, 34125f1) |
 | [data-model.md](data-model.md) | T6.2, ce46d3f (запись пачкой, `keep` при сжатии; таблицы — T4.3, 7477309) |
-| [board-document.md](board-document.md) | T6.2, ce46d3f (стикер, `stack`, теги `Y.Array`, `showAuthor`, отложенные обновления сервера; `document`, текст с атрибутами — T6.1, 986b7b2; `tags` — T5.5, 044e3c2; отмена — T5.4, e2d1150; `topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
+| [board-document.md](board-document.md) | T6.3, 0de9f87 (фигура: `shape`, `marker`, `strokeWidth`, `radius`, каталог видов, недавние цвета вне документа; T6.2, ce46d3f — стикер, `stack`, теги `Y.Array`, `showAuthor`, отложенные обновления сервера; `document`, текст с атрибутами — T6.1, 986b7b2; `tags` — T5.5, 044e3c2; отмена — T5.4, e2d1150; `topZ` — T5.6, 298b639; поля объектов — T5.3, 1c15594) |
 | [ws-protocol.md](ws-protocol.md) | T6.2, ce46d3f (порядок кадров, BUG-018; сообщения — T4.3, 7477309) |
 | [sequences/login.md](sequences/login.md) | T1.2, f65eab9 |
 | [sequences/link-join.md](sequences/link-join.md) | T5.5, 044e3c2 (ссылка на объект; вход — T5.1, 34125f1) |
