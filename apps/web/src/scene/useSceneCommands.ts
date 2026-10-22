@@ -25,6 +25,7 @@ import {
 } from "./groups";
 import { renumber, reorder, type LayerOp } from "./layers";
 import { setLocked, unlockAll } from "./lock";
+import { detachFrom } from "./lineEdits";
 import { htmlToDelta } from "../richtext/html";
 import { plainText } from "../richtext/delta";
 import { objectLabel } from "./objectLabel";
@@ -116,11 +117,14 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
 
     const remove = () => {
       // Свежая сцена: выделенное могли изменить другие участники.
-      const moved = moveToTrash(
-        board,
-        removalSet(readScene(objects), selection),
-        actor,
-      );
+      const current = readScene(objects);
+      const removing = removalSet(current, selection);
+      let moved: string[] = [];
+      board.doc.transact(() => {
+        // CVS-26: линии, привязанные к удаляемым объектам, остаются на месте.
+        detachFrom(objects, current, new Set(removing), actor);
+        moved = moveToTrash(board, removing, actor);
+      });
       if (moved.length === 0) return;
       select(selection.filter((id) => !moved.includes(id)));
       onRemoved();

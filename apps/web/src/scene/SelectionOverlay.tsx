@@ -2,6 +2,7 @@ import { boundsOf, type Corner, type Frame } from "./geometry";
 import { typeSpec } from "./objectTypes";
 import { frameStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
+import { LineHandles } from "./LineView";
 
 const CORNERS: readonly Corner[] = ["nw", "ne", "sw", "se"];
 
@@ -10,6 +11,7 @@ const CORNERS: readonly Corner[] = ["nw", "ne", "sw", "se"];
  * только если поворот предусмотрен у всех выделенных типов, и маркерами промежутка
  * у нескольких объектов (CVS-15). У одного объекта рамка повёрнута вместе с ним,
  * у нескольких — общая рамка по осям. У заблокированного маркеров нет (CVS-19).
+ * У одной линии вместо рамки — маркеры концов и точек изгиба (T6.4).
  */
 export function SelectionOverlay({
   selected,
@@ -23,6 +25,9 @@ export function SelectionOverlay({
     selected.length === 1 ? single : bounds && { ...bounds, rotation: 0 };
   if (frame === null) return null;
   const locked = selected.some((o) => o.locked);
+  if (selected.length === 1 && single.line !== null && !locked) {
+    return <LineHandles line={single} />;
+  }
   const rotatable = selected.every((o) => typeSpec(o.type)?.rotatable === true);
   return (
     <>

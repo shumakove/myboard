@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { LineControls, type LineActions } from "./LineControls";
 import {
   MORE_TEXT_KEYS,
-  STYLE_KEYS,
   typeName,
   typeSpec,
   type StyleKey,
@@ -10,7 +10,12 @@ import {
 import type { RecentColors } from "./recentColors";
 import type { ObjectMeta, SceneObject } from "./sceneObjects";
 import { shapeKind, shapeMarker } from "./shapes";
-import { COLOR_KEYS, sharedStyleKeys, styleOptions } from "./styleOptions";
+import {
+  COLOR_KEYS,
+  sharedStyleKeys,
+  styleLabel,
+  styleOptions,
+} from "./styleOptions";
 import {
   Button,
   FloatingPanel,
@@ -62,7 +67,9 @@ export interface AuthorToggle {
  * - STK-02: размер шрифта стикера — число или Auto (подгон под стикер);
  * - STK-03: теги стикера и стопки — под кнопкой Tags, показ автора — переключатель;
  * - SHP-01…SHP-03: вид фигуры, маркер BPMN, заливка, обводка, скругление, текст;
- * - SHP-04: свой цвет — под кнопкой Custom color, недавние свои цвета — в списках цветов.
+ * - SHP-04: свой цвет — под кнопкой Custom color, недавние свои цвета — в списках цветов;
+ * - T6.4: у линии — вид и наконечники (CON-01, CON-07), Swap ends (CON-02), Detach
+ *   (CVS-26), подписи и их оформление (CON-03, CON-04).
  */
 export function SelectionBar({
   selected,
@@ -79,6 +86,7 @@ export function SelectionBar({
   tags = null,
   author = null,
   colors,
+  line = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -95,6 +103,7 @@ export function SelectionBar({
   tags?: TagActions | null;
   author?: AuthorToggle | null;
   colors?: ColorActions;
+  line?: LineActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
@@ -222,6 +231,7 @@ export function SelectionBar({
         </Button>
       )}
       {tags && tagsOpen && <TagEditor tags={tags} />}
+      {line && <LineControls line={line} />}
       <BarButton label="Edit text" action={onEditText} />
       {onArrange && (
         <Button
@@ -272,7 +282,7 @@ function StyleSelect({
   const [only] = values;
   const current =
     values.size === 1 && only !== undefined ? String(only) : MIXED;
-  const { label } = STYLE_KEYS[key];
+  const label = styleLabel(key, selected);
   const listed = styleOptions(key, selected, recent);
   // Значение не из списка (свой цвет) — тоже в списке, чтобы его было видно.
   const options: StyleOption[] =
@@ -384,7 +394,7 @@ function CustomColor({
       : "#000000";
   return (
     <label className="ui-field ui-field--inline selection-color">
-      {`Custom ${STYLE_KEYS[key].label.toLowerCase()}`}
+      {`Custom ${styleLabel(key, selected).toLowerCase()}`}
       <input ref={ref} type="color" defaultValue={initial} />
     </label>
   );

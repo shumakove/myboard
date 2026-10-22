@@ -79,6 +79,25 @@ import {
 } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { TextEditor } from "./TextEditor";
+import { LABEL_PLACES } from "./connectors";
+import type { LineActions } from "./LineControls";
+import {
+  addLabel,
+  createLine,
+  detachLine,
+  isAttached,
+  labelText,
+  removeLabel,
+  setLabel,
+  swapEnds,
+} from "./lineEdits";
+import {
+  DEFAULT_LINE_LENGTH,
+  dropEmptyLabel,
+  type ConnectHint,
+} from "./lineGestures";
+import { ConnectOverlay, type LabelState } from "./LineView";
+import { labelPlace, labelTextStyle } from "./lineLayout";
 import { ToolPanel } from "./ToolPanel";
 import { Button, FloatingPanel } from "../ui";
 import { placement, type ToolId } from "./tools";
@@ -114,7 +133,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши; T5.5 — CVS-08 поиск
  * по тексту и тегам, SHR-07 ссылка на объект и переход к нему; T6.1 — TXT-01…TXT-08
  * текст и документ с форматированием; T6.2 — STK-01…STK-05 стикеры и стопка стикеров;
- * T6.3 — SHP-01…SHP-04 наборы фигур, маркеры BPMN, оформление фигуры и недавние цвета.
+ * T6.3 — SHP-01…SHP-04 наборы фигур, маркеры BPMN, оформление фигуры и недавние цвета;
+ * T6.4 — CON-01…CON-07, CVS-26 соединительные линии, их подписи и привязка к объектам.
  */
 export function BoardScene({
   board,
@@ -168,6 +188,10 @@ export function BoardScene({
   const [shapeChoice, setShapeChoice] = useState(loadShapeKind);
   /** SHP-04: недавние свои цвета по категориям объектов. */
   const recentColors = useRecentColors();
+  /** CVS-26: точки привязки под концом линии, пока его тянут. */
+  const [hint, setHint] = useState<ConnectHint>(null);
+  /** CON-03: выбранная (или открытая для ввода) подпись линии. */
+  const [lineLabel, setLineLabel] = useState<LabelState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
@@ -209,6 +233,16 @@ export function BoardScene({
   );
   const selectedIds = useMemo(() => selected.map((o) => o.id), [selected]);
   const editedObject = scene.find((o) => o.id === editing?.id) ?? null;
+  // Подпись — только у одной выделенной линии, пока подпись есть.
+  const labelLine =
+    lineLabel !== null &&
+    selected.length === 1 &&
+    selected[0]?.id === lineLabel.line
+      ? selected[0]
+      : null;
+  const activeLabel =
+    labelLine?.line?.labels.find((l) => l.id === lineLabel?.label) ?? null;
+  const labelState = activeLabel === null ? null : lineLabel;
 
   const editText = useCallback(
     (id: string) => {
@@ -242,6 +276,18 @@ export function BoardScene({
       at: Point,
       choice: { fill?: string; shape?: string } = {},
     ): SceneObject | null => {
+      // CON-01: линия, поставленная без протяжки, — горизонтальная, центром в точке.
+      if (type === "line") {
+        const half = DEFAULT_LINE_LENGTH / 2;
+        const id = createLine(
+          objects,
+          { point: { x: at.x - half, y: at.y } },
+          { point: { x: at.x + half, y: at.y } },
+          actor,
+        );
+        setSelection([id]);
+        return readScene(objects).find((o) => o.id === id) ?? null;
+      }
       // SHP-01, SHP-02: фигура — выбранного вида, с его размером и оформлением.
       const shape =
         type === "shape"
@@ -313,14 +359,25 @@ export function BoardScene({
       );
     },
     editText,
+    setHint,
+    pickLabel: (line, label) => {
+      setLineLabel({ line, label, editing: false });
+    },
+    editLabel: (line, label) => {
+      setLineLabel({ line, label, editing: true });
+    },
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
     [sceneGestures, history],
   );
 
-  // CVS-07: сеанс правки текста — один шаг отмены.
-  const editingId = editing?.id ?? null;
+  // CVS-07: сеанс правки текста (и подписи линии) — один шаг отмены.
+  const editingId =
+    editing?.id ??
+    (labelState?.editing === true
+      ? `${labelState.line}:${labelState.label}`
+      : null);
   useEffect(() => {
     if (editingId === null) return;
     history.begin();
@@ -425,6 +482,53 @@ export function BoardScene({
           },
         }
       : null;
+
+  // T6.4: действия одной выделенной линии.
+  const lineActions: LineActions | null =
+    editableSingle?.line != null ? lineActionsFor(editableSingle) : null;
+
+  function lineActionsFor(line: SceneObject): LineActions {
+    const label = labelLine?.id === line.id ? activeLabel : null;
+    return {
+      swap: () => {
+        swapEnds(objects, line, actor);
+      },
+      detach: isAttached(line)
+        ? () => {
+            detachLine(objects, line, actor);
+          }
+        : null,
+      addLabel: () => {
+        const id = addLabel(objects, line.id, LABEL_PLACES.center, actor);
+        setLineLabel({ line: line.id, label: id, editing: true });
+      },
+      label:
+        label === null
+          ? null
+          : {
+              value: label,
+              set: (fields) => {
+                setLabel(objects, line.id, label.id, fields, actor);
+              },
+              edit: () => {
+                setLineLabel({ line: line.id, label: label.id, editing: true });
+              },
+              remove: () => {
+                removeLabel(objects, line.id, label.id, actor);
+                setLineLabel(null);
+              },
+            },
+    };
+  }
+
+  /** Конец правки подписи: пустая подпись убирается с линии. */
+  function stopLabelEditing(line: SceneObject, labelId: string) {
+    const fresh = readScene(objects).find((o) => o.id === line.id);
+    const dropped = dropEmptyLabel(objects, fresh, labelId, actor);
+    setLineLabel(
+      dropped ? null : { line: line.id, label: labelId, editing: false },
+    );
+  }
 
   // SHP-04: свой цвет выделенных — в их свойство и в недавние цвета их категорий.
   const colorActions: ColorActions = {
@@ -606,7 +710,23 @@ export function BoardScene({
             selected={new Set(selectedIds)}
             editing={editing?.id ?? null}
             rich={richHandlers}
+            label={labelState}
           />
+          {labelLine && activeLabel && labelState?.editing && (
+            <LabelEditor
+              key={`${labelLine.id}:${activeLabel.id}`}
+              line={labelLine}
+              text={labelText(objects, labelLine.id, activeLabel.id)}
+              style={labelEditorStyle(labelLine, activeLabel)}
+              onEdit={() => {
+                const map = objectMap(objects, labelLine.id);
+                if (map !== null) touch(map, actor);
+              }}
+              onDone={() => {
+                stopLabelEditing(labelLine, activeLabel.id);
+              }}
+            />
+          )}
           {editedObject && editing && isRichText(editedObject.type) && (
             <RichTextEditor
               key={editedObject.id}
@@ -655,6 +775,7 @@ export function BoardScene({
           <SelectionOverlay selected={units} />
           <AreaOverlay draft={draft} />
           <GuidesOverlay guides={guides} />
+          <ConnectOverlay hint={hint} />
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
@@ -685,6 +806,7 @@ export function BoardScene({
           tags={tagActions}
           author={authorToggle}
           colors={colorActions}
+          line={lineActions}
         />
         {(tool === "sticky" || tool === "stack") && (
           <StickyPalette
@@ -774,6 +896,51 @@ export function BoardScene({
       )}
     </div>
   );
+}
+
+/** CON-03: поле правки подписи линии — на месте подписи. */
+function LabelEditor({
+  line,
+  text,
+  style,
+  onEdit,
+  onDone,
+}: {
+  line: SceneObject;
+  text: Y.Text | null;
+  style: CSSProperties;
+  onEdit: () => void;
+  onDone: () => void;
+}) {
+  if (text === null) return null;
+  return (
+    <TextEditor
+      object={line}
+      text={text}
+      style={style}
+      label="Line label"
+      onEdit={onEdit}
+      onDone={onDone}
+    />
+  );
+}
+
+/** Поле правки подписи: по центру места подписи, оформление — как у подписи (CON-04). */
+function labelEditorStyle(
+  line: SceneObject,
+  label: NonNullable<SceneObject["line"]>["labels"][number],
+): CSSProperties {
+  const { point } = labelPlace(line, label);
+  const lines = Math.max(1, label.text.split("\n").length);
+  const width = 220;
+  const height = lines * label.fontSize * 1.3 + 12;
+  return {
+    left: point.x - width / 2,
+    top: point.y - height / 2,
+    width,
+    height,
+    ...labelTextStyle(label),
+  };
 }
 
 /**

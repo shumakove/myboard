@@ -1,6 +1,15 @@
 import * as Y from "yjs";
 import type { Point } from "../realtime/messages";
 import { boundsOf, type Frame } from "./geometry";
+import {
+  isConnectable,
+  pointsBounds,
+  readLineData,
+  resolveLine,
+  routeOf,
+  type LineData,
+  type LineShape,
+} from "./connectors";
 import type { DeltaOp } from "../richtext/delta";
 import {
   GROUP_TYPE,
@@ -56,6 +65,11 @@ export interface SceneObject extends Frame {
   /** CVS-19: заблокирован сам объект или его группа. */
   locked: boolean;
   meta: ObjectMeta;
+  /**
+   * Соединительная линия (T6.4): концы, точки изгиба и подписи, положение на доске;
+   * у остальных типов `null`. Рамка линии — описанный прямоугольник её точек.
+   */
+  line: LineShape | null;
 }
 
 /** Изменение рамки и оформления объекта; рамка — в координатах доски. */
@@ -69,8 +83,9 @@ export function newObjectId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type RawObject = Omit<SceneObject, "origin" | "offset" | "locked"> & {
+type RawObject = Omit<SceneObject, "origin" | "offset" | "locked" | "line"> & {
   lockedSelf: boolean;
+  lineData: LineData | null;
 };
 
 /**
@@ -84,12 +99,15 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
     if (object !== null) raw.set(id, object);
   }
   const children = new Map<string | null, RawObject[]>();
+  const parents = new Map<string, string | null>();
   for (const object of raw.values()) {
     const key = hasValidParent(object, raw) ? object.parent : null;
+    parents.set(object.id, key);
     const list = children.get(key) ?? [];
     list.push(object);
     children.set(key, list);
   }
+  const targets = connectableFrames(raw, parents);
 
   const scene: SceneObject[] = [];
   const visit = (object: RawObject, origin: Point, locked: boolean): void => {
@@ -114,8 +132,21 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       if (bounds === null) return; // пустая группа не рисуется
       frame = { ...bounds, rotation: 0 };
     }
-    const { id, type, parent, z, text, rich, tags, showAuthor, style, meta } =
-      object;
+    // CVS-26: привязанный конец линии — в точке привязки объекта, где бы тот ни был.
+    const line =
+      object.lineData === null
+        ? null
+        : resolveLine(
+            object.lineData,
+            position,
+            targets,
+            object.style.lineStyle,
+          );
+    if (line !== null) frame = { ...pointsBounds(routeOf(line)), rotation: 0 };
+    const { id, type, parent, z, rich, tags, showAuthor, style, meta } = object;
+    // CVS-08: линию находят по тексту её подписей.
+    const text =
+      line === null ? object.text : line.labels.map((l) => l.text).join("\n");
     scene.splice(at, 0, {
       id,
       type,
@@ -131,12 +162,41 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       origin,
       offset: { x: frame.x - position.x, y: frame.y - position.y },
       locked: lockedNow,
+      line,
     });
   };
   for (const root of sorted(children.get(null))) {
     visit(root, { x: 0, y: 0 }, false);
   }
   return scene;
+}
+
+/**
+ * Рамки на доске объектов, к которым привязывают линии (CVS-26): положение — сумма
+ * координат по цепочке родителей.
+ */
+function connectableFrames(
+  raw: ReadonlyMap<string, RawObject>,
+  parents: ReadonlyMap<string, string | null>,
+): Map<string, Frame> {
+  const positions = new Map<string, { x: number; y: number }>();
+  const positionOf = (object: RawObject): { x: number; y: number } => {
+    const known = positions.get(object.id);
+    if (known !== undefined) return known;
+    const parentId = parents.get(object.id) ?? null;
+    const parent = parentId === null ? undefined : raw.get(parentId);
+    const base = parent === undefined ? { x: 0, y: 0 } : positionOf(parent);
+    const position = { x: base.x + object.x, y: base.y + object.y };
+    positions.set(object.id, position);
+    return position;
+  };
+  const frames = new Map<string, Frame>();
+  for (const object of raw.values()) {
+    if (!isConnectable(object.type)) continue;
+    const { width, height, rotation } = object;
+    frames.set(object.id, { ...positionOf(object), width, height, rotation });
+  }
+  return frames;
 }
 
 function sorted(list: RawObject[] | undefined): RawObject[] {
@@ -200,6 +260,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     style,
     lockedSelf: record.locked === true,
     meta,
+    lineData: type === "line" ? readLineData(record) : null,
   };
 }
 
@@ -397,14 +458,23 @@ export function patchObjects(
         fields.x = value - object.origin.x - object.offset.x;
       } else if (key === "y" && typeof value === "number") {
         fields.y = value - object.origin.y - object.offset.y;
-      } else if (
-        object.type !== GROUP_TYPE ||
-        (key !== "width" && key !== "height")
-      ) {
+      } else if (!derivedFrame(object.type, key)) {
         fields[key] = value;
       }
     }
     changes.set(object.id, fields);
   }
   writeFields(objects, changes, actor);
+}
+
+/**
+ * Поле рамки, которое вычисляется, а не хранится: размер группы — по её объектам,
+ * размер и поворот линии — по её точкам (T6.4).
+ */
+function derivedFrame(type: string, key: string): boolean {
+  if (type === GROUP_TYPE) return key === "width" || key === "height";
+  if (type === "line") {
+    return key === "width" || key === "height" || key === "rotation";
+  }
+  return false;
 }

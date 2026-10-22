@@ -8,7 +8,7 @@ import { OBJECT_TYPES, type ObjectType } from "./objectTypes";
  * - `select` — щелчок выделяет, перетаскивание двигает объект или вид, Shift+перетаскивание
  *   по пустому месту — рамка выделения (CVS-10, CVS-12);
  * - `lasso` — выделение областью произвольной формы (CVS-10);
- * - `create` — ставит объект своего типа (CVS-09).
+ * - `create` — ставит объект своего типа (CVS-09); линия рисуется протяжкой (CON-01).
  *
  * `key` — горячая клавиша инструмента без модификаторов (CVS-25): код клавиши
  * `KeyboardEvent.code`, чтобы она работала при любой раскладке.
@@ -28,7 +28,16 @@ const CREATE_KEYS: Record<ObjectType, string> = {
   text: "KeyT",
   document: "KeyD",
   stack: "KeyK",
+  line: "KeyC",
 };
+
+/** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
+function createHint(type: ObjectType, label: string): string {
+  if (type === "line") {
+    return "Drag on the board to draw a line. Start or end it on an object to connect them; hold Shift for any angle, Alt to keep an end free.";
+  }
+  return `Click the board or drag this button onto it to add a ${label.toLowerCase()}.`;
+}
 
 export const TOOLS: readonly Tool[] = [
   {
@@ -50,7 +59,7 @@ export const TOOLS: readonly Tool[] = [
     id: spec.type,
     label: spec.label,
     key: CREATE_KEYS[spec.type],
-    hint: `Click the board or drag this button onto it to add a ${spec.label.toLowerCase()}.`,
+    hint: createHint(spec.type, spec.label),
   })) satisfies Tool[]),
 ];
 
