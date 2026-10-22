@@ -1,6 +1,9 @@
+import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
+
 /**
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
- * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05). Остальные типы
+ * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
+ * (`shapes.ts`, SHP-01, SHP-02). Остальные типы
  * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType = "sticky" | "shape" | "text" | "document" | "stack";
@@ -8,10 +11,16 @@ export type ObjectType = "sticky" | "shape" | "text" | "document" | "stack";
 /**
  * Свойства оформления, которые меняются в панели выделения (CVS-11). Текст и документ:
  * шрифт, размер, цвет, начертание, выравнивание, межстрочный интервал и фон (TXT-01).
+ * Фигура: вид и маркер BPMN (SHP-01, SHP-02), заливка, обводка и её толщина,
+ * скругление углов, текст с межстрочным интервалом (SHP-03).
  */
 export type StyleKey =
+  | "shape"
+  | "marker"
   | "fill"
   | "stroke"
+  | "strokeWidth"
+  | "radius"
   | "fontFamily"
   | "fontSize"
   | "color"
@@ -40,6 +49,8 @@ export const AUTO_FONT_SIZE = "auto";
 export interface StyleOption {
   value: string | number;
   label: string;
+  /** Подзаголовок группы значений в списке (набор фигур). */
+  group?: string;
 }
 
 export interface ObjectTypeSpec {
@@ -78,7 +89,18 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     height: 120,
     rotatable: true,
     editable: true,
-    style: { fill: "#ffffff", stroke: "#1f2937" },
+    // SHP-01, SHP-03: вид фигуры, контур и текст внутри (по центру).
+    style: {
+      shape: DEFAULT_SHAPE,
+      fill: "#ffffff",
+      stroke: "#1f2937",
+      strokeWidth: 2,
+      radius: 0,
+      fontSize: 18,
+      color: "#1f2937",
+      align: "center",
+      lineHeight: 1.25,
+    },
   },
   text: {
     type: "text",
@@ -165,9 +187,9 @@ export const STICKY_COLORS: StyleOption[] = COLORS.filter(
   (color) => color.value !== "#1f2937",
 );
 
-const FONT_SIZES: StyleOption[] = [12, 14, 16, 18, 24, 32, 36, 48, 64, 72].map(
-  (size) => ({ value: size, label: String(size) }),
-);
+export const FONT_SIZES: StyleOption[] = [
+  12, 14, 16, 18, 24, 32, 36, 48, 64, 72,
+].map((size) => ({ value: size, label: String(size) }));
 
 /** TXT-01: шрифты текста — ключ в документе, набор шрифтов — в `FONT_STACKS`. */
 export const FONT_STACKS: Record<string, string> = {
@@ -189,13 +211,40 @@ export const MORE_TEXT_KEYS: readonly StyleKey[] = [
   "background",
 ];
 
+/** SHP-03: прозрачная заливка фигуры. */
+export const NO_COLOR: StyleOption = { value: "transparent", label: "None" };
+
 /** Подпись и допустимые значения каждого свойства оформления. */
 export const STYLE_KEYS: Record<
   StyleKey,
   { label: string; options: StyleOption[] }
 > = {
+  shape: {
+    label: "Shape",
+    options: SHAPE_KINDS.map((kind) => ({
+      value: kind.id,
+      label: kind.label,
+      group: SHAPE_SETS.find((set) => set.id === kind.set)?.label,
+    })),
+  },
+  // Значения маркера зависят от вида фигуры — см. `styleOptions.ts`.
+  marker: { label: "Marker", options: [] },
   fill: { label: "Fill", options: COLORS },
   stroke: { label: "Border", options: COLORS },
+  strokeWidth: {
+    label: "Border width",
+    options: [0, 1, 2, 4, 6, 8].map((value) => ({
+      value,
+      label: value === 0 ? "None" : String(value),
+    })),
+  },
+  radius: {
+    label: "Corners",
+    options: [0, 4, 8, 12, 16, 24, 32, 48].map((value) => ({
+      value,
+      label: value === 0 ? "Square" : String(value),
+    })),
+  },
   fontFamily: {
     label: "Font",
     options: [
@@ -247,20 +296,4 @@ export function styleKeysOf(type: string): StyleKey[] {
   return (Object.keys(STYLE_KEYS) as StyleKey[]).filter((key) =>
     Object.hasOwn(spec.style, key),
   );
-}
-
-/**
- * Значения свойства для выделенных типов. STK-02: у стикеров размер шрифта — ещё и Auto;
- * при смешанном выделении — только общие для всех значения.
- */
-export function styleOptions(
-  key: StyleKey,
-  types: readonly string[],
-): StyleOption[] {
-  if (key === "fontSize" && types.length > 0) {
-    if (types.every((type) => type === "sticky")) {
-      return [{ value: AUTO_FONT_SIZE, label: "Auto" }, ...FONT_SIZES];
-    }
-  }
-  return STYLE_KEYS[key].options;
 }

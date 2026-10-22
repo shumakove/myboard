@@ -12,6 +12,8 @@ import {
 } from "./objectTypes";
 import { frameStyle, objectStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
+import { shapeKind, shapeMarker } from "./shapes";
+import { ShapeView } from "./ShapeView";
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
 export interface RichTextHandlers {
@@ -25,6 +27,7 @@ export interface RichTextHandlers {
  * Объекты сцены в порядке отрисовки (CVS-09, CVS-17); текст редактируемого объекта —
  * в редакторе. Текст, документ и стикер — с форматированием (TXT-01…TXT-06). Стикер —
  * с автоподгоном шрифта, тегами и автором (STK-02, STK-03), стопка — с тегами (STK-05).
+ * Фигура — контур SVG её вида с маркером BPMN и текстом (SHP-01…SHP-03).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -72,6 +75,7 @@ function SceneObjectView({
   const autoFit =
     sticky && (object.style.fontSize ?? AUTO_FONT_SIZE) === AUTO_FONT_SIZE;
   useFitFont(ref, autoFit && !editing, [object.width, object.height]);
+  const shape = object.type === "shape" ? shapeKind(object.style.shape) : null;
   return (
     <div
       ref={ref}
@@ -80,11 +84,21 @@ function SceneObjectView({
       data-type={object.type}
       data-locked={object.locked ? "true" : undefined}
       data-font-fit={autoFit ? "auto" : undefined}
+      data-shape={shape?.id}
+      data-marker={
+        shape
+          ? (shapeMarker(shape, object.style.marker) ?? undefined)
+          : undefined
+      }
       aria-label={typeName(object.type)}
       aria-selected={selected}
       style={group ? frameStyle(object) : objectStyle(object)}
     >
-      {!group && !editing && <ObjectContent object={object} rich={rich} />}
+      {shape ? (
+        <ShapeView object={object} editing={editing} />
+      ) : (
+        !group && !editing && <ObjectContent object={object} rich={rich} />
+      )}
       {(sticky || object.type === "stack") && <StickyFooter object={object} />}
       {!group && object.locked && <LockBadge />}
     </div>

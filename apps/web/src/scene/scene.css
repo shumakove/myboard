@@ -156,13 +156,37 @@
   text-overflow: ellipsis;
 }
 
-.scene-shape {
-  align-items: center;
-  justify-content: center;
+/* SHP-01…SHP-03: фигура — контур SVG, текст в области текста её вида. */
+.scene-object.scene-shape {
+  padding: 0;
+  overflow: visible;
   text-align: center;
   font-size: 18px;
-  border-width: 2px;
-  border-radius: 4px;
+}
+
+.shape-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.shape-text {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Поле правки текста фигуры — над областью текста, контур фигуры виден под ним. */
+.scene-editor.scene-shape {
+  padding: 4px;
+  background: transparent;
 }
 
 .scene-label {
@@ -627,4 +651,50 @@
 
 .selection-switch {
   white-space: nowrap;
+}
+
+/* SHP-01, SHP-02: наборы фигур у инструмента Shape. */
+.shape-palette {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--layer-panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: min(420px, calc(100% - 2 * var(--space-2)));
+  padding: var(--space-1);
+}
+
+.shape-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: var(--space-1);
+}
+
+.shape-swatch {
+  touch-action: none; /* образец тянут на холст и пальцем */
+}
+
+.shape-swatch svg {
+  width: 28px;
+  height: 22px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.shape-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* SHP-04: поле выбора своего цвета. */
+.selection-color input[type="color"] {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: none;
 }

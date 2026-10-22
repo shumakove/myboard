@@ -16,13 +16,17 @@ export function frameStyle(frame: Frame): CSSProperties {
   };
 }
 
-/** Оформление объекта по его типу и свойствам. */
+/**
+ * Оформление объекта по его типу и свойствам. Заливку и обводку фигуры рисует её контур
+ * SVG (SHP-03), а не рамка элемента.
+ */
 export function objectStyle(object: SceneObject): CSSProperties {
   const { fill, stroke, color, fontSize, background } = object.style;
+  const outlined = object.type === "shape";
   return {
     ...frameStyle(object),
-    background: str(fill) ?? str(background),
-    borderColor: str(stroke),
+    background: outlined ? undefined : (str(fill) ?? str(background)),
+    borderColor: outlined ? undefined : str(stroke),
     color: str(color),
     fontSize: num(fontSize),
     ...textStyle(object.style),

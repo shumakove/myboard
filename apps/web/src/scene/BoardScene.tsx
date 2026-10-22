@@ -59,12 +59,22 @@ import {
   rememberStickyColor,
 } from "./stickies";
 import { StickyPalette } from "./StickyPalette";
+import {
+  loadShapeKind,
+  newShapeFields,
+  rememberShapeKind,
+  shapeKind,
+} from "./shapes";
+import { ShapePalette } from "./ShapePalette";
+import { shapeEditorStyle } from "./shapeText";
+import { colorCategory, useRecentColors } from "./recentColors";
 import { addTag, removeTag } from "./tags";
 import { fittedHeight } from "./textHeight";
 import { loadTextStyle } from "./textStyle";
 import {
   SelectionBar,
   type AuthorToggle,
+  type ColorActions,
   type TagActions,
 } from "./SelectionBar";
 import { SelectionOverlay } from "./SelectionOverlay";
@@ -103,7 +113,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * CVS-23 контекстное меню, MOB-03 долгое нажатие; T5.4 — CVS-07 отмена и повтор своих
  * правок, CVS-24 закреплённые инструменты, CVS-25 горячие клавиши; T5.5 — CVS-08 поиск
  * по тексту и тегам, SHR-07 ссылка на объект и переход к нему; T6.1 — TXT-01…TXT-08
- * текст и документ с форматированием; T6.2 — STK-01…STK-05 стикеры и стопка стикеров.
+ * текст и документ с форматированием; T6.2 — STK-01…STK-05 стикеры и стопка стикеров;
+ * T6.3 — SHP-01…SHP-04 наборы фигур, маркеры BPMN, оформление фигуры и недавние цвета.
  */
 export function BoardScene({
   board,
@@ -153,6 +164,10 @@ export function BoardScene({
   );
   /** STK-01: цвет следующего стикера или стопки — выбирается до постановки. */
   const [stickyColor, setStickyColor] = useState(loadStickyColor);
+  /** SHP-01, SHP-02: вид следующей фигуры — выбирается до постановки. */
+  const [shapeChoice, setShapeChoice] = useState(loadShapeKind);
+  /** SHP-04: недавние свои цвета по категориям объектов. */
+  const recentColors = useRecentColors();
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const pointer = useRef<Point | null>(null);
@@ -222,11 +237,20 @@ export function BoardScene({
   );
 
   const create = useCallback(
-    (type: ObjectType, at: Point, fill?: string): SceneObject | null => {
+    (
+      type: ObjectType,
+      at: Point,
+      choice: { fill?: string; shape?: string } = {},
+    ): SceneObject | null => {
+      // SHP-01, SHP-02: фигура — выбранного вида, с его размером и оформлением.
+      const shape =
+        type === "shape"
+          ? newShapeFields(shapeKind(choice.shape ?? shapeChoice))
+          : null;
       const id = createObject(
         objects,
         type,
-        placement(type, at, settings.gridStep),
+        placement(type, at, settings.gridStep, shape ?? undefined),
         "",
         actor,
         // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом;
@@ -234,13 +258,14 @@ export function BoardScene({
         type === "text"
           ? loadTextStyle()
           : type === "sticky" || type === "stack"
-            ? { fill: fill ?? stickyColor }
-            : {},
+            ? { fill: choice.fill ?? stickyColor }
+            : (shape?.style ?? {}),
+        shape ?? undefined,
       );
       setSelection([id]);
       return readScene(objects).find((o) => o.id === id) ?? null;
     },
-    [objects, settings.gridStep, actor, stickyColor],
+    [objects, settings.gridStep, actor, stickyColor, shapeChoice],
   );
 
   /** STK-05: стикер из стопки. */
@@ -329,10 +354,14 @@ export function BoardScene({
    * CVS-09: инструмент отпустили над холстом — объект встаёт в эту точку; STK-01: образец
    * цвета — стикер этого цвета.
    */
-  function drop(type: ObjectType, client: Point, fill?: string) {
+  function drop(
+    type: ObjectType,
+    client: Point,
+    choice?: { fill?: string; shape?: string },
+  ) {
     const at = boardPointAt(client);
     if (at === null) return;
-    create(type, at, fill);
+    create(type, at, choice);
     setTool("select");
   }
 
@@ -396,6 +425,18 @@ export function BoardScene({
           },
         }
       : null;
+
+  // SHP-04: свой цвет выделенных — в их свойство и в недавние цвета их категорий.
+  const colorActions: ColorActions = {
+    recent: recentColors.recent,
+    pick: (key, color) => {
+      commands.setStyle(key, color);
+      const categories = editable
+        .map((o) => colorCategory(o.type))
+        .filter((c) => c !== null);
+      recentColors.remember(categories, color);
+    },
+  };
 
   const label = useCallback((id: string) => objectLabel(scene, id), [scene]);
   const richHandlers: RichTextHandlers = {
@@ -597,6 +638,12 @@ export function BoardScene({
             <TextEditor
               key={editedObject.id}
               object={editedObject}
+              {...(editedObject.type === "shape" && {
+                style: {
+                  ...objectStyle(editedObject),
+                  ...shapeEditorStyle(editedObject),
+                },
+              })}
               text={editing.text}
               onEdit={() => {
                 const map = objectMap(objects, editedObject.id);
@@ -637,16 +684,35 @@ export function BoardScene({
           }}
           tags={tagActions}
           author={authorToggle}
+          colors={colorActions}
         />
         {(tool === "sticky" || tool === "stack") && (
           <StickyPalette
             color={stickyColor}
+            recent={recentColors.recent.sticky}
             onColor={(color) => {
               setStickyColor(color);
               rememberStickyColor(color);
             }}
+            onCustom={(color) => {
+              setStickyColor(color);
+              rememberStickyColor(color);
+              recentColors.remember(["sticky"], color);
+            }}
             onDrop={(color, client) => {
-              drop("sticky", client, color);
+              drop("sticky", client, { fill: color });
+            }}
+          />
+        )}
+        {tool === "shape" && (
+          <ShapePalette
+            kind={shapeChoice}
+            onKind={(kind) => {
+              setShapeChoice(kind);
+              rememberShapeKind(kind);
+            }}
+            onDrop={(kind, client) => {
+              drop("shape", client, { shape: kind });
             }}
           />
         )}

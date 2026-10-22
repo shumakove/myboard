@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import type * as Y from "yjs";
 import { objectStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
@@ -12,11 +12,14 @@ import { applyTextChange, shiftIndex } from "./textBinding";
 export function TextEditor({
   object,
   text,
+  style,
   onEdit,
   onDone,
 }: {
   object: SceneObject;
   text: Y.Text;
+  /** Положение и вид поля; по умолчанию — рамка объекта (у фигуры — область текста). */
+  style?: CSSProperties;
   /** Отметка «изменил» (CVS-22) — в той же транзакции, что и правка текста. */
   onEdit?: () => void;
   onDone: () => void;
@@ -50,7 +53,7 @@ export function TextEditor({
       className={`scene-object scene-${object.type} scene-editor`}
       aria-label="Object text"
       data-canvas-ignore=""
-      style={objectStyle(object)}
+      style={style ?? objectStyle(object)}
       onInput={(event) => {
         const value = event.currentTarget.value;
         const write = () => {

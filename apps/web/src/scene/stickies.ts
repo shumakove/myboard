@@ -1,6 +1,7 @@
 import type * as Y from "yjs";
 import type { Point } from "../realtime/messages";
 import { OBJECT_TYPES, STICKY_COLORS } from "./objectTypes";
+import { normalizeColor } from "./recentColors";
 import {
   createObject,
   objectMap,
@@ -17,11 +18,14 @@ export const STICKY_COLOR_KEY = "myboard.stickyColor";
 
 const DEFAULT_COLOR = String(OBJECT_TYPES.sticky.style.fill);
 
-/** Цвет из палитры стикеров; чужое значение — цвет по умолчанию. */
+/**
+ * Цвет из палитры стикеров или свой цвет `#rrggbb` (SHP-04); чужое значение — цвет
+ * по умолчанию.
+ */
 export function stickyColor(value: unknown): string {
-  return STICKY_COLORS.some((color) => color.value === value)
-    ? String(value)
-    : DEFAULT_COLOR;
+  if (STICKY_COLORS.some((color) => color.value === value))
+    return String(value);
+  return normalizeColor(value) ?? DEFAULT_COLOR;
 }
 
 export function loadStickyColor(): string {
