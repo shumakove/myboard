@@ -33,8 +33,12 @@ classDiagram
     height: number
     rotation: number
     z: number
-    fill?: string
+    shape?: string
+    marker?: string
+    fill?: string | transparent
     stroke?: string
+    strokeWidth?: number
+    radius?: number
     color?: string
     fontSize?: number | auto
     fontFamily?: sans | serif | mono | hand
@@ -159,7 +163,7 @@ classDiagram
   class sceneObjects {
     <<apps/web scene/sceneObjects.ts>>
     readScene(objects) SceneObject[]$
-    createObject(objects, type, at, text: string | DeltaOp[], actor, style) string$
+    createObject(objects, type, at, text: string | DeltaOp[], actor, style, size) string$
     objectMap(objects, id) Y.Map | null$
     objectText(objects, id) Y.Text | null$
     patchObjects(objects, patches, actor) void$
@@ -251,8 +255,9 @@ classDiagram
     TAGGED_TYPES = sticky, stack$
     AUTO_FONT_SIZE = auto$
     STICKY_COLORS$
+    FONT_SIZES$
+    NO_COLOR = transparent, None$
     isRichText(type) boolean$
-    styleOptions(key, types) StyleOption[]$
     type: ObjectType
     label: string
     plural: string
@@ -266,7 +271,7 @@ classDiagram
     <<apps/web scene/stickies.ts>>
     NEXT_STICKY_GAP = 20$
     STICKY_COLOR_KEY = myboard.stickyColor$
-    stickyColor(value) string$
+    stickyColor(value) string — палитра или #rrggbb$
     loadStickyColor() string$
     rememberStickyColor(color) void$
     createNextSticky(objects, sticky, actor) string$
@@ -363,11 +368,76 @@ classDiagram
   stickies ..> sceneObjects : createObject, objectMap, transact, writeTags
   tags ..> SceneObjectMap : tags — push / delete в Y.Array + touch
   sceneObjects ..> ObjectTypeSpec : TAGGED_TYPES — пустой tags при создании
+  class shapes {
+    <<apps/web scene/shapes.ts>>
+    SHAPE_SETS: basic, callout, flowchart, bpmn$
+    SHAPE_KINDS: ShapeKind[]$
+    DEFAULT_SHAPE = rectangle$
+    SHAPE_KIND_KEY = myboard.shapeKind$
+    shapeKind(value) ShapeKind$
+    isShapeKind(value) boolean$
+    shapeMarker(kind, value) string | null$
+    textBoxOf(kind) TextBox$
+    newShapeFields(kind) width, height, style$
+    loadShapeKind() string$
+    rememberShapeKind(kind) void$
+  }
+  class ShapeKind {
+    <<interface, scene/shapes.ts>>
+    id: string
+    label: string
+    set: ShapeSet
+    width: number
+    height: number
+    roundable: boolean
+    style?: поля оформления нового
+    text?: TextBox
+    verticalText?: boolean
+    markers?: MarkerOption[]
+  }
+  class MarkerOption {
+    <<interface, scene/shapes.ts>>
+    id: string
+    label: string
+  }
+  class TextBox {
+    <<interface, scene/shapes.ts>>
+    x, y, width, height: доли рамки
+  }
+  class styleOptions {
+    <<apps/web scene/styleOptions.ts>>
+    COLOR_KEYS = fill, stroke, color, background$
+    RECENT_GROUP = Recent colors$
+    objectStyleKeys(object) StyleKey[]$
+    sharedStyleKeys(selected, recent) StyleKey[]$
+    styleOptions(key, selected, recent) StyleOption[]$
+  }
+  class recentColors {
+    <<apps/web scene/recentColors.ts, localStorage>>
+    RECENT_COLORS_KEY = myboard.recentColors$
+    RECENT_LIMIT = 8$
+    ColorCategory: text | sticky | shape | line
+    normalizeColor(value) string | null$
+    colorCategory(type) ColorCategory | null$
+    loadRecentColors() RecentColors$
+    addRecentColor(recent, categories, color) RecentColors$
+    useRecentColors() recent, remember$
+  }
+  shapes *-- ShapeKind : SHAPE_KINDS
+  ShapeKind *-- MarkerOption : markers (BPMN)
+  ShapeKind *-- TextBox : text
+  SceneObjectMap ..> ShapeKind : shape — id вида, marker — id маркера
+  ObjectTypeSpec ..> shapes : DEFAULT_SHAPE, SHAPE_KINDS — список Shape
+  styleOptions ..> shapes : маркеры и скругление по виду
+  styleOptions ..> recentColors : недавние цвета категории выделенных
+  stickies ..> recentColors : normalizeColor
 ```
 
-- Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.3…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `fill`, `stroke`; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
+- Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.3…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `shape`, `marker`, `fill`, `stroke`, `strokeWidth`, `radius`, `fontSize`, `color`, `align`, `lineHeight`, T6.3; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
 - Текст и документ (T6.1, TXT-01…TXT-08): `text` — тот же `Y.Text`, но с атрибутами в модели Quill (`RichTextContent`): начертание и ссылка — на символах, `header` 1–3, `list` (`bullet` | `ordered` | `checked` | `unchecked`) и `indent` 1–8 — на переводе строки своей строки; в документе ещё вставки `{ divider: true }` и `{ objectLink: id }` (id ключа в `objects`, TXT-06). Новых корней и полей-контейнеров нет; `toJSON()` текста — по-прежнему строка (поиск, подпись объекта). `readScene` кладёт дельту (`Y.Text.toDelta()`) в `SceneObject.rich` только для `RICH_TEXT_TYPES`; показ (`toBlocks`) отбрасывает неизвестные атрибуты, ссылки — только http(s), mailto, tel. Правка в редакторе (`bindQuill`) пишет в `Y.Text` минимальную разницу «было → стало» (`minimalChange`, BUG-014) одной транзакцией с origin `null` вместе с `touch` и подгонкой `height`; отметка пункта списка дел на холсте (TXT-02) — `text.format(end, 1, {list})` + `touch` одной транзакцией. Высота: текстовый блок следует за содержимым, документ только растёт; подгонка после смены оформления и вставки HTML (`useTextFit`) входит в тот же шаг отмены (`UndoHistory.amend`).
 - Стикер (T6.2, STK-01…STK-04): `type: "sticky"`, `text` — `Y.Text` с атрибутами Quill, как у текста (`RICH_TEXT_TYPES` = `text`, `document`, `sticky`; правка — `bindQuill`, подгонки высоты нет: `fittedHeight` для стикера — `null`). `fill` — цвет, выбранный до постановки (`STICKY_COLORS` — палитра без чёрного; выбор вкладки — `sessionStorage` `myboard.stickyColor`, в документ не входит). `fontSize` — число или `"auto"` (`AUTO_FONT_SIZE`, у нового — `"auto"`): автоподгон считает каждый клиент при отрисовке (`useFitFont`), в документ размер не пишется. `showAuthor: false` — имя автора (`createdBy`) на стикере скрыто; нет поля — показано. `tags` — `Y.Array<string>`, у нового стикера и стопки создаётся пустым сразу в `createObject` (`TAGGED_TYPES`), чтобы первые теги двух участников слились в один массив (COL-01). Следующий стикер по Tab (`createNextSticky`, STK-04) — справа на `NEXT_STICKY_GAP` = 20, тех же `width`, `height`, `fill`, `fontSize`, `showAuthor`, без тегов, одной транзакцией.
+- Фигура (T6.3, SHP-01…SHP-04): `type: "shape"`. `shape` — id вида из `SHAPE_KINDS` (`scene/shapes.ts`): наборы `basic` (Basic, 15 видов), `callout` (Callouts, 4), `flowchart` (Flowchart, 17), `bpmn` (BPMN, 11: `bpmn-task`, `bpmn-subprocess`, `bpmn-start`, `bpmn-intermediate`, `bpmn-end`, `bpmn-gateway`, `bpmn-data-object`, `bpmn-data-store`, `bpmn-pool`, `bpmn-annotation`, `bpmn-group`); нет поля или неизвестный id — `rectangle` (`shapeKind`), поэтому фигуры до T6.3 показываются прямоугольником. `marker` — id маркера BPMN (`ShapeKind.markers`: у задачи, подпроцесса, событий, шлюза и объекта данных; первый — по умолчанию, у шлюза — `exclusive`, у остальных — `none`); чужой или пустой — первый маркер вида (`shapeMarker`), у видов без маркеров поле не читается. Оформление: `fill` — цвет или `"transparent"` (`NO_COLOR`, SHP-03), `stroke`, `strokeWidth` (0 — без обводки; 0, 1, 2, 4, 6, 8), `radius` (скругление 0…48, читается только у видов с `roundable`), `fontSize`, `color`, `align`, `lineHeight`. Новая фигура (`newShapeFields`) — размер вида (`width`, `height`, передаётся в `createObject` аргументом `size`), оформление типа `shape` поверх него — `ShapeKind.style` вида, `shape` и маркер по умолчанию; всё одной транзакцией `createObject`. `text` — `Y.Text` без атрибутов (правка — `TextEditor` с `applyTextChange`, как раньше), поле правки — над областью текста вида (`TextBox` в долях рамки; у событий, шлюза и данных — подпись под фигурой). Контур и значки маркеров клиент вычисляет при отрисовке (`shapeGeometry.ts`, `bpmnMarkers.ts`) и в документ не пишет. Выбранный до постановки вид — `sessionStorage` `myboard.shapeKind` (`loadShapeKind`), в документ не входит.
+- Недавние свои цвета (T6.3, SHP-04) — не данные документа: `localStorage` `myboard.recentColors` = `{"text":[],"sticky":[],"shape":[],"line":[]}` (`#rrggbb`, до 8 в категории, последний — первым), общие для всех досок браузера. Категория — по типу объекта (`colorCategory`: `text`/`document` → `text`, `sticky`/`stack` → `sticky`, `shape` → `shape`, `line` → `line`). В документ попадает только сам цвет в поле объекта (`fill`, `stroke`, `color`, `background` через `setStyle`); цвет следующего стикера (`stickyColor`) принимает и свой `#rrggbb`.
 - Стопка стикеров (T6.2, STK-05): `type: "stack"`, рамка 200×200, `fill`, `tags` (`Y.Array<string>`), `text` пустой (`editable: false` — поле правки не открывается). Стикер из стопки (`pullSticky`) — новый `sticky` верхнего уровня размера типа, центром в точке, `fill` стопки и копия её тегов, одной транзакцией; сама стопка не меняется.
 - Новый текст (TXT-05) получает `fontSize` и `color` из `sessionStorage` `myboard.textStyle` (`loadTextStyle`; запоминаются при выборе у текстового блока) — это поля объекта, сама память вкладки в документ не входит. `createObject` принимает текст строкой или дельтой и оформление поверх значений типа; вставка HTML внешнего документа (`htmlToDelta`, TXT-08) создаёт `text` с дельтой и оценкой высоты (`estimateHeight`) одной транзакцией.
 - Id объекта — 32 hex-символа из `crypto.getRandomValues` (16 байт; `randomUUID` без HTTPS недоступен). `createObject` ставит объект верхнего уровня одной транзакцией (CVS-09). `patchObjects` пишет рамку и оформление нескольких объектов одной транзакцией (CVS-11, CVS-12, CVS-14), переводя `x`, `y` доски в координаты относительно родителя. Запись-JSON (как в тестах T5.1) читается так же и при первой правке заменяется `Y.Map` (`objectMap`, строка `text` → `Y.Text`). Неверные записи (нет `type` или числовой рамки) `readScene` пропускает.
@@ -387,4 +457,4 @@ classDiagram
 - Присутствие (курсоры, вид камеры, слежение, список участников — T4.2) в документ не входит; запомненный вид камеры (CVS-05) хранится в `localStorage` браузера, а не в документе: оно идёт сообщениями `awareness`/`presence` и живёт только в памяти соединений ([ws-protocol.md](ws-protocol.md)).
 - Серверная копия собирается из последнего снимка `board_snapshots` и хвоста `board_updates` при первом подключении к доске (`Hub.join` → `store.load_journal` → `BoardRoom(board_id, journal)`) и выгружается, когда уходит последнее соединение (`Hub.leave`, с этим — сжатие журнала). Снимок — полное состояние `Doc.get_update()`; присутствия в нём нет. См. [data-model.md](data-model.md), [sequences/sync.md](sequences/sync.md).
 
-Актуально на: T6.2, ce46d3f (стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
+Актуально на: T6.3, 0de9f87 (фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
