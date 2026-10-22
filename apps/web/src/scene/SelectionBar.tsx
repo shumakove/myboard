@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   MORE_TEXT_KEYS,
   STYLE_KEYS,
-  styleKeysOf,
-  styleOptions,
   typeName,
   typeSpec,
   type StyleKey,
+  type StyleOption,
 } from "./objectTypes";
+import type { RecentColors } from "./recentColors";
 import type { ObjectMeta, SceneObject } from "./sceneObjects";
+import { shapeKind, shapeMarker } from "./shapes";
+import { COLOR_KEYS, sharedStyleKeys, styleOptions } from "./styleOptions";
 import {
   Button,
   FloatingPanel,
@@ -32,6 +34,13 @@ export interface TagActions {
   remove: (tag: string) => void;
 }
 
+/** SHP-04: недавние пользовательские цвета и выбор своего цвета. */
+export interface ColorActions {
+  recent: RecentColors;
+  /** Выбран пользовательский цвет свойства `key`. */
+  pick: (key: StyleKey, color: string) => void;
+}
+
 /** STK-03: показ имени автора на стикере. */
 export interface AuthorToggle {
   shown: boolean;
@@ -51,7 +60,9 @@ export interface AuthorToggle {
  * - TXT-01: у текста и документа шрифт, начертание, выравнивание, интервал и фон —
  *   под кнопкой Text style (панель остаётся в одну строку);
  * - STK-02: размер шрифта стикера — число или Auto (подгон под стикер);
- * - STK-03: теги стикера и стопки — под кнопкой Tags, показ автора — переключатель.
+ * - STK-03: теги стикера и стопки — под кнопкой Tags, показ автора — переключатель;
+ * - SHP-01…SHP-03: вид фигуры, маркер BPMN, заливка, обводка, скругление, текст;
+ * - SHP-04: свой цвет — под кнопкой Custom color, недавние свои цвета — в списках цветов.
  */
 export function SelectionBar({
   selected,
@@ -67,6 +78,7 @@ export function SelectionBar({
   onMore,
   tags = null,
   author = null,
+  colors,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -82,9 +94,11 @@ export function SelectionBar({
   onMore: (button: HTMLElement) => void;
   tags?: TagActions | null;
   author?: AuthorToggle | null;
+  colors?: ColorActions;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   if (selected.length === 0) return null;
   const counts = new Map<string, number>();
   for (const object of selected) {
@@ -92,12 +106,9 @@ export function SelectionBar({
   }
   const types = [...counts.keys()];
   const editable = selected.filter((o) => !o.locked);
-  const shared =
-    editable.length === 0
-      ? []
-      : (Object.keys(STYLE_KEYS) as StyleKey[]).filter((key) =>
-          types.every((type) => styleKeysOf(type).includes(key)),
-        );
+  const recent = colors?.recent;
+  const shared = editable.length === 0 ? [] : sharedStyleKeys(selected, recent);
+  const colorKeys = shared.filter((key) => COLOR_KEYS.includes(key));
   const [single] = selected;
 
   return (
@@ -132,10 +143,37 @@ export function SelectionBar({
             key={key}
             styleKey={key}
             selected={selected}
-            types={types}
+            recent={recent}
             onStyle={onStyle}
           />
         ))}
+      {colors && colorKeys.length > 0 && (
+        <Button
+          variant="ghost"
+          aria-expanded={customOpen}
+          onClick={() => {
+            setCustomOpen((open) => !open);
+          }}
+        >
+          Custom color
+        </Button>
+      )}
+      {colors && customOpen && colorKeys.length > 0 && (
+        <span
+          role="group"
+          aria-label="Custom color"
+          className="selection-more selection-custom"
+        >
+          {colorKeys.map((key) => (
+            <CustomColor
+              key={key}
+              styleKey={key}
+              selected={selected}
+              onPick={colors.pick}
+            />
+          ))}
+        </span>
+      )}
       {shared.some((key) => MORE_TEXT_KEYS.includes(key)) && (
         <Button
           variant="ghost"
@@ -156,7 +194,7 @@ export function SelectionBar({
                 key={key}
                 styleKey={key}
                 selected={selected}
-                types={types}
+                recent={recent}
                 onStyle={onStyle}
               />
             ))}
@@ -222,22 +260,25 @@ export function SelectionBar({
 function StyleSelect({
   styleKey: key,
   selected,
-  types,
+  recent,
   onStyle,
 }: {
   styleKey: StyleKey;
   selected: readonly SceneObject[];
-  types: readonly string[];
+  recent: RecentColors | undefined;
   onStyle: (key: StyleKey, value: string | number) => void;
 }) {
-  const values = new Set(
-    selected.map((o) => o.style[key] ?? typeSpec(o.type)?.style[key]),
-  );
+  const values = new Set(selected.map((o) => styleValue(o, key)));
   const [only] = values;
   const current =
     values.size === 1 && only !== undefined ? String(only) : MIXED;
   const { label } = STYLE_KEYS[key];
-  const options = styleOptions(key, types);
+  const listed = styleOptions(key, selected, recent);
+  // Значение не из списка (свой цвет) — тоже в списке, чтобы его было видно.
+  const options: StyleOption[] =
+    current === MIXED || listed.some((o) => String(o.value) === current)
+      ? listed
+      : [...listed, { value: only ?? current, label: current }];
   return (
     <SelectField
       label={label}
@@ -255,12 +296,97 @@ function StyleSelect({
           Mixed
         </option>
       )}
-      {options.map((option) => (
-        <option key={String(option.value)} value={String(option.value)}>
-          {option.label}
-        </option>
-      ))}
+      {groupOptions(options).map(([group, items], index) =>
+        group === undefined ? (
+          items.map(optionView)
+        ) : (
+          <optgroup key={`${group}-${String(index)}`} label={group}>
+            {items.map(optionView)}
+          </optgroup>
+        ),
+      )}
     </SelectField>
+  );
+}
+
+function optionView(option: StyleOption) {
+  return (
+    <option key={String(option.value)} value={String(option.value)}>
+      {option.label}
+    </option>
+  );
+}
+
+/** Подряд идущие значения одной группы — вместе (наборы фигур, недавние цвета). */
+function groupOptions(
+  options: readonly StyleOption[],
+): [string | undefined, StyleOption[]][] {
+  const groups: [string | undefined, StyleOption[]][] = [];
+  for (const option of options) {
+    const last = groups.at(-1);
+    if (last !== undefined && last[0] === option.group) last[1].push(option);
+    else groups.push([option.group, [option]]);
+  }
+  return groups;
+}
+
+/**
+ * Значение свойства у объекта: записанное или значение типа. SHP-02: маркер — действующий
+ * маркер вида фигуры.
+ */
+function styleValue(
+  object: SceneObject,
+  key: StyleKey,
+): string | number | undefined {
+  if (key === "marker") {
+    return (
+      shapeMarker(shapeKind(object.style.shape), object.style.marker) ??
+      undefined
+    );
+  }
+  return object.style[key] ?? typeSpec(object.type)?.style[key];
+}
+
+/**
+ * SHP-04: свой цвет свойства — поле выбора цвета браузера. Цвет применяется, когда выбор
+ * закончен (событие `change`), а не на каждом шаге в окне выбора цвета.
+ */
+function CustomColor({
+  styleKey: key,
+  selected,
+  onPick,
+}: {
+  styleKey: StyleKey;
+  selected: readonly SceneObject[];
+  onPick: (key: StyleKey, color: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const pick = useRef(onPick);
+  useEffect(() => {
+    pick.current = onPick;
+  });
+  useEffect(() => {
+    const input = ref.current;
+    if (input === null) return;
+    const changed = () => {
+      pick.current(key, input.value);
+    };
+    input.addEventListener("change", changed);
+    return () => {
+      input.removeEventListener("change", changed);
+    };
+  }, [key]);
+  const [first] = selected;
+  const value = first === undefined ? undefined : styleValue(first, key);
+  const initial =
+    typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
+      ? value.toLowerCase()
+      : "#000000";
+  return (
+    <label className="ui-field ui-field--inline selection-color">
+      {`Custom ${STYLE_KEYS[key].label.toLowerCase()}`}
+      <input ref={ref} type="color" defaultValue={initial} />
+    </label>
   );
 }
 

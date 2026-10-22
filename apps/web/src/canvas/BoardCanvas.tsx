@@ -137,6 +137,23 @@ export function BoardCanvas({
     };
   }, [ref]);
 
+  // BUG-020: пальцы на холсте ведёт сам холст (MOB-02). Без отказа от touchmove браузер
+  // параллельно распознаёт свою прокрутку и инерцию; touch-action их гасит не полностью,
+  // и Chromium после смены ввода (палец → мышь → палец) глотал click первого касания
+  // кнопки вне холста — например, повторного Follow (COL-04). Поля правки текста
+  // (data-canvas-ignore) прокручиваются и выделяются пальцем как обычно.
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    function touchMove(event: TouchEvent) {
+      if (event.cancelable && !isIgnored(event.target)) event.preventDefault();
+    }
+    element.addEventListener("touchmove", touchMove, { passive: false });
+    return () => {
+      element.removeEventListener("touchmove", touchMove);
+    };
+  }, [ref]);
+
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;

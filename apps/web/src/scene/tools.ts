@@ -68,15 +68,18 @@ export function toolTitle(tool: Tool): string {
   return `${tool.label} (${keyLabel(tool.key)}). ${tool.hint}`;
 }
 
-/** Левый верхний угол нового объекта: центр — в точке, угол прилипает к сетке. */
+/**
+ * Левый верхний угол нового объекта: центр — в точке, угол прилипает к сетке. `size` —
+ * размер, если он не размер типа (вид фигуры, SHP-01).
+ */
 export function placement(
   type: ObjectType,
   at: Point,
   gridStep: number,
+  size: { width: number; height: number } = OBJECT_TYPES[type],
 ): Point {
-  const spec = OBJECT_TYPES[type];
   return {
-    x: snap(at.x - spec.width / 2, gridStep),
-    y: snap(at.y - spec.height / 2, gridStep),
+    x: snap(at.x - size.width / 2, gridStep),
+    y: snap(at.y - size.height / 2, gridStep),
   };
 }

@@ -274,8 +274,8 @@ export function touch(
 /**
  * CVS-09: новый объект типа `type` с левым верхним углом в точке `at` (верхний уровень).
  * `text` — строка или, у текста и документа, дельта с форматированием (TXT-08);
- * `actor` — имя автора (CVS-22); `style` — оформление поверх значений типа (TXT-05).
- * Возвращает id объекта.
+ * `actor` — имя автора (CVS-22); `style` — оформление поверх значений типа (TXT-05);
+ * `size` — размер, если он не размер типа (вид фигуры, SHP-01). Возвращает id объекта.
  */
 export function createObject(
   objects: Y.Map<unknown>,
@@ -284,6 +284,7 @@ export function createObject(
   text: string | readonly DeltaOp[] = "",
   actor = "",
   style: Partial<Record<StyleKey, string | number>> = {},
+  size: { width: number; height: number } = OBJECT_TYPES[type],
 ): string {
   const spec = OBJECT_TYPES[type];
   const id = newObjectId();
@@ -293,8 +294,8 @@ export function createObject(
     object.set("parent", null);
     object.set("x", at.x);
     object.set("y", at.y);
-    object.set("width", spec.width);
-    object.set("height", spec.height);
+    object.set("width", size.width);
+    object.set("height", size.height);
     object.set("rotation", 0);
     object.set("z", topZ(objects));
     for (const [key, value] of Object.entries({
