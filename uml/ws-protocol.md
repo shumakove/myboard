@@ -33,6 +33,12 @@ classDiagram
     cursor: Point or null
     camera: CameraView or null
     following: string or null
+    laser: LaserTrail or null
+  }
+  class LaserTrail {
+    <<type, клиент, DRW-05>>
+    number[][] — линии [x0, y0, x1, y1, …]
+    целые координаты доски, ≤ LASER_MAX_POINTS = 100 точек
   }
   class Point {
     x: number
@@ -83,6 +89,7 @@ classDiagram
   ServerAwareness --> AwarenessState : state
   AwarenessState --> Point : cursor
   AwarenessState --> CameraView : camera
+  AwarenessState --> LaserTrail : laser
   Presence *-- PresencePeer
   protocol ..> MessageType
   protocol ..> SyncMessage : decode
@@ -110,7 +117,7 @@ presence:  varuint 2 | varuint длина | JSON в UTF-8
 | `sync STEP1` | сервер — сразу после `accept`; клиент — в `onopen` | вектор версии отправителя (`Doc.get_state()` / `Y.encodeStateVector`) |
 | `sync STEP2` | ответ на `STEP1` | недостающие обновления (`Doc.get_update(sv)` / `Y.encodeStateAsUpdate(doc, sv)`); на пустой вектор `00` — полный снимок |
 | `sync UPDATE` | клиент — каждая локальная правка при открытом сокете; правки, сделанные без открытого сокета, — одним кадром (`Y.mergeUpdates`) в `onopen` сразу после своего `STEP1` (T6.2, BUG-018); сервер — рассылка каждой принятой правки остальным | обновление Yjs |
-| `awareness` клиента | `BoardPresence.flush`: при открытии канала и при изменении, не чаще раза в `AWARENESS_INTERVAL_MS = 50` | состояние целиком `{cursor, camera, following}` (координаты доски; `camera` — центр вида и масштаб). Сервер поля не интерпретирует |
+| `awareness` клиента | `BoardPresence.flush`: при открытии канала и при изменении, не чаще раза в `AWARENESS_INTERVAL_MS = 50` | состояние целиком `{cursor, camera, following, laser}` (координаты доски; `camera` — центр вида и масштаб; `laser` — след лазерной указки или `null`, T6.5, DRW-05). Сервер поля не интерпретирует |
 | `awareness` сервера | `BoardRoom.update_awareness` — всем соединениям доски, кроме отправителя; `BoardRoom.announce` — новичку последние состояния остальных | `{peer, name, state}`; `peer` — случайный `Peer.id` (`token_hex(8)`), `name` — из сессии соединения (`BoardAccess.name`: имя учётки владельца или `display_name` участника), а не из присланного состояния |
 | `presence` | только сервер (`BoardRoom._send_presence`) — всем соединениям доски при каждом входе и выходе | `{self, peers: [{peer, name}]}`: `self` — id получателя, `peers` — все открытые соединения доски по возрастанию id, включая получателя |
 
@@ -140,7 +147,7 @@ sequenceDiagram
     loop работа
       C->>R: sync UPDATE
       R->>H: room.apply(правки подряд из Inbox) → журнал одной транзакцией →<br/>рассылка UPDATE остальным по одной
-      C->>R: awareness {cursor, camera, following}
+      C->>R: awareness {cursor, camera, following, laser}
       R->>H: room.update_awareness: Peer.awareness = state
       H-->>O: awareness {peer, name, state}
     end
@@ -163,10 +170,11 @@ sequenceDiagram
 | `4403` | `ACCESS_REVOKED` / `CloseCode.AccessRevoked` | `Hub.close_participants` при сбросе ссылки; `_watch_access` раз в `ACCESS_CHECK_SECONDS = 5` (ошибка базы отзывом не считается). После закрытия остальные сразу получают новый `presence` |
 
 - Пустое обновление `00 00` (ответ `STEP2` клиента, у которого нет нового) не пишется в журнал и не рассылается (`EMPTY_UPDATE`).
-- Клиент игнорирует кадры незнакомого типа и неразобранный JSON (`decodeMessage` → `null`), не отправляет обратно правки, пришедшие с сервера (`origin === this`). Из чужого `state` берутся только поля правильной формы (`parseState`: `cursor` — конечные `x`, `y`; `camera` — плюс `zoom > 0`; `following` — строка).
+- Клиент игнорирует кадры незнакомого типа и неразобранный JSON (`decodeMessage` → `null`), не отправляет обратно правки, пришедшие с сервера (`origin === this`). Из чужого `state` берутся только поля правильной формы (`parseState`: `cursor` — конечные `x`, `y`; `camera` — плюс `zoom > 0`; `following` — строка; `laser` — `null` или массив линий из конечных чисел чётной длины, T6.5).
+- След лазера (T6.5, DRW-05) — обычное поле `awareness`: сервер его не разбирает, в документ, `board_updates` и снимки не пишет (`test_drw05_laser_trail_reaches_others_and_stays_out_of_document`). Размер ограничивает клиент (`LASER_MAX_POINTS` = 100 точек, целые координаты), чтобы состояние уложилось в `MAX_AWARENESS_BYTES` = 4096; больший кадр сервер по-прежнему отвергает. Погасший след — `laser: null`.
 - Присутствие живёт только в памяти: `Peer.awareness` на сервере и `BoardPresence` на клиенте. В документ, `board_updates` и рассылку `sync` оно не попадает и пропадает вместе с соединением; на разрыве клиент очищает список (`BoardPresence.detach`). Список и состояния — в пределах одной доски (`BoardRoom`).
 - Сообщений T4.3 не добавила: `STEP2` на вектор клиента строится из серверной копии, собранной из последнего снимка `board_snapshots` и хвоста журнала, — поздний клиент после сжатия получает полное состояние. `awareness` не попадает и в снимки ([sequences/sync.md](sequences/sync.md)).
 - Сообщений T6.2 не добавила (BUG-018): сервер вычитывает кадры отдельной задачей `_read` в очередь `Inbox` с момента `accept` — до загрузки доски и не дожидаясь применения правок; кадры обрабатываются в порядке прихода. Правки (`UPDATE` и `STEP2` клиента), стоящие в очереди подряд, применяются и пишутся пачкой, но рассылаются по одной, кадрами `UPDATE`. Повреждённая правка в пачке закрывает соединение `1007` после записи и рассылки принятых до неё. Клиент дошлёт правку, сделанную до открытия сокета, не дожидаясь `STEP1` сервера; её повтор в `STEP2` Yjs не применяет второй раз.
 - Рассылки `apply`, `announce`, `announce_leave`, `update_awareness` идут под одной блокировкой `BoardRoom._lock` — один порядок кадров для всех соединений доски.
 
-Актуально на: T6.2, ce46d3f (порядок чтения и отправки кадров — BUG-018; сообщения — T4.3, 7477309). Требования: COL-01, COL-02, COL-03 (локально на клиенте, сообщений не требует), COL-04, COL-09, SHR-04 (канал), SHR-06 (закрытие канала участника).
+Актуально на: T6.5, d31412e (поле `laser` в `awareness`; T6.2, ce46d3f — порядок чтения и отправки кадров — BUG-018; сообщения — T4.3, 7477309). Требования: COL-01, COL-02, COL-03 (локально на клиенте, сообщений не требует), COL-04, COL-09, DRW-05 (след лазера), SHR-04 (канал), SHR-06 (закрытие канала участника).
