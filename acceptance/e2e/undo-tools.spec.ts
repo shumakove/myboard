@@ -17,7 +17,9 @@ const mobileOnly = (isMobile: boolean) => test.skip(!isMobile, 'телефон �
 
 test.beforeEach(() => test.setTimeout(120_000));
 
-const DEFAULT_TOOLS = ['Select', 'Lasso', 'Sticky note', 'Shape', 'Text'];
+// Состав набора по умолчанию CVS-24 не задаёт — константа повторяет handoff (T5.4; Pen добавлен в T6.5).
+const DEFAULT_TOOLS = ['Select', 'Lasso', 'Sticky note', 'Shape', 'Text', 'Pen'];
+const LAST_TOOL = DEFAULT_TOOLS[DEFAULT_TOOLS.length - 1];
 const undoBtn = (page: Page) => tools(page).getByRole('button', { name: 'Undo', exact: true });
 const redoBtn = (page: Page) => tools(page).getByRole('button', { name: 'Redo', exact: true });
 const allToolsBtn = (page: Page) => tools(page).getByRole('button', { name: 'All tools', exact: true });
@@ -316,7 +318,7 @@ test('CVS-24 All tools lists every tool; an unpinned tool leaves the panel, stay
     await expect(pin(page, 'Sticky note')).not.toBeChecked();
     await dlg.getByRole('button', { name: 'Done' }).click();
     await expect(dlg).toBeHidden();
-    expect(await pinned(page)).toEqual(['Select', 'Lasso', 'Shape', 'Text']);
+    expect(await pinned(page)).toEqual(DEFAULT_TOOLS.filter((t) => t !== 'Sticky note'));
     await expect(tool(page, 'Sticky note')).toHaveCount(0);
 
     // откреплённый инструмент выбирается из полного списка и работает
@@ -350,7 +352,7 @@ test('CVS-24 the order of pinned tools changes and the set and order survive a r
     const dlg = allToolsDialog(page);
     // крайние позиции: первый вверх и последний вниз не двигаются
     const up0 = dlg.getByRole('button', { name: 'Move Select up' });
-    const down4 = dlg.getByRole('button', { name: 'Move Text down' });
+    const down4 = dlg.getByRole('button', { name: `Move ${LAST_TOOL} down` });
     if (await up0.isEnabled()) await up0.click();
     if (await down4.isEnabled()) await down4.click();
     await expect.poll(() => pinned(page)).toEqual(DEFAULT_TOOLS);
@@ -361,8 +363,8 @@ test('CVS-24 the order of pinned tools changes and the set and order survive a r
     await pin(page, 'Lasso').click();
     await dlg.getByRole('button', { name: 'Done' }).click();
     const order = await pinned(page);
-    // [Select, Lasso, Sticky note, Shape, Text] → Text ↑↑ → Select ↓ → без Lasso
-    expect(order).toEqual(['Select', 'Text', 'Sticky note', 'Shape']);
+    // [Select, Lasso, Sticky note, Shape, Text, …] → Text ↑↑ → Select ↓ → без Lasso
+    expect(order).toEqual(['Select', 'Text', 'Sticky note', 'Shape', ...DEFAULT_TOOLS.slice(5)]);
 
     // перезагрузка и другая доска этого пользователя — тот же набор и порядок
     await page.reload();
