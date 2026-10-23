@@ -85,9 +85,46 @@ sequenceDiagram
   Note over WB: вид остаётся там, где был
 ```
 
+## Лазерная указка (DRW-05)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Участник A
+  participant SA as BoardScene A: useSceneGestures / useLaser
+  participant PA as BoardPresence A
+  participant R as BoardRoom
+  participant PB as BoardPresence B
+  participant WB as BoardWorkspace B: RemoteLasers
+
+  U->>SA: инструмент Laser (R), нажатие на холсте
+  SA->>SA: laserGesture: begin(press.board) — новая линия следа
+  SA-->>U: LaserView Your laser (красный)
+  SA->>PA: onLaser(encodeTrail(trail)) → setLocal({laser: [[x0, y0, …]]})
+  PA->>R: awareness {cursor, camera, following, laser}
+  R->>R: update_awareness: Peer.awareness = state<br/>(в документ и board_updates не пишется)
+  R-->>PB: awareness {peer: A, name, state}
+  PB-->>WB: RemoteLasers: LaserView «имя A's laser» цветом peerColor(A)
+  loop движение указателя
+    U->>SA: move → add(board): точка не ближе 4 единиц доски к прошлой,<br/>не больше LASER_MAX_POINTS = 100 точек
+    SA->>PA: setLocal({laser})
+    PA->>R: awareness (не чаще раза в AWARENESS_INTERVAL_MS = 50)
+    R-->>PB: awareness A
+  end
+  loop каждые LASER_TICK_MS = 100, пока след есть
+    SA->>SA: fade: точки старше LASER_FADE_MS = 3000 убираются
+    SA->>PA: setLocal({laser: остаток})
+  end
+  SA->>PA: след пуст → setLocal({laser: null})
+  PA->>R: awareness {…, laser: null}
+  R-->>PB: awareness A
+  PB-->>WB: следа A нет
+```
+
 - Скрытие курсоров (COL-03) — кнопка `Hide cursors` / `Show cursors` в `PresencePanel`: локальный флаг `cursorsShown` вкладки, `RemoteCursors` не рисуется; в канал ничего не уходит.
 - Свой курсор не рисуется (`self`); две вкладки одного человека — два соединения и две строки списка.
 - Камера (T5.1, `canvas/camera.ts`, масштаб `MIN_ZOOM = 0.1`…`MAX_ZOOM = 8`): любое своё движение вида — мышь, колесо, клавиши, кнопки, касание, щипок, миникарта — идёт через `BoardWorkspace.move` и выключает слежение. Вид ведущего, полученный по `awareness`, повторяется и у наблюдателя запоминается в `localStorage` как его собственный (CVS-05). Курсор касанием передаётся, пока движется один палец; во время щипка (два зажатых указателя) курсор не шлётся, при отрыве не убирается (`null` — только для мыши).
+- След лазера (T6.5, DRW-05) рисуется всегда, независимо от `Hide cursors`; новичок получает его в последнем состоянии `announce`, пока след не погас. Как и остальное присутствие, в снимки и резервные копии он не входит.
 - Присутствие не попадает в документ и `board_updates`; при сбросе ссылки (`Hub.close_participants`) и отзыве доступа (`_watch_access`) соединение закрывается `4403` и сразу пропадает из `presence` у остальных.
 
-Актуально на: T5.1, 34125f1. Требования: COL-02, COL-03, COL-04 (в том числе на жестах телефона, MOB-02), COL-09.
+Актуально на: T6.5, d31412e (лазерная указка; остальное — T5.1, 34125f1). Требования: COL-02, COL-03, COL-04 (в том числе на жестах телефона, MOB-02), COL-09, DRW-05.
