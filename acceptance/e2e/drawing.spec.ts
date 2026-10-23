@@ -559,8 +559,9 @@ test('DRW-05 the owner laser is seen by the participant and fades for both withi
     // Перезагрузка — следа нет.
     await guest.page.reload();
     await expect(canvas(guest.page)).toBeVisible();
+    // документ после перезагрузки приходит не сразу — ждём его, затем сверяем состав
+    await expect.poll(() => objectIds(guest.page), { timeout: 10_000 }).toEqual(['qa-ref']);
     await expect(guest.page.getByRole('img', { name: /laser/ })).toHaveCount(0);
-    expect(await objectIds(guest.page)).toEqual(['qa-ref']);
   } finally {
     await owner.close();
     await guest.close();
