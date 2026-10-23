@@ -20,9 +20,16 @@ import {
   withDescendants,
 } from "./groups";
 import { GUIDE_SNAP_PX, type Guide } from "./guides";
-import type { ObjectType } from "./objectTypes";
+import type { PlaceableType } from "./objectTypes";
 import { GROUP_TYPE, type SceneObject } from "./sceneObjects";
-import { toolById, type ToolId } from "./tools";
+import { drawTool, toolById, type DrawToolId, type ToolId } from "./tools";
+import {
+  drawGesture,
+  eraseGesture,
+  laserGesture,
+  type InkDraft,
+} from "./drawGestures";
+import { brushWidth, type DrawSettings } from "./drawSettings";
 import { projectOnto, routeOf } from "./connectors";
 import { addLabel, boardPoints, setPoints } from "./lineEdits";
 import {
@@ -50,7 +57,7 @@ export interface SceneControls {
   setDraft: (draft: AreaDraft | null) => void;
   setGuides: (guides: Guide[]) => void;
   /** Ставит объект и возвращает его (CVS-09). */
-  create: (type: ObjectType, at: Point) => SceneObject | null;
+  create: (type: PlaceableType, at: Point) => SceneObject | null;
   /** STK-05: новый стикер из стопки центром в точке; возвращает его. */
   pull: (stack: SceneObject, at: Point) => SceneObject | null;
   openMenu: (
@@ -64,6 +71,14 @@ export interface SceneControls {
   pickLabel: (lineId: string, labelId: string) => void;
   /** CON-03: открыть подпись линии для ввода текста. */
   editLabel: (lineId: string, labelId: string) => void;
+  /** T6.5: перо, маркер и режим «стилус сразу рисует» (DRW-01, DRW-02, MOB-05). */
+  drawSettings: DrawSettings;
+  /** DRW-01: штрих, который рисуют сейчас (до отпускания). */
+  setInk: (ink: InkDraft | null) => void;
+  /** DRW-03: стереть штрихи — в корзину. */
+  erase: (ids: string[]) => void;
+  /** DRW-05: свой след лазера. */
+  laser: { begin: (at: Point) => void; add: (at: Point) => void };
 }
 
 function hit(target: EventTarget | null): {
@@ -197,7 +212,11 @@ function still(click?: () => void): Gesture {
  * - T6.4: инструмент Line рисует линию протяжкой (CON-01); у выделенной линии тянут концы
  *   (привязка к объекту, Alt — без неё, CVS-26; Shift — любой угол, CON-05), точки изгиба
  *   и подписи вдоль линии (CON-03); двойной щелчок по точке удаляет её (CON-06), по линии —
- *   добавляет подпись.
+ *   добавляет подпись;
+ * - T6.5: перо и маркер рисуют штрих (DRW-01, Shift — прямой, DRW-04), ластик стирает
+ *   незаблокированные штрихи (DRW-03), лазер оставляет временный след (DRW-05); при
+ *   включённом режиме «стилус сразу рисует» стилус с инструментом Select рисует пером
+ *   (MOB-05), а пальцы двигают вид и выделяют.
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -266,6 +285,30 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       };
     };
 
+    /** Инструмент рисования этого нажатия: выбранный или перо стилуса (MOB-05). */
+    const drawingWith = (press: CanvasPress): DrawToolId | null => {
+      const c = latest.current;
+      const chosen = drawTool(c.tool);
+      if (chosen !== null) return chosen;
+      const stylus = press.pointerType === "pen" && c.drawSettings.stylusDraws;
+      return stylus && c.tool === "select" ? "pen" : null;
+    };
+
+    const draw = (kind: DrawToolId, press: CanvasPress): Gesture => {
+      const c = latest.current;
+      if (kind === "eraser") {
+        return eraseGesture(c.scene, press, { zoom: c.zoom, erase: c.erase });
+      }
+      if (kind === "laser") return laserGesture(press, c.laser);
+      const brush = c.drawSettings[kind];
+      return drawGesture(
+        c.objects,
+        press,
+        { brush: kind, color: brush.color, width: brushWidth(brush) },
+        { zoom: c.zoom, actor: c.actor, onDraft: c.setInk },
+      );
+    };
+
     const area = (kind: AreaDraft["kind"], press: CanvasPress) => {
       const c = latest.current;
       const base = press.shiftKey ? [...c.selection] : [];
@@ -287,6 +330,8 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         const tool = toolById(c.tool);
         const { objectId: leafId, handle, label } = hit(press.target);
 
+        const drawing = drawingWith(press);
+        if (drawing !== null) return draw(drawing, press);
         // CON-01: инструмент Line рисует линию протяжкой.
         if (tool.kind === "create" && tool.id === "line") {
           c.setTool("select");
@@ -403,6 +448,8 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
 
       doubleClick(press) {
         const c = latest.current;
+        // Двойное касание пером рисует две точки, а не открывает объект.
+        if (drawingWith(press) !== null) return;
         const { objectId: leafId, handle, label } = hit(press.target);
         // CON-06: двойной щелчок по точке изгиба удаляет её.
         const line = editableLine(selectedObjects(c.selection));

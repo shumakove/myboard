@@ -17,12 +17,13 @@ import { Button, FloatingPanel } from "../ui";
 import { peerColor } from "./peerColor";
 import { PresencePanel } from "./PresencePanel";
 import { RemoteCursors } from "./RemoteCursors";
+import { RemoteLasers } from "./RemoteLasers";
 import "./collab.css";
 
 /**
  * Холст доски вместе с присутствием: камера (CVS-01…CVS-05, MOB-02), сцена с объектами
  * (T5.2), чужие курсоры с именами (COL-02) и их скрытие (COL-03), «смотреть глазами
- * участника» (COL-04), список присутствующих (COL-09).
+ * участника» (COL-04), список присутствующих (COL-09), лазерная указка (DRW-05).
  *
  * Слежение: вид повторяет камеру выбранного участника, пока наблюдатель не нажмёт
  * Stop following или не сдвинет вид сам (мышь, колесо, клавиши, касания, миникарта);
@@ -129,8 +130,16 @@ export function BoardWorkspace({
             presence.setLocal({ cursor });
           }}
           onResize={setViewport}
+          onLaser={(laser) => {
+            presence.setLocal({ laser });
+          }}
           worldOverlay={
-            cursorsShown && <RemoteCursors peers={peers} zoom={camera.zoom} />
+            <>
+              <RemoteLasers peers={peers} />
+              {cursorsShown && (
+                <RemoteCursors peers={peers} zoom={camera.zoom} />
+              )}
+            </>
           }
           stageOverlay={
             <>

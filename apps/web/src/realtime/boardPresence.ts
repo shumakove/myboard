@@ -26,6 +26,7 @@ export class BoardPresence {
     cursor: null,
     camera: null,
     following: null,
+    laser: null,
   };
   private roster: PresencePeer[] = [];
   private selfId: string | null = null;

@@ -8,6 +8,7 @@ import {
   type StyleKey,
   type StyleOption,
 } from "./objectTypes";
+import { THICKNESSES } from "./drawSettings";
 import { colorCategory, type RecentColors } from "./recentColors";
 import { shapeKind } from "./shapes";
 import type { SceneObject } from "./sceneObjects";
@@ -22,14 +23,20 @@ export const COLOR_KEYS: readonly StyleKey[] = [
 
 export const RECENT_GROUP = "Recent colors";
 
-/** Подпись свойства в панели: обводка линии — её цвет и толщина (T6.4). */
+/**
+ * Подпись свойства в панели: обводка линии — её цвет и толщина (T6.4), обводка
+ * рисунка — цвет и толщина штриха (DRW-01).
+ */
 export function styleLabel(
   key: StyleKey,
   selected: readonly SceneObject[],
 ): string {
-  const lines = selected.length > 0 && selected.every((o) => o.type === "line");
-  if (lines && key === "stroke") return "Line color";
-  if (lines && key === "strokeWidth") return "Line width";
+  const all = (type: string) =>
+    selected.length > 0 && selected.every((o) => o.type === type);
+  if (all("line") && key === "stroke") return "Line color";
+  if (all("line") && key === "strokeWidth") return "Line width";
+  if (all("drawing") && key === "stroke") return "Color";
+  if (all("drawing") && key === "strokeWidth") return "Thickness";
   return STYLE_KEYS[key].label;
 }
 
@@ -82,6 +89,10 @@ export function styleOptions(
   // CON-01: у линии нет толщины «без линии».
   if (key === "strokeWidth" && only("line")) {
     return STYLE_KEYS.strokeWidth.options.filter((o) => o.value !== 0);
+  }
+  // DRW-01: толщины штриха — те же, что у пера и маркера.
+  if (key === "strokeWidth" && only("drawing")) {
+    return THICKNESSES.map((value) => ({ value, label: String(value) }));
   }
   if (!COLOR_KEYS.includes(key)) return STYLE_KEYS[key].options;
   const base =

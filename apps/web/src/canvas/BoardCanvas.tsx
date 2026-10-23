@@ -22,6 +22,10 @@ const TAP_TOLERANCE = { mouse: 4, other: 10 };
 const AUTOSCROLL_TICK_MS = 16;
 /** Точки сетки не рисуются чаще, чем через столько экранных px. */
 const MIN_DOT_SPACING = 8;
+/** MOB-04: касание шире этого (px) во время рисования — ладонь, а не палец. */
+export const PALM_CONTACT_PX = 40;
+/** MOB-04: столько после стилуса касания считаются ладонью пишущей руки, мс. */
+export const PEN_GRACE_MS = 600;
 
 export type CameraUpdate = (camera: CameraView) => CameraView;
 
@@ -73,6 +77,9 @@ interface Session {
  * - CVS-13: пока объект тянут у края, вид прокручивается.
  * - MOB-02: один палец двигает вид, два — щипок (масштаб и сдвиг одновременно).
  * - MOB-03: короткое движение пальцем двигает вид, долгое нажатие начинает выделение.
+ * - MOB-04: пока рисуют (жест `ink`) или работают стилусом, касания ладони
+ *   игнорируются: не двигают вид и не прерывают штрих. Стилус вытесняет касания,
+ *   начатые до него; широкое касание не начинает штрих.
  * - COL-02: положение указателя уходит наверх в координатах доски; во время щипка
  *   курсор не прыгает между пальцами.
  */
@@ -110,6 +117,10 @@ export function BoardCanvas({
   /** Зажатые указатели (пальцы, кнопка мыши): id → точка в области холста. */
   const pressed = useRef(new Map<number, Point>());
   const session = useRef<Session | null>(null);
+  /** MOB-04: указатели, признанные ладонью, — до отпускания. */
+  const palms = useRef(new Set<number>());
+  /** MOB-04: время последнего события стилуса. */
+  const lastPen = useRef(Number.NEGATIVE_INFINITY);
   const lastPointerType = useRef("mouse");
   const latest = useRef({ onMove, wheelMode, onResize, camera, gestures });
   useEffect(() => {
@@ -227,11 +238,39 @@ export function BoardCanvas({
     }, AUTOSCROLL_TICK_MS);
   }
 
+  /** MOB-04: касание во время работы стилусом или идущего штриха — ладонь. */
+  function isPalm(event: ReactPointerEvent): boolean {
+    if (event.pointerType !== "touch") return false;
+    if (event.timeStamp - lastPen.current < PEN_GRACE_MS) return true;
+    const current = session.current;
+    if (current === null) return false;
+    if (current.press.pointerType === "pen") return true;
+    // Второй палец до начала штриха — ещё щипок, после — ладонь.
+    return current.gesture?.ink === true && current.moved;
+  }
+
+  /** MOB-04: стилус коснулся — начатые касания (ладонь) больше ничего не делают. */
+  function dropTouches() {
+    if (session.current?.press.pointerType === "touch") {
+      stopSession()?.gesture?.cancel();
+    }
+    for (const id of pressed.current.keys()) palms.current.add(id);
+    pressed.current.clear();
+  }
+
   function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (isIgnored(event.target)) return;
     lastPointerType.current = event.pointerType;
     // Левая или средняя кнопка мыши; касание и перо приходят как левая.
     if (event.button !== 0 && event.button !== 1) return;
+    if (isPalm(event)) {
+      palms.current.add(event.pointerId);
+      return;
+    }
+    if (event.pointerType === "pen") {
+      lastPen.current = event.timeStamp;
+      dropTouches();
+    }
     if (event.button === 1) event.preventDefault(); // без автопрокрутки браузера
     const element = event.currentTarget;
     try {
@@ -246,9 +285,15 @@ export function BoardCanvas({
       pressed.current.set(event.pointerId, press.screen);
       return;
     }
-    pressed.current.set(event.pointerId, press.screen);
     const gesture =
       event.button === 0 ? (gestures?.start(press, false) ?? null) : null;
+    if (gesture?.ink && isWideContact(event)) {
+      // MOB-04: ладонь легла раньше пальца — штриха нет.
+      gesture.cancel();
+      palms.current.add(event.pointerId);
+      return;
+    }
+    pressed.current.set(event.pointerId, press.screen);
     const current: Session = {
       pointerId: event.pointerId,
       press,
@@ -274,6 +319,8 @@ export function BoardCanvas({
   }
 
   function pointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (palms.current.has(event.pointerId)) return;
+    if (event.pointerType === "pen") lastPen.current = event.timeStamp;
     const { point, size } = locate(event.currentTarget, event);
     const fingers = pressed.current;
     const current = session.current;
@@ -317,6 +364,8 @@ export function BoardCanvas({
   }
 
   function pointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
+    if (palms.current.delete(event.pointerId)) return;
+    if (event.pointerType === "pen") lastPen.current = event.timeStamp;
     // Оставшийся палец продолжает сдвиг со своего места, без скачка вида.
     pressed.current.delete(event.pointerId);
     if (session.current?.pointerId !== event.pointerId) return;
@@ -419,6 +468,14 @@ function elementAt(x: number, y: number): Element | null {
   return typeof document.elementFromPoint === "function"
     ? document.elementFromPoint(x, y)
     : null;
+}
+
+/** MOB-04: пятно касания размером с ладонь. */
+function isWideContact(event: ReactPointerEvent): boolean {
+  return (
+    event.pointerType === "touch" &&
+    Math.max(event.width, event.height) > PALM_CONTACT_PX
+  );
 }
 
 /** Поля ввода и панели поверх холста свои нажатия обрабатывают сами. */

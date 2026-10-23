@@ -57,7 +57,9 @@ describe("BoardPresence", () => {
   it("своё состояние уходит сразу, частые изменения — не чаще интервала", () => {
     vi.useFakeTimers();
     const { presence, sent } = attached();
-    expect(sent).toEqual([{ cursor: null, camera: null, following: null }]);
+    expect(sent).toEqual([
+      { cursor: null, camera: null, following: null, laser: null },
+    ]);
 
     presence.setLocal({ cursor: { x: 1, y: 1 } });
     presence.setLocal({ cursor: { x: 2, y: 2 } });
@@ -69,6 +71,7 @@ describe("BoardPresence", () => {
       cursor: { x: 2, y: 2 },
       camera: null,
       following: null,
+      laser: null,
     });
   });
 
@@ -77,6 +80,8 @@ describe("BoardPresence", () => {
     presence.setLocal({ following: "p1" });
     const sent: AwarenessState[] = [];
     presence.attach((state) => sent.push(state));
-    expect(sent).toEqual([{ cursor: null, camera: null, following: "p1" }]);
+    expect(sent).toEqual([
+      { cursor: null, camera: null, following: "p1", laser: null },
+    ]);
   });
 });

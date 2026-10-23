@@ -610,6 +610,32 @@ def test_presence_stays_out_of_document_and_journal(
             assert late.doc.get_update() == Doc().get_update()
 
 
+def test_drw05_laser_trail_reaches_others_and_stays_out_of_document(
+    client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies, settings: Settings
+) -> None:
+    # Предельный след клиента: сто точек с крупными координатами (apps/web/src/scene/laser.ts).
+    trail = [[c for i in range(100) for c in (-9_999_999 + i * 10, -9_999_999)]]
+    state = {
+        "cursor": {"x": -9_999_999.5, "y": -9_999_999.5},
+        "camera": {"x": -9_999_999.5, "y": -9_999_999.5, "zoom": 0.123456789},
+        "following": None,
+        "laser": trail,
+    }
+    with (
+        _connect(client, f"board={board}", alice) as owner,
+        _connect(client, f"token={link}", kate) as guest,
+    ):
+        guest.send_awareness(state)
+        assert owner.next_awareness()["state"]["laser"] == trail
+        # След погас — у остальных его больше нет.
+        guest.send_awareness({**state, "laser": None})
+        assert owner.next_awareness()["state"]["laser"] is None
+        owner.flush()
+        assert _count(settings, "board_updates", board) == 0
+        with _connect(client, f"board={board}", alice) as late:
+            assert late.doc.get_update() == Doc().get_update()
+
+
 def test_presence_does_not_leak_to_other_boards(
     client: TestClient, alice: Cookies, board: str, link: str, kate: Cookies
 ) -> None:

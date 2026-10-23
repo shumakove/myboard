@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 import { createBoardDocument } from "../realtime/boardDocument";
-import { BoardPresence } from "../realtime/boardPresence";
+import {
+  AWARENESS_INTERVAL_MS,
+  BoardPresence,
+} from "../realtime/boardPresence";
 import type {
   AwarenessState,
   CameraView,
@@ -160,6 +163,32 @@ describe("BoardWorkspace — присутствие на доске", () => {
 
 // jsdom не считает раскладку: область холста 0×0 с началом в (0, 0), центр вида — в (0, 0).
 // Поэтому экранная точка события равна смещению от центра вида.
+describe("BoardWorkspace — лазерная указка (DRW-05)", () => {
+  it("свой след уходит в присутствие; чужой виден цветом участника и пропадает вместе с ним", async () => {
+    const { sent, kateState } = setup();
+    fireEvent.keyDown(window, { code: "KeyR", key: "r" });
+    const canvas = screen.getByTestId("board-canvas");
+    const mouse = { pointerId: 1, pointerType: "mouse", button: 0 };
+    fireEvent.pointerDown(canvas, { ...mouse, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(canvas, { ...mouse, clientX: 40, clientY: 0 });
+    fireEvent.pointerUp(canvas, { ...mouse, clientX: 40, clientY: 0 });
+    // Состояние уходит не чаще интервала присутствия.
+    await act(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(resolve, AWARENESS_INTERVAL_MS * 2),
+        ),
+    );
+    expect(sent.some((state) => state.laser !== null)).toBe(true);
+
+    kateState({ laser: [[0, 0, 100, 50]] });
+    const trail = screen.getByRole("img", { name: "Kate's laser" });
+    expect(trail.querySelector("path")).toHaveAttribute("d", "M0 0 L100 50");
+    kateState({ laser: null });
+    expect(screen.queryByRole("img", { name: "Kate's laser" })).toBeNull();
+  });
+});
+
 describe("BoardWorkspace — камера", () => {
   function canvas() {
     return screen.getByTestId("board-canvas");

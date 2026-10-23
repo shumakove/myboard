@@ -2,17 +2,18 @@ import { useCallback, useState } from "react";
 
 /**
  * SHP-04: недавно выбранные пользовательские цвета — отдельно для текста, стикера,
- * фигуры и линии. Пользовательский цвет — выбранный в поле выбора цвета, а не из
+ * фигуры, линии и рисунка (DRW-01). Пользовательский цвет — выбранный в поле выбора цвета, а не из
  * стандартной палитры. Списки хранит браузер (`localStorage`): они общие для всех досок
  * этого браузера и переживают закрытие вкладки (docs/decisions.md, T6.3).
  */
-export type ColorCategory = "text" | "sticky" | "shape" | "line";
+export type ColorCategory = "text" | "sticky" | "shape" | "line" | "drawing";
 
 export const COLOR_CATEGORIES: readonly ColorCategory[] = [
   "text",
   "sticky",
   "shape",
   "line",
+  "drawing",
 ];
 
 export const RECENT_COLORS_KEY = "myboard.recentColors";
@@ -44,13 +45,15 @@ export function colorCategory(type: string): ColorCategory | null {
       return "shape";
     case "line":
       return "line";
+    case "drawing":
+      return "drawing";
     default:
       return null;
   }
 }
 
 function empty(): RecentColors {
-  return { text: [], sticky: [], shape: [], line: [] };
+  return { text: [], sticky: [], shape: [], line: [], drawing: [] };
 }
 
 function storage(): Storage | null {

@@ -14,19 +14,23 @@ afterEach(() => {
 });
 
 describe("CVS-24 закреплённые инструменты", () => {
-  it("по умолчанию закреплены инструменты T5.4; документ, стопка и линия — только в полном списке", () => {
+  it("по умолчанию закреплены инструменты T5.4 и перо; документ, стопка, линия, маркер, ластик и лазер — только в полном списке", () => {
     expect(loadPinned()).toEqual([
       "select",
       "lasso",
       "sticky",
       "shape",
       "text",
+      "pen",
     ]);
     expect(allTools(DEFAULT_PINNED)).toEqual([
       ...DEFAULT_PINNED,
       "document",
       "stack",
       "line",
+      "marker",
+      "eraser",
+      "laser",
     ]);
   });
 
@@ -47,7 +51,7 @@ describe("CVS-24 закреплённые инструменты", () => {
     expect(loadPinned()).toEqual([...DEFAULT_PINNED]);
     localStorage.setItem(
       PINNED_TOOLS_KEY,
-      JSON.stringify(["shape", "laser", "shape", 7, "select"]),
+      JSON.stringify(["shape", "hammer", "shape", 7, "select"]),
     );
     expect(loadPinned()).toEqual(["shape", "select"]);
   });
@@ -80,6 +84,10 @@ describe("CVS-24 закреплённые инструменты", () => {
       "document",
       "stack",
       "line",
+      "pen",
+      "marker",
+      "eraser",
+      "laser",
     ]);
   });
 });
