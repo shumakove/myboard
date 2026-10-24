@@ -102,11 +102,11 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | DRW-04 | T6.5 | acceptance/e2e/drawing.spec.ts (DRW-04 *) | PASS |
 | DRW-05 | T6.5 | acceptance/e2e/drawing.spec.ts (DRW-05 *, 2 клиента, awareness) | PASS |
 | DRW-06 | T6.5 | acceptance/e2e/drawing.spec.ts (DRW-06 *) | PASS |
-| FRM-01 | T6.6 | — | не проверено |
-| FRM-02 | T6.6 | — | не проверено |
-| FRM-03 | T6.6 | — | не проверено |
-| FRM-04 | T6.6 | — | не проверено |
-| FRM-05 | T6.6 | — | не проверено |
+| FRM-01 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-01 *, в т. ч. линия к фрейму и участник по ссылке) | PASS |
+| FRM-02 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-02 *) | BLOCKED (Q-004) |
+| FRM-03 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-03 *) | PASS |
+| FRM-04 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-04 *, в т. ч. у заблокированного фрейма) | PASS |
+| FRM-05 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-05 *) | PASS |
 | FRM-06 | T10.2 | — | не проверено |
 | TBL-01 | T6.7 | — | не проверено |
 | TBL-02 | T6.7 | — | не проверено |
