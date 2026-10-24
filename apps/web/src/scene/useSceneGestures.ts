@@ -21,7 +21,13 @@ import {
 } from "./groups";
 import { GUIDE_SNAP_PX, type Guide } from "./guides";
 import type { PlaceableType } from "./objectTypes";
-import { GROUP_TYPE, type SceneObject } from "./sceneObjects";
+import { GROUP_TYPE, readScene, type SceneObject } from "./sceneObjects";
+import {
+  FRAME_TYPE,
+  frameResizeGesture,
+  placeInFrames,
+  scaledLeaves,
+} from "./frames";
 import { drawTool, toolById, type DrawToolId, type ToolId } from "./tools";
 import {
   drawGesture,
@@ -133,10 +139,15 @@ function lineHandleGesture(
   return null;
 }
 
-/** Объекты верхнего уровня: их выделяют рамка и лассо (группа — целиком). */
+/**
+ * Объекты не из групп: их выделяют рамка и лассо (группа — целиком, объект во фрейме —
+ * сам по себе, FRM-01).
+ */
 function roots(scene: readonly SceneObject[]): SceneObject[] {
-  const ids = new Set(scene.map((o) => o.id));
-  return scene.filter((o) => o.parent === null || !ids.has(o.parent));
+  const groups = new Set(
+    scene.filter((o) => o.type === GROUP_TYPE).map((o) => o.id),
+  );
+  return scene.filter((o) => o.parent === null || !groups.has(o.parent));
 }
 
 /** Соседи перемещаемых для направляющих: всё, кроме них самих, вложенных и их групп. */
@@ -216,7 +227,10 @@ function still(click?: () => void): Gesture {
  * - T6.5: перо и маркер рисуют штрих (DRW-01, Shift — прямой, DRW-04), ластик стирает
  *   незаблокированные штрихи (DRW-03), лазер оставляет временный след (DRW-05); при
  *   включённом режиме «стилус сразу рисует» стилус с инструментом Select рисует пером
- *   (MOB-05), а пальцы двигают вид и выделяют.
+ *   (MOB-05), а пальцы двигают вид и выделяют;
+ * - T6.6: перемещённый, поставленный или нарисованный объект попадает во фрейм под своим
+ *   центром или выходит из него (FRM-01); угол одного фрейма меняет его размер без сдвига
+ *   содержимого, с фиксированными пропорциями — по их соотношению (FRM-03).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -228,6 +242,12 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
     const selectedObjects = (ids: readonly string[]) =>
       topmost(latest.current.scene, ids);
 
+    /** FRM-01: объекты после жеста — во фрейм под ними или из фрейма. */
+    const settle = (ids: readonly string[]) => {
+      const c = latest.current;
+      placeInFrames(c.objects, readScene(c.objects), ids, c.actor);
+    };
+
     const move = (
       objects: readonly SceneObject[],
       press: CanvasPress,
@@ -235,13 +255,20 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       const c = latest.current;
       const targets = objects.filter((o) => !o.locked);
       if (targets.length === 0) return still();
-      return moveGesture(c.objects, targets, press.board, {
+      const gesture = moveGesture(c.objects, targets, press.board, {
         gridStep: c.gridStep,
         neighbors: neighborsOf(c.scene, targets),
         threshold: GUIDE_SNAP_PX / c.zoom,
         onGuides: c.setGuides,
         actor: c.actor,
       });
+      return {
+        ...gesture,
+        end: (pointer) => {
+          gesture.end(pointer);
+          settle(targets.map((o) => o.id));
+        },
+      };
     };
 
     /** STK-05: стикер появляется при первом движении и сразу едет за указателем. */
@@ -305,7 +332,14 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         c.objects,
         press,
         { brush: kind, color: brush.color, width: brushWidth(brush) },
-        { zoom: c.zoom, actor: c.actor, onDraft: c.setInk },
+        {
+          zoom: c.zoom,
+          actor: c.actor,
+          onDraft: c.setInk,
+          onCommit: (id) => {
+            settle([id]);
+          },
+        },
       );
     };
 
@@ -376,18 +410,32 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
               c.actor,
             );
           }
-          const leaves = withDescendants(
-            c.scene,
-            selected.map((o) => o.id),
-          ).filter((o) => o.type !== GROUP_TYPE);
+          const [only] = selected;
+          const corner = handle as Corner;
+          const resize =
+            selected.length === 1 && only?.type === FRAME_TYPE
+              ? frameResizeGesture(
+                  c.objects,
+                  only,
+                  readScene(c.objects).filter((o) => o.parent === only.id),
+                  corner,
+                  c.actor,
+                )
+              : resizeGesture(
+                  c.objects,
+                  selected,
+                  scaledLeaves(
+                    c.scene,
+                    withDescendants(
+                      c.scene,
+                      selected.map((o) => o.id),
+                    ),
+                  ),
+                  corner,
+                  c.actor,
+                );
           return {
-            ...resizeGesture(
-              c.objects,
-              selected,
-              leaves,
-              handle as Corner,
-              c.actor,
-            ),
+            ...resize,
             click: () => {
               checkUnder(press);
             },

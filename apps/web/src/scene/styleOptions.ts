@@ -37,6 +37,7 @@ export function styleLabel(
   if (all("line") && key === "strokeWidth") return "Line width";
   if (all("drawing") && key === "stroke") return "Color";
   if (all("drawing") && key === "strokeWidth") return "Thickness";
+  if (all("frame") && key === "fill") return "Frame color";
   return STYLE_KEYS[key].label;
 }
 

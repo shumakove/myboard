@@ -40,12 +40,16 @@ const CREATE_KEYS: Record<PlaceableType, string> = {
   document: "KeyD",
   stack: "KeyK",
   line: "KeyC",
+  frame: "KeyF",
 };
 
 /** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
 function createHint(type: PlaceableType, label: string): string {
   if (type === "line") {
     return "Drag on the board to draw a line. Start or end it on an object to connect them; hold Shift for any angle, Alt to keep an end free.";
+  }
+  if (type === "frame") {
+    return "Click the board to add a frame. Objects inside it or dropped into it move with the frame.";
   }
   return `Click the board or drag this button onto it to add a ${label.toLowerCase()}.`;
 }

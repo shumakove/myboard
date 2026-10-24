@@ -30,6 +30,8 @@ export function drawGesture(
     zoom: number;
     actor: string;
     onDraft: (ink: InkDraft | null) => void;
+    /** Штрих записан в документ (попадание во фрейм, FRM-01). */
+    onCommit?: (id: string) => void;
   },
 ): Gesture {
   const start = press.board;
@@ -41,7 +43,8 @@ export function drawGesture(
   };
   const commit = () => {
     options.onDraft(null);
-    createDrawing(objects, points, style, options.actor);
+    const id = createDrawing(objects, points, style, options.actor);
+    options.onCommit?.(id);
   };
   show();
   return {

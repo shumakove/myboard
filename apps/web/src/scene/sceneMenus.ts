@@ -49,6 +49,20 @@ function layerItems({ layer }: SceneCommands): MenuItem[] {
       );
 }
 
+/** FRM-05: блокировка с фреймами — выбор, что блокировать. */
+function lockFrameItems({ lockFrames }: SceneCommands): MenuItem[] {
+  return lockFrames === null
+    ? []
+    : [
+        ...item("Lock frame only", () => {
+          lockFrames(false);
+        }),
+        ...item("Lock frame and content", () => {
+          lockFrames(true);
+        }),
+      ];
+}
+
 /** CVS-15, CVS-18: меню Arrange панели выделения. */
 export function arrangeMenu(commands: SceneCommands): MenuItem[] {
   const { align, distribute } = commands;
@@ -103,7 +117,12 @@ export function objectMenu(
     ...item("Group", commands.group),
     ...item("Ungroup", commands.ungroup),
     ...item("Lock", commands.lock),
+    ...lockFrameItems(commands),
     ...item("Unlock", commands.unlock),
+    ...item(
+      commands.frameContent?.hidden === true ? "Show content" : "Hide content",
+      commands.frameContent?.toggle ?? null,
+    ),
     ...layerItems(commands),
     ...item(
       count > 1 ? `Delete ${String(count)} objects` : "Delete",

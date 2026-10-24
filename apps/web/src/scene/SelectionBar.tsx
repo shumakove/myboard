@@ -46,6 +46,16 @@ export interface ColorActions {
   pick: (key: StyleKey, color: string) => void;
 }
 
+/** T6.6: действия с фреймами в выделении (FRM-03…FRM-05); `null` — действия нет. */
+export interface FrameActions {
+  /** FRM-05: блокировка — только рамка или вместе с содержимым. */
+  lock: ((withContent: boolean) => void) | null;
+  /** FRM-04: скрыть или показать содержимое. */
+  content: { hidden: boolean; toggle: () => void } | null;
+  /** FRM-03: фиксация пропорций. */
+  keepRatio: { on: boolean; set: (on: boolean) => void } | null;
+}
+
 /** STK-03: показ имени автора на стикере. */
 export interface AuthorToggle {
   shown: boolean;
@@ -69,7 +79,10 @@ export interface AuthorToggle {
  * - SHP-01…SHP-03: вид фигуры, маркер BPMN, заливка, обводка, скругление, текст;
  * - SHP-04: свой цвет — под кнопкой Custom color, недавние свои цвета — в списках цветов;
  * - T6.4: у линии — вид и наконечники (CON-01, CON-07), Swap ends (CON-02), Detach
- *   (CVS-26), подписи и их оформление (CON-03, CON-04).
+ *   (CVS-26), подписи и их оформление (CON-03, CON-04);
+ * - T6.6: у фрейма — оформление и цвет (FRM-02), Keep proportions (FRM-03), Hide content /
+ *   Show content и у заблокированного (FRM-04), Lock — с выбором Frame only или Frame
+ *   and content (FRM-05).
  */
 export function SelectionBar({
   selected,
@@ -87,6 +100,7 @@ export function SelectionBar({
   author = null,
   colors,
   line = null,
+  frame = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -104,8 +118,10 @@ export function SelectionBar({
   author?: AuthorToggle | null;
   colors?: ColorActions;
   line?: LineActions | null;
+  frame?: FrameActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [lockOpen, setLockOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   if (selected.length === 0) return null;
@@ -232,6 +248,21 @@ export function SelectionBar({
       )}
       {tags && tagsOpen && <TagEditor tags={tags} />}
       {line && <LineControls line={line} />}
+      {frame?.keepRatio && (
+        <Switch
+          label="Keep proportions"
+          className="selection-switch"
+          checked={frame.keepRatio.on}
+          onChange={(event) => {
+            frame.keepRatio?.set(event.target.checked);
+          }}
+        />
+      )}
+      {frame?.content && (
+        <Button variant="ghost" onClick={frame.content.toggle}>
+          {frame.content.hidden ? "Show content" : "Hide content"}
+        </Button>
+      )}
       <BarButton label="Edit text" action={onEditText} />
       {onArrange && (
         <Button
@@ -247,6 +278,25 @@ export function SelectionBar({
       <BarButton label="Group" action={onGroup} />
       <BarButton label="Ungroup" action={onUngroup} />
       <BarButton label="Lock" action={onLock} />
+      {frame?.lock && (
+        <Button
+          variant="ghost"
+          aria-expanded={lockOpen}
+          onClick={() => {
+            setLockOpen((open) => !open);
+          }}
+        >
+          Lock
+        </Button>
+      )}
+      {frame?.lock && lockOpen && (
+        <LockChoice
+          lock={(withContent) => {
+            setLockOpen(false);
+            frame.lock?.(withContent);
+          }}
+        />
+      )}
       <BarButton label="Unlock" action={onUnlock} />
       <BarButton label="Delete" action={onDelete} />
       <Button
@@ -444,6 +494,31 @@ function TagEditor({ tags }: { tags: TagActions }) {
           Add
         </Button>
       </form>
+    </span>
+  );
+}
+
+/** FRM-05: что блокировать у фрейма — только рамку или рамку вместе с содержимым. */
+function LockChoice({ lock }: { lock: (withContent: boolean) => void }) {
+  return (
+    <span role="group" aria-label="Lock frame" className="selection-more">
+      <span className="selection-question">Lock what?</span>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          lock(false);
+        }}
+      >
+        Frame only
+      </Button>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          lock(true);
+        }}
+      >
+        Frame and content
+      </Button>
     </span>
   );
 }

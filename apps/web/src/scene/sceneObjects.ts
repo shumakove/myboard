@@ -13,6 +13,12 @@ import {
 import type { DeltaOp } from "../richtext/delta";
 import { readDrawing, type DrawingShape } from "./drawingShape";
 import {
+  FRAME_TYPE,
+  readFrameFields,
+  type FrameFields,
+  type FrameOptions,
+} from "./frameOptions";
+import {
   GROUP_TYPE,
   isRichText,
   OBJECT_TYPES,
@@ -76,6 +82,10 @@ export interface SceneObject extends Frame {
    * (DRW-06); у остальных типов `null`.
    */
   drawing: DrawingShape | null;
+  /** Фрейм (T6.6): пропорции, скрытие и блокировка содержимого; у остальных `null`. */
+  frameOptions: FrameOptions | null;
+  /** FRM-04: объект внутри фрейма со скрытым содержимым — не показывается на холсте. */
+  hidden: boolean;
 }
 
 /** Изменение рамки и оформления объекта; рамка — в координатах доски. */
@@ -89,14 +99,21 @@ export function newObjectId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type RawObject = Omit<SceneObject, "origin" | "offset" | "locked" | "line"> & {
+type RawObject = Omit<
+  SceneObject,
+  "origin" | "offset" | "locked" | "line" | "frameOptions" | "hidden"
+> & {
   lockedSelf: boolean;
   lineData: LineData | null;
+  frameFields: FrameFields | null;
 };
 
 /**
  * Все объекты сцены в координатах доски в порядке отрисовки: соседи снизу вверх по `z`,
- * группа — перед своими объектами (CVS-17). Неверные записи и пустые группы пропускаются.
+ * группа и фрейм — перед своими объектами (CVS-17, FRM-01). Неверные записи и пустые
+ * группы пропускаются. Блокировка родителя переходит на детей, кроме фрейма,
+ * заблокированного без содержимого (FRM-05); дети фрейма со скрытым содержимым —
+ * `hidden` (FRM-04).
  */
 export function readScene(objects: Y.Map<unknown>): SceneObject[] {
   const raw = new Map<string, RawObject>();
@@ -116,14 +133,23 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
   const targets = connectableFrames(raw, parents);
 
   const scene: SceneObject[] = [];
-  const visit = (object: RawObject, origin: Point, locked: boolean): void => {
+  const visit = (
+    object: RawObject,
+    origin: Point,
+    locked: boolean,
+    hidden: boolean,
+  ): void => {
     const position = { x: object.x + origin.x, y: object.y + origin.y };
     const lockedNow = locked || object.lockedSelf;
+    const { frameFields } = object;
+    const kidsLocked =
+      locked || (object.lockedSelf && (frameFields?.lockContent ?? true));
+    const kidsHidden = hidden || frameFields?.contentHidden === true;
     const at = scene.length;
     const kids: SceneObject[] = [];
     for (const child of sorted(children.get(object.id))) {
       const before = scene.length;
-      visit(child, position, lockedNow);
+      visit(child, position, kidsLocked, kidsHidden);
       const placed = scene[before];
       if (placed?.id === child.id) kids.push(placed);
     }
@@ -181,10 +207,15 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       locked: lockedNow,
       line,
       drawing,
+      frameOptions:
+        frameFields === null
+          ? null
+          : { ...frameFields, contentLocked: kidsLocked },
+      hidden,
     });
   };
   for (const root of sorted(children.get(null))) {
-    visit(root, { x: 0, y: 0 }, false);
+    visit(root, { x: 0, y: 0 }, false, false);
   }
   return scene;
 }
@@ -280,6 +311,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     meta,
     lineData: type === "line" ? readLineData(record) : null,
     drawing: type === "drawing" ? readDrawing(record, width, height) : null,
+    frameFields: type === FRAME_TYPE ? readFrameFields(record) : null,
   };
 }
 

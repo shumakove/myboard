@@ -15,6 +15,7 @@ const LISTED_ONLY: readonly ToolId[] = [
   "marker",
   "eraser",
   "laser",
+  "frame", // T6.6
 ];
 
 /** По умолчанию закреплены инструменты T5.4 и перо (T6.5) в порядке полного списка. */

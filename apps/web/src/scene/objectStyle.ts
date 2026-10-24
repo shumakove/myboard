@@ -21,6 +21,9 @@ export function frameStyle(frame: Frame): CSSProperties {
  * SVG (SHP-03), а не рамка элемента.
  */
 export function objectStyle(object: SceneObject): CSSProperties {
+  if (object.type === "frame") {
+    return { ...frameStyle(object), ...frameLook(object.style) };
+  }
   const { fill, stroke, color, fontSize, background } = object.style;
   const outlined = object.type === "shape";
   return {
@@ -31,6 +34,26 @@ export function objectStyle(object: SceneObject): CSSProperties {
     fontSize: num(fontSize),
     ...textStyle(object.style),
   };
+}
+
+/** Цвет фона рамки в виде Border only: цвет — только у границы (FRM-02). */
+const FRAME_PAPER = "#ffffff";
+
+/**
+ * FRM-02: оформление фрейма. Fill — фон цветом (тонкая нейтральная граница видна и на
+ * фоне того же цвета); Border only — граница цветом, фон белый; No background — граница
+ * цветом, фон прозрачный (видна доска).
+ */
+export function frameLook(style: SceneObject["style"]): CSSProperties {
+  const color = str(style.fill) ?? FRAME_PAPER;
+  switch (style.appearance) {
+    case "border":
+      return { background: FRAME_PAPER, borderColor: color };
+    case "outline":
+      return { background: "transparent", borderColor: color };
+    default:
+      return { background: color, borderColor: undefined };
+  }
 }
 
 /** TXT-01: шрифт, начертание, выравнивание и межстрочный интервал текста. */
