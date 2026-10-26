@@ -4,7 +4,8 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
  * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
  * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01), фрейм (T6.6,
- * `frames.ts`, FRM-01…FRM-05), таблица (T6.7, `tables.ts`, TBL-01…TBL-07). Остальные типы
+ * `frames.ts`, FRM-01…FRM-05), таблица (T6.7, `tables.ts`, TBL-01…TBL-07), канбан и карточка
+ * задачи (T6.8, `kanbans.ts`, KBN-01…KBN-03). Остальные типы
  * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType =
@@ -16,7 +17,9 @@ export type ObjectType =
   | "line"
   | "drawing"
   | "frame"
-  | "table";
+  | "table"
+  | "kanban"
+  | "card";
 
 /** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
 export type PlaceableType = Exclude<ObjectType, "drawing">;
@@ -226,6 +229,29 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     editable: false,
     style: {},
   },
+  // KBN-01, KBN-03: канбан — столбцы с названиями (`kanbanData.ts`); ширина рамки — число
+  // столбцов × 280, высота растёт под карточки. Оформления и своего текста нет.
+  kanban: {
+    type: "kanban",
+    label: "Kanban",
+    plural: "kanbans",
+    width: 840,
+    height: 480,
+    rotatable: false,
+    editable: false,
+    style: {},
+  },
+  // KBN-02: карточка задачи — текст и теги; в столбце канбана выстраивается по порядку.
+  card: {
+    type: "card",
+    label: "Card",
+    plural: "cards",
+    width: 240,
+    height: 96,
+    rotatable: false,
+    editable: true,
+    style: { fill: "#ffffff" },
+  },
 };
 
 /** Тип объекта-группы (CVS-17): рамка группы — описанный прямоугольник её объектов. */
@@ -239,8 +265,8 @@ export function typeName(type: string, plural = false): string {
   return plural ? spec.plural : spec.label;
 }
 
-/** STK-03, STK-05: типы, у которых в интерфейсе правят теги. */
-export const TAGGED_TYPES: readonly string[] = ["sticky", "stack"];
+/** STK-03, STK-05, KBN-02: типы, у которых в интерфейсе правят теги. */
+export const TAGGED_TYPES: readonly string[] = ["sticky", "stack", "card"];
 
 export function typeSpec(type: string): ObjectTypeSpec | undefined {
   return Object.hasOwn(OBJECT_TYPES, type)

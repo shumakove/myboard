@@ -17,6 +17,7 @@ import { ShapeView } from "./ShapeView";
 import { LineView, type LabelState } from "./LineView";
 import { DrawingView } from "./DrawingView";
 import { TableView, type TableCellsState } from "./TableView";
+import { KanbanView, type KanbanColumnsState } from "./KanbanView";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -24,6 +25,12 @@ export interface TableLayerState {
   cells: { table: string; state: TableCellsState } | null;
   /** Таблица, у которой показаны маркеры ширины столбцов и высоты строк (TBL-01). */
   handles: string | null;
+}
+
+/** Канбан с выбранным столбцом или правкой названия столбца (T6.8, KBN-03). */
+export interface KanbanLayerState {
+  kanban: string;
+  state: KanbanColumnsState;
 }
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
@@ -42,7 +49,8 @@ export interface RichTextHandlers {
  * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04). Рисунок — штрих SVG
  * (T6.5, DRW-01, DRW-06). Фрейм — рамка своего оформления (FRM-02); со скрытым
  * содержимым — с пометкой Content hidden, а его объектов в списке нет (FRM-04).
- * Таблица — ячейки с оформлением и маркеры границ (T6.7, TBL-01…TBL-04).
+ * Таблица — ячейки с оформлением и маркеры границ (T6.7, TBL-01…TBL-04). Канбан — столбцы
+ * с заголовками, карточка — текст и теги (T6.8, KBN-01…KBN-03).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -52,6 +60,7 @@ export function SceneLayer({
   rich,
   label = null,
   tables = null,
+  kanban = null,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
@@ -60,6 +69,7 @@ export function SceneLayer({
   /** CON-03: выбранная или редактируемая подпись линии. */
   label?: LabelState | null;
   tables?: TableLayerState | null;
+  kanban?: KanbanLayerState | null;
 }) {
   return (
     <>
@@ -73,6 +83,7 @@ export function SceneLayer({
           label={label?.line === object.id ? label : null}
           cells={tables?.cells?.table === object.id ? tables.cells.state : null}
           handles={tables?.handles === object.id}
+          columns={kanban?.kanban === object.id ? kanban.state : null}
         />
       ))}
     </>
@@ -87,6 +98,7 @@ function SceneObjectView({
   label,
   cells,
   handles,
+  columns,
 }: {
   object: SceneObject;
   selected: boolean;
@@ -95,6 +107,7 @@ function SceneObjectView({
   label: LabelState | null;
   cells: TableCellsState | null;
   handles: boolean;
+  columns: KanbanColumnsState | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const group = object.type === GROUP_TYPE;
@@ -139,6 +152,8 @@ function SceneObjectView({
         <DrawingView object={object} />
       ) : object.table ? (
         <TableView object={object} cells={cells} handles={handles} />
+      ) : object.kanban ? (
+        <KanbanView object={object} columns={columns} />
       ) : object.frameOptions ? (
         object.frameOptions.contentHidden && (
           <span className="frame-hidden-note">Content hidden</span>
@@ -146,7 +161,9 @@ function SceneObjectView({
       ) : (
         !group && !editing && <ObjectContent object={object} rich={rich} />
       )}
-      {(sticky || object.type === "stack") && <StickyFooter object={object} />}
+      {(sticky || object.type === "stack" || object.type === "card") && (
+        <StickyFooter object={object} />
+      )}
       {!group && object.locked && <LockBadge />}
     </div>
   );
@@ -184,7 +201,8 @@ function ObjectContent({
   );
 }
 
-/** STK-03: теги стикера и стопки, имя автора стикера — строкой внизу. */
+/** STK-03, KBN-02: теги стикера, стопки и карточки, имя автора стикера — строкой внизу. */
+
 function StickyFooter({ object }: { object: SceneObject }) {
   const author =
     object.type === "sticky" && object.showAuthor

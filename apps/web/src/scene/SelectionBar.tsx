@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LineControls, type LineActions } from "./LineControls";
 import { TableControls, type TableActions } from "./TableControls";
+import { KanbanControls, type KanbanActions } from "./KanbanControls";
 import {
   MORE_TEXT_KEYS,
   typeName,
@@ -86,7 +87,9 @@ export interface AuthorToggle {
  *   and content (FRM-05);
  * - T6.7: у таблицы — оформление и заливка выделенных ячеек (TBL-02, TBL-03), Merge cells /
  *   Unmerge cells (TBL-03), Edit cell (TBL-04), Rows & columns — добавить и удалить строки
- *   и столбцы, ширина столбца и высота строки (TBL-01).
+ *   и столбцы, ширина столбца и высота строки (TBL-01);
+ * - T6.8: у канбана — выбранный столбец, Add card (KBN-02), Add column, Rename column,
+ *   Delete column (KBN-03); у карточки — Tags (KBN-02).
  */
 export function SelectionBar({
   selected,
@@ -106,6 +109,7 @@ export function SelectionBar({
   line = null,
   frame = null,
   table = null,
+  kanban = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -125,6 +129,7 @@ export function SelectionBar({
   line?: LineActions | null;
   frame?: FrameActions | null;
   table?: TableActions | null;
+  kanban?: KanbanActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -255,6 +260,8 @@ export function SelectionBar({
       {tags && tagsOpen && <TagEditor tags={tags} />}
       {line && <LineControls line={line} />}
       {table && <TableControls table={table} />}
+      {kanban && <KanbanControls kanban={kanban} />}
+
       {frame?.keepRatio && (
         <Switch
           label="Keep proportions"

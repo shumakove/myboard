@@ -42,6 +42,8 @@ const CREATE_KEYS: Record<PlaceableType, string> = {
   line: "KeyC",
   frame: "KeyF",
   table: "KeyB",
+  kanban: "KeyJ",
+  card: "KeyA",
 };
 
 /** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
@@ -55,6 +57,13 @@ function createHint(type: PlaceableType, label: string): string {
   if (type === "table") {
     return "Click the board to add a table. Click a cell to select it, double-click to type; arrow keys move between cells.";
   }
+  if (type === "kanban") {
+    return "Click the board to add a kanban board. Double-click a column title to rename it; drag cards between columns.";
+  }
+  if (type === "card") {
+    return "Click the board or a kanban column to add a task card. Double-click it to type; add tags in the selection bar.";
+  }
+
   return `Click the board or drag this button onto it to add a ${label.toLowerCase()}.`;
 }
 

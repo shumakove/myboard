@@ -131,8 +131,25 @@ import {
 } from "./tables";
 import { NEW_TABLE_SIZE } from "./tableData";
 import { useTableKeys } from "./useTableKeys";
+import { columnTitle } from "./kanbanData";
+import {
+  addCard,
+  addColumn,
+  columnCards,
+  createKanban,
+  deleteColumn,
+  type ColumnFate,
+} from "./kanbans";
+import { DeleteColumnDialog, type KanbanActions } from "./KanbanControls";
+import { columnEditorStyle } from "./kanbans";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
+
+/** Столбец канбана (KBN-03). */
+interface KanbanColumn {
+  kanban: string;
+  column: string;
+}
 
 type Menu =
   | { kind: "object"; at: Point }
@@ -165,7 +182,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * T6.6 — FRM-01…FRM-05 фреймы: содержимое, оформление, пропорции, скрытие содержимого
  * и выбор блокировки; T6.7 — TBL-01…TBL-07 таблицы: строки, столбцы и их размер,
  * оформление и объединение ячеек, переход стрелками, объекты в ячейках, обмен с внешними
- * электронными таблицами и вставка таблицы стикерами.
+ * электронными таблицами и вставка таблицы стикерами; T6.8 — KBN-01…KBN-03 канбан со
+ * столбцами, карточки задач с текстом и тегами, перенос карточек между столбцами,
+ * добавление, переименование и удаление столбца с выбором судьбы его карточек.
  */
 export function BoardScene({
   board,
@@ -254,6 +273,12 @@ export function BoardScene({
   } | null>(null);
   /** TBL-06, TBL-07: внешняя таблица из буфера ждёт выбора, как её вставить. */
   const [pasteGrid, setPasteGrid] = useState<Grid | null>(null);
+  /** KBN-03: выбранный столбец канбана, правка его названия и вопрос перед удалением. */
+  const [column, setColumn] = useState<KanbanColumn | null>(null);
+  const [columnEdit, setColumnEdit] = useState<
+    (KanbanColumn & { text: Y.Text }) | null
+  >(null);
+  const [columnDelete, setColumnDelete] = useState<KanbanColumn | null>(null);
 
   /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
   const goTo = useCallback(
@@ -334,6 +359,20 @@ export function BoardScene({
           { point: { x: at.x + half, y: at.y } },
           actor,
         );
+        setSelection([id]);
+        return readScene(objects).find((o) => o.id === id) ?? null;
+      }
+      // KBN-01: новый канбан со столбцами; попадает во фрейм под собой (FRM-01).
+      if (type === "kanban") {
+        let id = "";
+        board.doc.transact(() => {
+          id = createKanban(
+            objects,
+            placement(type, at, settings.gridStep),
+            actor,
+          );
+          placeInFrames(objects, readScene(objects), [id], actor);
+        });
         setSelection([id]);
         return readScene(objects).find((o) => o.id === id) ?? null;
       }
@@ -450,6 +489,38 @@ export function BoardScene({
     [objects, tableById],
   );
 
+  /** Канбан для действий со столбцами: есть на доске, не заблокирован (CVS-19). */
+  const kanbanById = useCallback(
+    (id: string): SceneObject | null => {
+      const target = readScene(objects).find((o) => o.id === id);
+      return target?.kanban != null && !target.locked ? target : null;
+    },
+    [objects],
+  );
+
+  /** KBN-03: выбрать столбец канбана. */
+  const selectColumn = useCallback(
+    (kanbanId: string, columnId: string) => {
+      if (kanbanById(kanbanId) === null) return;
+      setSelection([kanbanId]);
+      setColumn({ kanban: kanbanId, column: columnId });
+    },
+    [kanbanById],
+  );
+
+  /** KBN-03: правка названия столбца — обычное поле поверх заголовка. */
+  const editColumn = useCallback(
+    (kanbanId: string, columnId: string) => {
+      const map = objectMap(objects, kanbanId);
+      if (kanbanById(kanbanId) === null || map === null) return;
+      const text = columnTitle(map, columnId);
+      setSelection([kanbanId]);
+      setColumn({ kanban: kanbanId, column: columnId });
+      setColumnEdit({ kanban: kanbanId, column: columnId, text });
+    },
+    [objects, kanbanById],
+  );
+
   const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
@@ -499,6 +570,8 @@ export function BoardScene({
     laser,
     selectCell,
     editCell,
+    selectColumn,
+    editColumn,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -509,6 +582,9 @@ export function BoardScene({
   const editingId =
     editing?.id ??
     (cellEdit !== null ? `${cellEdit.table}#${cellEdit.cell}` : null) ??
+    (columnEdit !== null
+      ? `${columnEdit.kanban}#${columnEdit.column}`
+      : null) ??
     (labelState?.editing === true
       ? `${labelState.line}:${labelState.label}`
       : null);
@@ -540,6 +616,13 @@ export function BoardScene({
     ) {
       setCells(null);
       setCellEdit(null);
+    }
+    if (
+      column !== null &&
+      !(selection.length === 1 && selection[0] === column.kanban)
+    ) {
+      setColumn(null);
+      setColumnEdit(null);
     }
   }
   const cellTable =
@@ -674,6 +757,81 @@ export function BoardScene({
           },
         }
       : null;
+
+  // T6.8: действия одного выделенного канбана; выбранный столбец — если он ещё есть.
+  const kanbanShape = editableSingle?.kanban ?? null;
+  const activeColumn =
+    kanbanShape !== null &&
+    column !== null &&
+    column.kanban === editableSingle?.id
+      ? (kanbanShape.columns.find((c) => c.id === column.column) ?? null)
+      : null;
+  const editedColumn =
+    editableSingle !== null &&
+    activeColumn !== null &&
+    columnEdit?.kanban === editableSingle.id &&
+    columnEdit.column === activeColumn.id
+      ? columnEdit
+      : null;
+  const kanbanActions: KanbanActions | null =
+    editableSingle !== null && kanbanShape !== null
+      ? {
+          column: activeColumn,
+          addCard: () => {
+            const target = activeColumn ?? kanbanShape.columns[0];
+            if (target === undefined) return;
+            const id = addCard(objects, editableSingle, target.id, actor);
+            setSelection([id]);
+            editText(id);
+          },
+          addColumn: () => {
+            const id = addColumn(
+              objects,
+              editableSingle,
+              activeColumn?.id ?? null,
+              actor,
+            );
+            if (id !== null) editColumn(editableSingle.id, id);
+          },
+          renameColumn:
+            activeColumn === null
+              ? null
+              : () => {
+                  editColumn(editableSingle.id, activeColumn.id);
+                },
+          deleteColumn:
+            activeColumn === null || kanbanShape.columns.length < 2
+              ? null
+              : () => {
+                  const target = {
+                    kanban: editableSingle.id,
+                    column: activeColumn.id,
+                  };
+                  // Пустой столбец удаляется сразу: решать про карточки не нужно.
+                  if (columnCards(scene, target.kanban, target.column).length) {
+                    setColumnDelete(target);
+                  } else {
+                    removeColumn(target, { kind: "delete" });
+                  }
+                },
+        }
+      : null;
+
+  /** KBN-03: удалить столбец, решив судьбу его карточек. */
+  function removeColumn(target: KanbanColumn, fate: ColumnFate) {
+    const kanban = kanbanById(target.kanban);
+    if (kanban === null) return;
+    deleteColumn(board, kanban, target.column, fate, actor);
+    setColumn(null);
+    setColumnEdit(null);
+  }
+
+  // Вопрос об удалении — пока столбец ещё есть у незаблокированного канбана.
+  const deleting =
+    columnDelete === null ? null : kanbanById(columnDelete.kanban);
+  const deletingColumn =
+    deleting?.kanban?.columns.find((c) => c.id === columnDelete?.column) ??
+    null;
 
   // T6.4: действия одной выделенной линии.
   const lineActions: LineActions | null =
@@ -933,7 +1091,45 @@ export function BoardScene({
                   : null,
               handles: editableSingle?.table != null ? editableSingle.id : null,
             }}
+            kanban={
+              editableSingle !== null && kanbanShape !== null
+                ? {
+                    kanban: editableSingle.id,
+                    state: {
+                      active: activeColumn?.id ?? null,
+                      editing: editedColumn?.column ?? null,
+                    },
+                  }
+                : null
+            }
           />
+          {editableSingle && editedColumn && (
+            <TextEditor
+              key={`${editedColumn.kanban}#${editedColumn.column}`}
+              object={editableSingle}
+              text={editedColumn.text}
+              label="Column title"
+              className="kanban-title-editor"
+              style={
+                columnEditorStyle(editableSingle, editedColumn.column) ?? {}
+              }
+              onKeyDown={(event) => {
+                // Название — одна строка: Enter завершает правку.
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  setColumnEdit(null);
+                }
+              }}
+              onEdit={() => {
+                const map = objectMap(objects, editedColumn.kanban);
+                if (map !== null) touch(map, actor);
+              }}
+              onDone={() => {
+                const done = editedColumn;
+                setColumnEdit((current) => (current === done ? null : current));
+              }}
+            />
+          )}
           {cellTable && editedCell && (
             <TextEditor
               key={`${editedCell.table}#${editedCell.cell}`}
@@ -1056,6 +1252,7 @@ export function BoardScene({
           colors={colorActions}
           line={lineActions}
           table={tableActions}
+          kanban={kanbanActions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1146,6 +1343,25 @@ export function BoardScene({
             }}
             onCancel={() => {
               setPasteGrid(null);
+            }}
+          />
+        )}
+        {deleting && deletingColumn && (
+          <DeleteColumnDialog
+            title={deletingColumn.title}
+            cards={columnCards(scene, deleting.id, deletingColumn.id).length}
+            targets={(deleting.kanban?.columns ?? []).filter(
+              (c) => c.id !== deletingColumn.id,
+            )}
+            onDelete={(fate) => {
+              setColumnDelete(null);
+              removeColumn(
+                { kanban: deleting.id, column: deletingColumn.id },
+                fate,
+              );
+            }}
+            onCancel={() => {
+              setColumnDelete(null);
             }}
           />
         )}

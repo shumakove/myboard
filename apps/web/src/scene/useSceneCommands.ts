@@ -50,6 +50,7 @@ import { estimateHeight } from "./textHeight";
 import { loadTextStyle, rememberTextStyle } from "./textStyle";
 import { placement } from "./tools";
 import { pasteTableGrid, stickiesFromGrid } from "./tables";
+import { arrangeKanbans, kanbansOf } from "./kanbans";
 import type { Grid } from "./tableExchange";
 
 /** Команды над выделенным; `null` — команда сейчас недоступна. */
@@ -146,6 +147,8 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         // CVS-26: линии, привязанные к удаляемым объектам, остаются на месте.
         detachFrom(objects, current, new Set(removing), actor);
         moved = moveToTrash(board, removing, actor);
+        // KBN-02: оставшиеся карточки столбца сдвигаются на место удалённых.
+        arrangeKanbans(objects, kanbansOf(current, removing), actor);
       });
       if (moved.length === 0) return;
       select(selection.filter((id) => !moved.includes(id)));
@@ -252,15 +255,20 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
           parentId !== null && first !== undefined
             ? { parent: parentId, cell, origin: first.origin }
             : { parent: null, cell: null, origin: { x: 0, y: 0 } };
-        select(
-          pasteObjects(
+        let pasted: string[] = [];
+        transact(objects, () => {
+          pasted = pasteObjects(
             objects,
             clip,
             { kind: "offset", offset, ...place },
             actor,
-          ),
-        );
+          );
+          // KBN-02: дубликат карточки встаёт в свой столбец под оригиналом.
+          arrangeKanbans(objects, kanbansOf(readScene(objects), pasted), actor);
+        });
+        select(pasted);
       }),
+
       align: when(editable.length > 1, (op: AlignOp) => {
         shift(alignDeltas(placed(), op));
       }),

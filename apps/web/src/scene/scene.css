@@ -1015,3 +1015,85 @@
   top: var(--space-2);
   bottom: auto;
 }
+
+/* T6.8: канбан — столбцы с заголовками (KBN-01, KBN-03); карточки — поверх столбцов. */
+.scene-object.scene-kanban {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  white-space: normal;
+}
+
+.kanban-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.kanban-column:last-child {
+  border-right: 0;
+}
+
+.kanban-column-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.kanban-column-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-column[data-active="true"] .kanban-column-header {
+  box-shadow: inset 0 calc(-3px * var(--inverse-zoom, 1)) 0 var(--color-accent);
+}
+
+.scene-editor.kanban-title-editor {
+  padding: 12px 20px;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  line-height: 24px;
+  resize: none;
+}
+
+/* KBN-02: карточка задачи — текст сверху, теги внизу. */
+.scene-object.scene-card {
+  align-items: flex-start;
+  padding: 10px 12px 28px;
+  border: 1px solid var(--color-border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: 1.3;
+  box-shadow: var(--shadow-sm);
+}
+
+.kanban-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+
+.selection-kanban {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
