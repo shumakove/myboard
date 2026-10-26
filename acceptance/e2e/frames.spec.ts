@@ -507,6 +507,11 @@ test('FRM-02 frame style: three looks, palette and custom color; the second clie
     const sig = (l: typeof fillLook) => `${l.background}|${l.border}`;
     expect(new Set([sig(fillLook), sig(borderLook), sig(noBgLook)]).size, 'три вида оформления различаются').toBe(3);
     expect(fillLook.background, 'Fill — фон цветом').toBe(hexToRgb('#12ab34'));
+    // толкование по ответу владельца на Q-004 (вариант а)
+    expect(borderLook.border, 'Border only — граница цветом').toContain(hexToRgb('#12ab34'));
+    expect(borderLook.background, 'Border only — фон белый').toBe('rgb(255, 255, 255)');
+    expect(noBgLook.border, 'No background — граница цветом').toContain(hexToRgb('#12ab34'));
+    expect(noBgLook.background, 'No background — фон прозрачный').toBe('transparent');
     await expect(async () => {
       const l = await look(guest.page, 'qa-frame');
       expect(l.background).toBe('transparent');
