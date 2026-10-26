@@ -19,6 +19,13 @@ import {
   type FrameOptions,
 } from "./frameOptions";
 import {
+  cellRect,
+  readTable,
+  resizeTable,
+  TABLE_TYPE,
+  type TableShape,
+} from "./tableData";
+import {
   GROUP_TYPE,
   isRichText,
   OBJECT_TYPES,
@@ -86,6 +93,13 @@ export interface SceneObject extends Frame {
   frameOptions: FrameOptions | null;
   /** FRM-04: объект внутри фрейма со скрытым содержимым — не показывается на холсте. */
   hidden: boolean;
+  /** Таблица (T6.7): столбцы, строки и ячейки; у остальных типов `null`. */
+  table: TableShape | null;
+  /**
+   * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; его `x`, `y`
+   * в документе — относительно левого верхнего угла ячейки. Вне таблицы — `null`.
+   */
+  cell: string | null;
 }
 
 /** Изменение рамки и оформления объекта; рамка — в координатах доски. */
@@ -149,7 +163,13 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
     const kids: SceneObject[] = [];
     for (const child of sorted(children.get(object.id))) {
       const before = scene.length;
-      visit(child, position, kidsLocked, kidsHidden);
+      const shift = cellOffset(object.table, child.cell);
+      visit(
+        child,
+        { x: position.x + shift.x, y: position.y + shift.y },
+        kidsLocked,
+        kidsHidden,
+      );
       const placed = scene[before];
       if (placed?.id === child.id) kids.push(placed);
     }
@@ -163,6 +183,11 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       const bounds = boundsOf(kids);
       if (bounds === null) return; // пустая группа не рисуется
       frame = { ...bounds, rotation: 0 };
+    }
+    // TBL-01: рамка таблицы — сумма ширин столбцов и высот строк.
+    const { table } = object;
+    if (table !== null) {
+      frame = { ...frame, width: table.width, height: table.height };
     }
     // CVS-26: привязанный конец линии — в точке привязки объекта, где бы тот ни был.
     const line =
@@ -186,10 +211,15 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       style,
       meta,
       drawing,
+      cell,
     } = object;
-    // CVS-08: линию находят по тексту её подписей.
+    // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек.
     const text =
-      line === null ? object.text : line.labels.map((l) => l.text).join("\n");
+      line !== null
+        ? line.labels.map((l) => l.text).join("\n")
+        : table !== null
+          ? [...table.cells.values()].map((c) => c.text).join("\n")
+          : object.text;
     scene.splice(at, 0, {
       id,
       type,
@@ -212,6 +242,8 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
           ? null
           : { ...frameFields, contentLocked: kidsLocked },
       hidden,
+      table,
+      cell,
     });
   };
   for (const root of sorted(children.get(null))) {
@@ -235,17 +267,32 @@ function connectableFrames(
     const parentId = parents.get(object.id) ?? null;
     const parent = parentId === null ? undefined : raw.get(parentId);
     const base = parent === undefined ? { x: 0, y: 0 } : positionOf(parent);
-    const position = { x: base.x + object.x, y: base.y + object.y };
+    const shift = cellOffset(parent?.table ?? null, object.cell);
+    const position = {
+      x: base.x + shift.x + object.x,
+      y: base.y + shift.y + object.y,
+    };
     positions.set(object.id, position);
     return position;
   };
   const frames = new Map<string, Frame>();
   for (const object of raw.values()) {
     if (!isConnectable(object.type)) continue;
-    const { width, height, rotation } = object;
+    const { rotation, table } = object;
+    const width = table?.width ?? object.width;
+    const height = table?.height ?? object.height;
     frames.set(object.id, { ...positionOf(object), width, height, rotation });
   }
   return frames;
+}
+
+/**
+ * TBL-05: сдвиг начала координат объекта в ячейке от угла таблицы. Ячейки, которой больше
+ * нет (строку удалили одновременно), — угол таблицы.
+ */
+function cellOffset(table: TableShape | null, cell: string | null): Point {
+  const rect = table === null || cell === null ? null : cellRect(table, cell);
+  return rect === null ? { x: 0, y: 0 } : { x: rect.x, y: rect.y };
 }
 
 function sorted(list: RawObject[] | undefined): RawObject[] {
@@ -312,6 +359,8 @@ function readObject(id: string, value: unknown): RawObject | null {
     lineData: type === "line" ? readLineData(record) : null,
     drawing: type === "drawing" ? readDrawing(record, width, height) : null,
     frameFields: type === FRAME_TYPE ? readFrameFields(record) : null,
+    table: type === TABLE_TYPE ? readTable(record) : null,
+    cell: typeof record.cell === "string" ? record.cell : null,
   };
 }
 
@@ -502,8 +551,14 @@ export function patchObjects(
   actor = "",
 ): void {
   const changes = new Map<string, Record<string, unknown>>();
+  const tables = new Map<string, { width?: number; height?: number }>();
   for (const [object, patch] of patches) {
     const fields: Record<string, unknown> = {};
+    // CVS-14: размер таблицы меняется размерами её столбцов и строк.
+    const { width, height } = patch;
+    if (object.table !== null && (width ?? height) !== undefined) {
+      tables.set(object.id, { width, height });
+    }
     for (const [key, value] of Object.entries(patch)) {
       if (key === "x" && typeof value === "number") {
         fields.x = value - object.origin.x - object.offset.x;
@@ -515,15 +570,23 @@ export function patchObjects(
     }
     changes.set(object.id, fields);
   }
-  writeFields(objects, changes, actor);
+  transact(objects, () => {
+    writeFields(objects, changes, actor);
+    for (const [id, size] of tables) {
+      const map = objectMap(objects, id);
+      if (map !== null) resizeTable(map, size);
+    }
+  });
 }
 
 /**
  * Поле рамки, которое вычисляется, а не хранится: размер группы — по её объектам,
- * размер и поворот линии — по её точкам (T6.4).
+ * размер и поворот линии — по её точкам (T6.4), размер таблицы — по столбцам и строкам.
  */
 function derivedFrame(type: string, key: string): boolean {
-  if (type === GROUP_TYPE) return key === "width" || key === "height";
+  if (type === GROUP_TYPE || type === TABLE_TYPE) {
+    return key === "width" || key === "height";
+  }
   if (type === "line") {
     return key === "width" || key === "height" || key === "rotation";
   }

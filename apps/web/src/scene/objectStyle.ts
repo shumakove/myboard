@@ -57,7 +57,7 @@ export function frameLook(style: SceneObject["style"]): CSSProperties {
 }
 
 /** TXT-01: шрифт, начертание, выравнивание и межстрочный интервал текста. */
-function textStyle(style: SceneObject["style"]): CSSProperties {
+export function textStyle(style: SceneObject["style"]): CSSProperties {
   const { fontFamily, fontStyle, align, lineHeight } = style;
   const family = str(fontFamily);
   const variant = str(fontStyle) ?? "";

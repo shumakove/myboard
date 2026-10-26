@@ -175,7 +175,13 @@ describe("CVS-20: копия линии", () => {
     const pasted = pasteObjects(
       objects,
       both,
-      { kind: "offset", offset: { x: 0, y: 500 }, parent: null },
+      {
+        kind: "offset",
+        offset: { x: 0, y: 500 },
+        parent: null,
+        cell: null,
+        origin: { x: 0, y: 0 },
+      },
       "Alice",
     );
     const copies = readScene(objects).filter((o) => pasted.includes(o.id));
@@ -191,7 +197,13 @@ describe("CVS-20: копия линии", () => {
     const [alone] = pasteObjects(
       objects,
       lineOnly,
-      { kind: "offset", offset: { x: 0, y: 900 }, parent: null },
+      {
+        kind: "offset",
+        offset: { x: 0, y: 900 },
+        parent: null,
+        cell: null,
+        origin: { x: 0, y: 0 },
+      },
       "Alice",
     );
     const free = find(objects, alone ?? "");

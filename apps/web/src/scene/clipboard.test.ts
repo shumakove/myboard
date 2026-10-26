@@ -42,7 +42,6 @@ describe("CVS-20: копирование и вставка объектов", ()
     const scene = readScene(source);
     const group = groupObjects(
       source,
-      scene,
       scene.filter((o) => o.id === a || o.id === b),
       "Alice",
     );
@@ -112,7 +111,7 @@ describe("CVS-20: копирование и вставка объектов", ()
     const a = createObject(objects, "sticky", { x: 0, y: 0 });
     const b = createObject(objects, "sticky", { x: 300, y: 0 });
     const scene = readScene(objects);
-    const group = groupObjects(objects, scene, scene, "Alice");
+    const group = groupObjects(objects, scene, "Alice");
     const current = readScene(objects);
     const clip = copyObjects(objects, current, [a]);
     if (clip === null || group === null) throw new Error("нет копии");
@@ -122,7 +121,9 @@ describe("CVS-20: копирование и вставка объектов", ()
       {
         kind: "offset",
         offset: { x: 20, y: 20 },
-        parent: current.find((o) => o.id === group) ?? null,
+        parent: group,
+        cell: null,
+        origin: current.find((o) => o.id === a)?.origin ?? { x: -1, y: -1 },
       },
       "Alice",
     );

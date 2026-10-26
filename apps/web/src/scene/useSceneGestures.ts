@@ -38,6 +38,7 @@ import {
 import { brushWidth, type DrawSettings } from "./drawSettings";
 import { projectOnto, routeOf } from "./connectors";
 import { addLabel, boardPoints, setPoints } from "./lineEdits";
+import { lineResizeGesture } from "./tables";
 import {
   drawLineGesture,
   endGesture,
@@ -85,17 +86,23 @@ export interface SceneControls {
   erase: (ids: string[]) => void;
   /** DRW-05: свой след лазера. */
   laser: { begin: (at: Point) => void; add: (at: Point) => void };
+  /** TBL-02…TBL-04: выделить ячейку таблицы (`extend` — до неё от прежней, Shift). */
+  selectCell: (table: string, cell: string, extend: boolean) => void;
+  /** TBL-04: открыть ячейку таблицы для ввода текста. */
+  editCell: (table: string, cell: string) => void;
 }
 
 function hit(target: EventTarget | null): {
   objectId: string | null;
   handle: string | null;
   label: string | null;
+  cell: string | null;
 } {
   if (!(target instanceof Element)) {
-    return { objectId: null, handle: null, label: null };
+    return { objectId: null, handle: null, label: null, cell: null };
   }
   return {
+    cell: target.closest("[data-cell]")?.getAttribute("data-cell") ?? null,
     objectId:
       target.closest("[data-object-id]")?.getAttribute("data-object-id") ??
       null,
@@ -112,6 +119,19 @@ function editableLine(selected: readonly SceneObject[]): SceneObject | null {
   return selected.length === 1 && only?.type === "line" && !only.locked
     ? only
     : null;
+}
+
+/**
+ * Маркер границы столбца или строки таблицы (TBL-01): `col:<id>` / `row:<id>`; другой
+ * маркер — `null`.
+ */
+function tableHandle(
+  handle: string | null,
+): { axis: "column" | "row"; id: string } | null {
+  if (handle?.startsWith("col:"))
+    return { axis: "column", id: handle.slice(4) };
+  if (handle?.startsWith("row:")) return { axis: "row", id: handle.slice(4) };
+  return null;
 }
 
 /** Номер в имени маркера линии: `line-point-2` → 2. */
@@ -230,7 +250,11 @@ function still(click?: () => void): Gesture {
  *   (MOB-05), а пальцы двигают вид и выделяют;
  * - T6.6: перемещённый, поставленный или нарисованный объект попадает во фрейм под своим
  *   центром или выходит из него (FRM-01); угол одного фрейма меняет его размер без сдвига
- *   содержимого, с фиксированными пропорциями — по их соотношению (FRM-03).
+ *   содержимого, с фиксированными пропорциями — по их соотношению (FRM-03);
+ * - T6.7: щелчок по ячейке таблицы выделяет таблицу и ячейку, Shift+щелчок по ячейке
+ *   выделенной таблицы — диапазон, двойной щелчок открывает ячейку для ввода (TBL-02…
+ *   TBL-04); маркеры границ выделенной таблицы меняют ширину столбца и высоту строки
+ *   (TBL-01); объект попадает в ячейку под своим центром (TBL-05).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -362,7 +386,7 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       start(press, longPress) {
         const c = latest.current;
         const tool = toolById(c.tool);
-        const { objectId: leafId, handle, label } = hit(press.target);
+        const { objectId: leafId, handle, label, cell } = hit(press.target);
 
         const drawing = drawingWith(press);
         if (drawing !== null) return draw(drawing, press);
@@ -386,6 +410,22 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         if (tool.kind === "lasso") return area("lasso", press);
 
         const selected = selectedObjects(c.selection);
+        // TBL-01: граница столбца или строки одной выделенной таблицы.
+        const border = tableHandle(handle);
+        if (border !== null) {
+          const [table] = selected;
+          if (selected.length !== 1 || table?.table == null || table.locked) {
+            return still();
+          }
+          return lineResizeGesture(
+            c.objects,
+            table,
+            border.axis,
+            border.id,
+            press.board,
+            c.actor,
+          );
+        }
         const line = editableLine(selected);
         if (line !== null && handle?.startsWith("line-")) {
           return lineHandleGesture(lineContext(), line, handle);
@@ -452,6 +492,20 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           if (press.pointerType === "touch" && !longPress && !isSelected) {
             return null;
           }
+          // TBL-02…TBL-04: щелчок по ячейке выделяет таблицу и ячейку; Shift+щелчок по
+          // ячейке выделенной таблицы — диапазон ячеек, а не снятие выделения.
+          const cellOf = objectId === leafId ? cell : null;
+          if (cellOf !== null && (isSelected || !press.shiftKey)) {
+            const extend = press.shiftKey;
+            const ids = isSelected ? [...c.selection] : [objectId];
+            c.select(ids);
+            return {
+              ...move(selectedObjects(ids), press),
+              click: () => {
+                latest.current.selectCell(objectId, cellOf, extend);
+              },
+            };
+          }
           const ids = isSelected
             ? [...c.selection]
             : press.shiftKey
@@ -476,9 +530,13 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
 
       tap(press) {
         const c = latest.current;
-        const { objectId: leafId } = hit(press.target);
+        const { objectId: leafId, cell } = hit(press.target);
         if (leafId !== null) {
-          c.select([selectionTarget(c.scene, leafId, c.selection)]);
+          const objectId = selectionTarget(c.scene, leafId, c.selection);
+          c.select([objectId]);
+          if (cell !== null && objectId === leafId) {
+            c.selectCell(objectId, cell, false);
+          }
         } else if (!press.shiftKey) c.select([]);
       },
 
@@ -498,7 +556,7 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         const c = latest.current;
         // Двойное касание пером рисует две точки, а не открывает объект.
         if (drawingWith(press) !== null) return;
-        const { objectId: leafId, handle, label } = hit(press.target);
+        const { objectId: leafId, handle, label, cell } = hit(press.target);
         // CON-06: двойной щелчок по точке изгиба удаляет её.
         const line = editableLine(selectedObjects(c.selection));
         if (line !== null && handle?.startsWith("line-point-")) {
@@ -514,6 +572,11 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           return;
         }
         const leaf = c.scene.find((o) => o.id === leafId);
+        // TBL-04: двойной щелчок по ячейке — ввод текста в ней.
+        if (leaf?.table != null && cell !== null) {
+          c.editCell(leaf.id, cell);
+          return;
+        }
         if (leaf?.type === "line" && leaf.line !== null && !leaf.locked) {
           // CON-03: двойной щелчок по подписи — правка, по линии — новая подпись.
           c.select([leaf.id]);
