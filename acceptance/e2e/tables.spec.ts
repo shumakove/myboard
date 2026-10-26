@@ -572,6 +572,14 @@ test('TBL-02 cell text color, emphasis, horizontal and vertical alignment apply 
       for (let x: Element | null = e; x; x = x.parentElement) s += getComputedStyle(x).textDecorationLine;
       return s.includes('underline');
     })).toBe(true);
+    // Q-005 (а): «выделение» — начертание, включая зачёркнутый
+    await clickCell(page, tid, k[0][2]);
+    await cellSelect(page, 'Style').selectOption({ label: 'Strikethrough' });
+    await expect.poll(() => cellText(page, tid, k[0][2]).evaluate((e) => {
+      let s = '';
+      for (let x: Element | null = e; x; x = x.parentElement) s += getComputedStyle(x).textDecorationLine;
+      return s.includes('line-through');
+    })).toBe(true);
     await page.reload();
     await expect(tables(page)).toHaveCount(1);
     await check(page, false);
