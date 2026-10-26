@@ -25,8 +25,9 @@ classDiagram
   }
   class SceneObjectMap {
     <<Y.Map, объект сцены>>
-    type: sticky | shape | text | document | stack | line | drawing | frame | group
+    type: sticky | shape | text | document | stack | line | drawing | frame | table | group
     parent: string | null
+    cell?: string — ключ ячейки таблицы-родителя
     x: number
     y: number
     width: number
@@ -60,6 +61,10 @@ classDiagram
     keepRatio?: boolean — frame
     contentHidden?: boolean — frame
     lockContent?: boolean — frame, нет поля = true
+    columns?: Y.Array~string~ — table, id столбцов
+    rows?: Y.Array~string~ — table, id строк
+    sizes?: Y.Map~number~ — table, id линии → ширина или высота
+    cells?: Y.Map~TableCellMap~ — table, ключ строка:столбец
     text?: Y.Text — нет у drawing
     tags?: Y.Array~string~
     showAuthor?: false
@@ -210,6 +215,8 @@ classDiagram
     drawing: DrawingShape | null
     frameOptions: FrameOptions | null
     hidden: boolean
+    table: TableShape | null
+    cell: string | null
   }
   class ObjectMeta {
     <<interface, scene/sceneObjects.ts>>
@@ -565,9 +572,10 @@ classDiagram
   class frames {
     <<apps/web scene/frames.ts>>
     isFrame(object) boolean$
-    frameUnder(scene, object) SceneObject | null$
+    containerUnder(scene, object) Container | null$
     placeInFrames(objects, scene, ids, actor) void$
     adoptContained(objects, scene, frameId, actor) void$
+    reparent(objects, scene, object, target: Container | null, actor) void$
     sendToBack(objects, scene, id) void$
     setContentHidden(objects, frames, hidden, actor) void$
     setKeepRatio(objects, frame, keep, actor) void$
@@ -583,16 +591,111 @@ classDiagram
   frames ..> SceneObjectMap : parent, x, y, z детей, z фрейма, keepRatio, contentHidden, locked + lockContent — writeFields
   frames ..> sceneObjects : objectMap, patchObjects, writeFields, transact, touch
   frames ..> groups : ancestors
+  class Container {
+    <<interface, scene/frames.ts>>
+    parent: SceneObject — фрейм или таблица
+    cell: string | null — ключ ячейки у таблицы
+  }
+  class TableCellMap {
+    <<Y.Map, ячейка таблицы>>
+    text?: Y.Text
+    color?: string
+    fontStyle?: normal | bold | italic | bold-italic | underline | strike
+    align?: left | center | right
+    valign?: top | middle | bottom
+    fill?: string | transparent
+    rowSpan?: number — у левой верхней ячейки объединения
+    colSpan?: number
+  }
+  class TableShape {
+    <<interface, scene/tableData.ts>>
+    columns: TableLine[]
+    rows: TableLine[]
+    cells: Map~string, TableCell~
+    covered: Map~string, string~ — закрытая ячейка → владелец
+    width: number — сумма ширин столбцов
+    height: number — сумма высот строк
+  }
+  class TableLine {
+    <<interface, scene/tableData.ts>>
+    id: string
+    size: number
+    start: number
+  }
+  class TableCell {
+    <<interface, scene/tableData.ts>>
+    text: string
+    style: CellStyleKey → string
+    rowSpan: number
+    colSpan: number
+  }
+  class tableData {
+    <<apps/web scene/tableData.ts>>
+    TABLE_TYPE = table$
+    DEFAULT_COLUMN_WIDTH = 160, DEFAULT_ROW_HEIGHT = 48$
+    MIN_CELL_SIZE = 24, NEW_TABLE_SIZE = 3$
+    CELL_STYLE_KEYS, CELL_DEFAULTS$
+    cellKey(row, column), splitKey(key)$
+    readTable(record) TableShape | null$
+    ownerOf, cellRect, cellAt, cellIndex, keyAt$
+    tableGrid(table) string[][]$
+    initTable(map, grid, sizes) void$
+    cellMap, cellText(map, key) Y.Text$
+    syncFrame(map) — width, height = суммы$
+    setLineSize, resizeTable, insertLine, deleteLine$
+    expandBox, boxCells, mergeCells, unmergeCells$
+    setCellStyle, clearCells$
+    tableFieldValue(key, value) — вставка копии$
+  }
+  class tables {
+    <<apps/web scene/tables.ts>>
+    STICKY_GRID_STEP = 220$
+    emptyGrid(rows, columns) Grid$
+    createTable(objects, at, grid, actor) string$
+    pasteTableGrid(objects, grid, point, gridStep, actor) string$
+    stickiesFromGrid(objects, grid, point, gridStep, actor) string[]$
+    selectionBox, selectedCells, neighborCell, stepCell$
+    editTable(objects, table, actor, write) void$
+    addLine(objects, table, axis, lineId, after, actor)$
+    removeLine(objects, scene, table, axis, lineId, actor) boolean$
+    mergeSelection(objects, scene, table, box, actor)$
+    lineResizeGesture(objects, table, axis, lineId, start, actor) Gesture$
+    editorExit, cellAfter$
+  }
+  class tableExchange {
+    <<apps/web scene/tableExchange.ts>>
+    MAX_GRID_ROWS = 500, MAX_GRID_COLUMNS = 100$
+    gridToTsv(grid), gridToHtml(grid) string$
+    parseTsv(text) Grid$
+    parseHtmlTable(html) Grid | null$
+    tabularGrid(text, html) Grid | null$
+  }
+  frames ..> Container
+  Container --> SceneObject : parent
+  SceneObjectMap *-- TableCellMap : cells (table)
+  SceneObject --> TableShape : table (у остальных типов null)
+  TableShape *-- TableLine
+  TableShape *-- TableCell
+  sceneObjects ..> tableData : readTable у type table, cellRect — сдвиг детей в ячейке, resizeTable в patchObjects
+  tableData ..> SceneObjectMap : columns, rows, sizes, cells, width, height
+  tableData ..> TableShape
+  tables ..> tableData : initTable, insertLine, deleteLine, mergeCells, setLineSize
+  tables ..> sceneObjects : createObject, objectMap, transact, touch, readScene
+  tables ..> frames : placeInFrames, reparent — объекты ячеек при удалении строки и объединении
+  frames ..> tableData : cellAt, cellRect — объект в ячейке (TBL-05)
+  clipboard ..> tableData : readTable, tableGrid, tableFieldValue
+  clipboard ..> tableExchange : gridToTsv, gridToHtml
 ```
 
-- Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` | `line` | `drawing` | `frame` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2, `line` — T6.4, `drawing` — T6.5, `frame` — T6.6) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.7…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `shape`, `marker`, `fill`, `stroke`, `strokeWidth`, `radius`, `fontSize`, `color`, `align`, `lineHeight`, T6.3; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
+- Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` | `line` | `drawing` | `frame` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2, `line` — T6.4, `drawing` — T6.5, `frame` — T6.6, `table` — T6.7) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.8…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `shape`, `marker`, `fill`, `stroke`, `strokeWidth`, `radius`, `fontSize`, `color`, `align`, `lineHeight`, T6.3; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
 - Текст и документ (T6.1, TXT-01…TXT-08): `text` — тот же `Y.Text`, но с атрибутами в модели Quill (`RichTextContent`): начертание и ссылка — на символах, `header` 1–3, `list` (`bullet` | `ordered` | `checked` | `unchecked`) и `indent` 1–8 — на переводе строки своей строки; в документе ещё вставки `{ divider: true }` и `{ objectLink: id }` (id ключа в `objects`, TXT-06). Новых корней и полей-контейнеров нет; `toJSON()` текста — по-прежнему строка (поиск, подпись объекта). `readScene` кладёт дельту (`Y.Text.toDelta()`) в `SceneObject.rich` только для `RICH_TEXT_TYPES`; показ (`toBlocks`) отбрасывает неизвестные атрибуты, ссылки — только http(s), mailto, tel. Правка в редакторе (`bindQuill`) пишет в `Y.Text` минимальную разницу «было → стало» (`minimalChange`, BUG-014) одной транзакцией с origin `null` вместе с `touch` и подгонкой `height`; отметка пункта списка дел на холсте (TXT-02) — `text.format(end, 1, {list})` + `touch` одной транзакцией. Высота: текстовый блок следует за содержимым, документ только растёт; подгонка после смены оформления и вставки HTML (`useTextFit`) входит в тот же шаг отмены (`UndoHistory.amend`).
 - Стикер (T6.2, STK-01…STK-04): `type: "sticky"`, `text` — `Y.Text` с атрибутами Quill, как у текста (`RICH_TEXT_TYPES` = `text`, `document`, `sticky`; правка — `bindQuill`, подгонки высоты нет: `fittedHeight` для стикера — `null`). `fill` — цвет, выбранный до постановки (`STICKY_COLORS` — палитра без чёрного; выбор вкладки — `sessionStorage` `myboard.stickyColor`, в документ не входит). `fontSize` — число или `"auto"` (`AUTO_FONT_SIZE`, у нового — `"auto"`): автоподгон считает каждый клиент при отрисовке (`useFitFont`), в документ размер не пишется. `showAuthor: false` — имя автора (`createdBy`) на стикере скрыто; нет поля — показано. `tags` — `Y.Array<string>`, у нового стикера и стопки создаётся пустым сразу в `createObject` (`TAGGED_TYPES`), чтобы первые теги двух участников слились в один массив (COL-01). Следующий стикер по Tab (`createNextSticky`, STK-04) — справа на `NEXT_STICKY_GAP` = 20, тех же `width`, `height`, `fill`, `fontSize`, `showAuthor`, без тегов, одной транзакцией.
 - Фигура (T6.3, SHP-01…SHP-04): `type: "shape"`. `shape` — id вида из `SHAPE_KINDS` (`scene/shapes.ts`): наборы `basic` (Basic, 15 видов), `callout` (Callouts, 4), `flowchart` (Flowchart, 17), `bpmn` (BPMN, 11: `bpmn-task`, `bpmn-subprocess`, `bpmn-start`, `bpmn-intermediate`, `bpmn-end`, `bpmn-gateway`, `bpmn-data-object`, `bpmn-data-store`, `bpmn-pool`, `bpmn-annotation`, `bpmn-group`); нет поля или неизвестный id — `rectangle` (`shapeKind`), поэтому фигуры до T6.3 показываются прямоугольником. `marker` — id маркера BPMN (`ShapeKind.markers`: у задачи, подпроцесса, событий, шлюза и объекта данных; первый — по умолчанию, у шлюза — `exclusive`, у остальных — `none`); чужой или пустой — первый маркер вида (`shapeMarker`), у видов без маркеров поле не читается. Оформление: `fill` — цвет или `"transparent"` (`NO_COLOR`, SHP-03), `stroke`, `strokeWidth` (0 — без обводки; 0, 1, 2, 4, 6, 8), `radius` (скругление 0…48, читается только у видов с `roundable`), `fontSize`, `color`, `align`, `lineHeight`. Новая фигура (`newShapeFields`) — размер вида (`width`, `height`, передаётся в `createObject` аргументом `size`), оформление типа `shape` поверх него — `ShapeKind.style` вида, `shape` и маркер по умолчанию; всё одной транзакцией `createObject`. `text` — `Y.Text` без атрибутов (правка — `TextEditor` с `applyTextChange`, как раньше), поле правки — над областью текста вида (`TextBox` в долях рамки; у событий, шлюза и данных — подпись под фигурой). Контур и значки маркеров клиент вычисляет при отрисовке (`shapeGeometry.ts`, `bpmnMarkers.ts`) и в документ не пишет. Выбранный до постановки вид — `sessionStorage` `myboard.shapeKind` (`loadShapeKind`), в документ не входит.
 - Соединительная линия (T6.4, CON-01…CON-07, CVS-26): `type: "line"`, `x`, `y` — положение линии, `width`/`height` — 0, `rotation` не пишется (`patchObjects` пропускает `width`, `height`, `rotation` линии — `derivedFrame`): рамку на сцене `readScene` вычисляет по точкам маршрута (`pointsBounds(routeOf(line))`). `start`, `end` — JSON `LineEnd` `{x, y}` относительно `x`, `y` линии; у привязанного конца ещё `object` (id ключа в `objects`) и `anchor` (`n` | `e` | `s` | `w` — середина стороны рамки с учётом поворота). `points` — JSON-массив точек изгиба относительно линии. Оформление: `lineStyle` (`straight` | `elbow` | `curved`), `startCap`/`endCap` (`none` | `arrow` | `triangle` | `circle` | `diamond`; у новой — `none`/`arrow`), `stroke`, `strokeWidth` (без 0). `labels` — `Y.Map` id → `Y.Map` подписи (`LineLabelMap`: `text` — `Y.Text`, правки сливаются по символам; `position` — доля длины 0…1; `orientation`, `align`, `fontFamily`, `fontSize`, `color`). `text` линии — пустой `Y.Text` от `createObject`; `SceneObject.text` линии — тексты подписей через перевод строки (поиск, CVS-08). Новая линия (`createLine`) — `createObject` + `start`, `end`, `points: []` одной транзакцией.
 - Привязка (CVS-26) в документе — только `object`/`anchor` конца: `readScene` собирает рамки всех объектов, кроме линий и групп (`connectableFrames`, `isConnectable`), и `resolveLine` ставит привязанный конец в точку привязки текущей рамки объекта; запасные `x`, `y` конца — если объекта нет. Поэтому движение объекта не пишет в линию, а линия следует за ним у всех участников. `detachLine` и `detachFrom` записывают текущие точки концов свободными; `SceneCommands.remove` вызывает `detachFrom` в одной транзакции с `moveToTrash`. `swapEnds` меняет `start`/`end`, разворачивает `points`, подписям ставит `position = 1 − position`; наконечники не меняются. Запись-JSON подписей при первой правке заменяется `Y.Map` (`labelsMap`, `labelEntry`). Состояние вкладки (выбранная подпись `LabelState`, точки привязки под концом `ConnectHint`) в документ не входит.
 - Рисунок (T6.5, DRW-01…DRW-04, DRW-06): `type: "drawing"` — один штрих пера или маркера. `x`, `y`, `width`, `height` — описанный прямоугольник точек (не меньше 1×1), `rotation`; `points` — плоский JSON-массив `[x0, y0, x1, y1, …]` относительно рамки, с точностью 0,1; `baseWidth`, `baseHeight` — размер рамки, в котором штрих нарисован; `brush` — `pen` | `marker` (маркер рисуется с `stroke-opacity` `MARKER_OPACITY` = 0.5); `stroke` — цвет, `strokeWidth` — толщина. Поля `text` нет: `createDrawing` удаляет `Y.Text`, созданный `createObject`. Одна точка (касание без движения) пишется дважды — отрезок нулевой длины с круглым концом. `readDrawing` растягивает точки на `width / baseWidth` и `height / baseHeight`, поэтому изменение размера (`patchObjects`) растягивает штрих, в том числе неравномерно, а толщина не меняется (DRW-06); испорченные точки — `drawing: null`, штрих не рисуется. Штрих пишется одной транзакцией при отпускании (`createDrawing`): черновик `InkDraft` и прямой отрезок с Shift (DRW-04, две точки) — состояние вкладки. Ластик (DRW-03) переносит задетые незаблокированные штрихи целиком в `trash` (`moveToTrash` вместе с `detachFrom` одной транзакцией), частичного стирания нет. Типа `drawing` нет среди `PlaceableType`: щелчком и из меню он не ставится.
-- Фрейм (T6.6, FRM-01…FRM-05): `type: "frame"`, рамка `x`, `y`, `width`, `height` (новый — 640×480 центром в точке), `rotation` не меняется (`rotatable: false`), `z`; `appearance` — `fill` | `border` | `outline` (FRM-02: фон цветом; граница цветом и белый фон; граница цветом без фона), `fill` — цвет (у нового `appearance: fill`, `fill: #ffffff`); `keepRatio` — размер за угол в прежнем соотношении сторон (FRM-03); `contentHidden` — содержимое скрыто у всех (FRM-04); `lockContent` — при `locked: true` блокировка переходит на содержимое (FRM-05; нет поля — `true`, как у группы; `false` — «Frame only»). Поля `text` нет в показе (`editable: false`, `Y.Text` от `createObject` пустой). Дети фрейма — объекты с `parent` = id фрейма, `x`, `y` относительно его левого верхнего угла, `z` — среди детей; `readScene` отдаёт фрейм перед его детьми, поэтому они двигаются вместе с ним (FRM-01) без записи в детей. Попадание во фрейм (`placeInFrames`) — после перемещения, постановки или штриха: объект верхнего уровня или ребёнок фрейма, не фрейм, не линия, не заблокированный, переходит к верхнему фрейму под центром своей рамки (`frameUnder`) или на верхний уровень, когда центр снаружи; `reparent` пишет `parent`, `x`, `y` в новой системе координат (на доске объект на месте), `z` — поверх новых соседей, и `touch`. Фрейм со скрытым содержимым или заблокированный вместе с содержимым (`FrameOptions.contentLocked`) новых объектов не принимает; вложенных фреймов нет. Новый фрейм в той же транзакции, что `createObject`, встаёт под объекты верхнего уровня (`sendToBack`: `z` = наименьший − 1) и забирает лежащие в нём целиком (`adoptContained`). Изменение размера одного фрейма (`frameResizeGesture`) переписывает `x`, `y` его детей, когда сдвинулся левый верхний угол, — на доске они остаются на месте; при масштабе нескольких выделенных дети выделенного фрейма не масштабируются (`scaledLeaves`). `readScene`: `SceneObject.frameOptions` — поля фрейма и `contentLocked`, `hidden` — у всех потомков фрейма с `contentHidden` (их не рисуют, не выделяют, не ищут: `BoardScene` отдаёт сцене, поиску и жестам только `visible`). Удаление и копирование фрейма — с его детьми, как у группы (`removalSet`, `copyObjects`).
+- Фрейм (T6.6, FRM-01…FRM-05): `type: "frame"`, рамка `x`, `y`, `width`, `height` (новый — 640×480 центром в точке), `rotation` не меняется (`rotatable: false`), `z`; `appearance` — `fill` | `border` | `outline` (FRM-02: фон цветом; граница цветом и белый фон; граница цветом без фона), `fill` — цвет (у нового `appearance: fill`, `fill: #ffffff`); `keepRatio` — размер за угол в прежнем соотношении сторон (FRM-03); `contentHidden` — содержимое скрыто у всех (FRM-04); `lockContent` — при `locked: true` блокировка переходит на содержимое (FRM-05; нет поля — `true`, как у группы; `false` — «Frame only»). Поля `text` нет в показе (`editable: false`, `Y.Text` от `createObject` пустой). Дети фрейма — объекты с `parent` = id фрейма, `x`, `y` относительно его левого верхнего угла, `z` — среди детей; `readScene` отдаёт фрейм перед его детьми, поэтому они двигаются вместе с ним (FRM-01) без записи в детей. Попадание во фрейм (`placeInFrames`) — после перемещения, постановки или штриха: объект верхнего уровня или ребёнок фрейма, не фрейм, не линия, не заблокированный, переходит к верхнему фрейму под центром своей рамки (`containerUnder`, с T6.7 — фрейм или ячейка таблицы) или на верхний уровень, когда центр снаружи; `reparent` пишет `parent`, `x`, `y` в новой системе координат (на доске объект на месте), `z` — поверх новых соседей, и `touch`. Фрейм со скрытым содержимым или заблокированный вместе с содержимым (`FrameOptions.contentLocked`) новых объектов не принимает; вложенных фреймов нет. Новый фрейм в той же транзакции, что `createObject`, встаёт под объекты верхнего уровня (`sendToBack`: `z` = наименьший − 1) и забирает лежащие в нём целиком (`adoptContained`). Изменение размера одного фрейма (`frameResizeGesture`) переписывает `x`, `y` его детей, когда сдвинулся левый верхний угол, — на доске они остаются на месте; при масштабе нескольких выделенных дети выделенного фрейма не масштабируются (`scaledLeaves`). `readScene`: `SceneObject.frameOptions` — поля фрейма и `contentLocked`, `hidden` — у всех потомков фрейма с `contentHidden` (их не рисуют, не выделяют, не ищут: `BoardScene` отдаёт сцене, поиску и жестам только `visible`). Удаление и копирование фрейма — с его детьми, как у группы (`removalSet`, `copyObjects`).
+- Таблица (T6.7, TBL-01…TBL-07): `type: "table"`, `x`, `y`, `z`, `rotation` не меняется (`rotatable: false`), `editable: false` (`Y.Text` объекта пустой). `columns`, `rows` — `Y.Array<string>` id столбцов и строк по порядку; `sizes` — `Y.Map` id линии → ширина столбца или высота строки (не меньше `MIN_CELL_SIZE` = 24; новая — 3×3 по 160×48); `width`, `height` — суммы размеров, их пересчитывает `syncFrame` при каждой правке структуры, а `readScene` берёт рамку из `TableShape`, поэтому `patchObjects` их не пишет (`derivedFrame`): размер за угол (CVS-14) — `resizeTable`, пропорционально всем столбцам и строкам. `cells` — `Y.Map` ключ `"<id строки>:<id столбца>"` → `Y.Map` ячейки (`TableCellMap`): `text` — `Y.Text` без атрибутов (правка — `TextEditor` `Table cell` поверх ячейки, `touch` таблицы), оформление ячейки `color`, `fontStyle`, `align`, `valign`, `fill` (TBL-02, TBL-03; нет поля — `CELL_DEFAULTS`), `rowSpan`/`colSpan` у левой верхней ячейки объединения. Пустой ячейки в `cells` может не быть — её `Y.Map` создаётся при первой правке (`cellMap`). Объединение (`mergeCells`) дописывает текст закрытых ячеек в левую верхнюю с новой строки и удаляет их записи; разъединение (`unmergeCells`) снимает `rowSpan`/`colSpan`. Добавление строки или столбца (`insertLine`) — новый id в `rows`/`columns`, размер соседа, объединения через линию растягиваются; удаление (`deleteLine`) — удаляет id, размер и ячейки линии, объединения сжимаются; последнюю строку и последний столбец не удаляют. Каждая правка структуры — одна транзакция с `touch` таблицы (`editTable`). Объект в ячейке (TBL-05): `parent` = id таблицы, `cell` — ключ ячейки, `x`, `y` — относительно её левого верхнего угла; `readScene` прибавляет `cellRect` ячейки, поэтому объект едет с таблицей и с ячейкой при изменении размеров без записи в объект. `containerUnder` выбирает верхний фрейм или ячейку под центром объекта (таблица в таблицу не попадает, заблокированная таблица не принимает), `reparent` пишет `parent`, `cell`, `x`, `y`, `z`; выход из таблицы удаляет `cell`. Объединение переносит объекты закрытых ячеек в объединённую (`mergeSelection`), удаление строки или столбца переносит объекты её ячеек к родителю таблицы (`removeLine`); ключ ячейки, которой больше нет, читается как угол таблицы. Группа в ячейке тоже получает `cell`, дубликат — `cell` оригинала. `SceneObject.text` таблицы — тексты ячеек через перевод строки (поиск, CVS-08). Копия (TBL-06) — JSON полей таблицы (`tableFieldValue` при вставке снова делает `Y.Array`/`Y.Map`/`Y.Text`), корень копии без `cell`; в системный буфер — ещё TSV (`gridToTsv`) и HTML `<table>` (`gridToHtml`). Внешняя таблица из буфера (`tabularGrid`: HTML `<table>` или текст с табуляцией, до 500 × 100) — в документ попадает только после выбора: новая таблица (`pasteTableGrid`) или стикеры на непустые ячейки с шагом `STICKY_GRID_STEP` = 220 (`stickiesFromGrid`, TBL-07), одной транзакцией с `placeInFrames`. Выделенные ячейки, активная ячейка и ячейка ввода — состояние вкладки, в документ не входят.
 - Недавние свои цвета (T6.3, SHP-04) — не данные документа: `localStorage` `myboard.recentColors` = `{"text":[],"sticky":[],"shape":[],"line":[],"drawing":[]}` (`#rrggbb`, до 8 в категории, последний — первым), общие для всех досок браузера. Категория — по типу объекта (`colorCategory`: `text`/`document` → `text`, `sticky`/`stack` → `sticky`, `shape` → `shape`, `line` → `line`, `drawing` → `drawing`, T6.5). Настройки пера и маркера (цвет, три пресета толщины, выбранный пресет) и режим «стилус сразу рисует» — тоже не данные документа: `localStorage` `myboard.drawSettings` (`drawSettings.ts`, DRW-02, MOB-05). В документ попадает только сам цвет в поле объекта (`fill`, `stroke`, `color`, `background` через `setStyle`); цвет следующего стикера (`stickyColor`) принимает и свой `#rrggbb`.
 - Стопка стикеров (T6.2, STK-05): `type: "stack"`, рамка 200×200, `fill`, `tags` (`Y.Array<string>`), `text` пустой (`editable: false` — поле правки не открывается). Стикер из стопки (`pullSticky`) — новый `sticky` верхнего уровня размера типа, центром в точке, `fill` стопки и копия её тегов, одной транзакцией; сама стопка не меняется.
 - Новый текст (TXT-05) получает `fontSize` и `color` из `sessionStorage` `myboard.textStyle` (`loadTextStyle`; запоминаются при выборе у текстового блока) — это поля объекта, сама память вкладки в документ не входит. `createObject` принимает текст строкой или дельтой и оформление поверх значений типа; вставка HTML внешнего документа (`htmlToDelta`, TXT-08) создаёт `text` с дельтой и оценкой высоты (`estimateHeight`) одной транзакцией.
@@ -613,4 +716,4 @@ classDiagram
 - Присутствие (курсоры, вид камеры, слежение, список участников — T4.2; след лазерной указки — T6.5, DRW-05) в документ не входит; запомненный вид камеры (CVS-05) хранится в `localStorage` браузера, а не в документе: оно идёт сообщениями `awareness`/`presence` и живёт только в памяти соединений ([ws-protocol.md](ws-protocol.md)).
 - Серверная копия собирается из последнего снимка `board_snapshots` и хвоста `board_updates` при первом подключении к доске (`Hub.join` → `store.load_journal` → `BoardRoom(board_id, journal)`) и выгружается, когда уходит последнее соединение (`Hub.leave`, с этим — сжатие журнала). Снимок — полное состояние `Doc.get_update()`; присутствия в нём нет. См. [data-model.md](data-model.md), [sequences/sync.md](sequences/sync.md).
 
-Актуально на: T6.6, e94fd44 (фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
+Актуально на: T6.7, 88f9e7e (таблица: `type: table`, `columns`, `rows`, `sizes`, `cells` с `TableCellMap`, поле `cell` объекта в ячейке, `tableData.ts`, `tables.ts`, `tableExchange.ts`, `SceneObject.table`, `cell`, `containerUnder`, `Container`, копия таблицы; T6.6, e94fd44 — фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: TBL-01…TBL-07 (таблица, ячейки, объединение, объекты в ячейках, обмен с электронными таблицами), FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
