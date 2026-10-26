@@ -109,7 +109,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | FRM-05 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-05 *) | PASS |
 | FRM-06 | T10.2 | — | не проверено |
 | TBL-01 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-01 *, в т. ч. участник по ссылке) | PASS |
-| TBL-02 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-02 *) | BLOCKED (Q-005) |
+| TBL-02 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-02 *; «выделение» = начертание по Q-005) | PASS |
 | TBL-03 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-03 *) | PASS |
 | TBL-04 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-04 *) | PASS |
 | TBL-05 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-05 *, в т. ч. участник по ссылке) | PASS |
