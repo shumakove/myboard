@@ -103,7 +103,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | DRW-05 | T6.5 | acceptance/e2e/drawing.spec.ts (DRW-05 *, 2 клиента, awareness) | PASS |
 | DRW-06 | T6.5 | acceptance/e2e/drawing.spec.ts (DRW-06 *) | PASS |
 | FRM-01 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-01 *, в т. ч. линия к фрейму и участник по ссылке) | PASS |
-| FRM-02 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-02 *) | BLOCKED (Q-004) |
+| FRM-02 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-02 *, толкование по ответу на Q-004 — вариант а) | PASS |
 | FRM-03 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-03 *) | PASS |
 | FRM-04 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-04 *, в т. ч. у заблокированного фрейма) | PASS |
 | FRM-05 | T6.6 | acceptance/e2e/frames.spec.ts (FRM-05 *) | PASS |
