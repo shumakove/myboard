@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import type * as Y from "yjs";
@@ -114,6 +115,22 @@ import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
 import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
 import { useTextFit } from "./useTextFit";
+import { cellEditorStyle } from "./tableStyle";
+import { PasteTableChoice } from "./PasteTableChoice";
+import { tableActionsFor } from "./tableActions";
+import { cellText, clearCells, ownerOf } from "./tableData";
+import type { Grid } from "./tableExchange";
+import {
+  cellAfter,
+  createTable,
+  editorExit,
+  editTable,
+  emptyGrid,
+  selectedCells,
+  type CellSelection,
+} from "./tables";
+import { NEW_TABLE_SIZE } from "./tableData";
+import { useTableKeys } from "./useTableKeys";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
@@ -146,7 +163,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * T6.5 — DRW-01…DRW-06 перо, маркер, пресеты толщины, ластик, прямой штрих, лазер и
  * масштаб штриха, MOB-04 отсев ладони (`BoardCanvas`), MOB-05 «стилус сразу рисует»;
  * T6.6 — FRM-01…FRM-05 фреймы: содержимое, оформление, пропорции, скрытие содержимого
- * и выбор блокировки.
+ * и выбор блокировки; T6.7 — TBL-01…TBL-07 таблицы: строки, столбцы и их размер,
+ * оформление и объединение ячеек, переход стрелками, объекты в ячейках, обмен с внешними
+ * электронными таблицами и вставка таблицы стикерами.
  */
 export function BoardScene({
   board,
@@ -226,6 +245,15 @@ export function BoardScene({
   const [picker, setPicker] = useState<{
     done: (id: string | null) => void;
   } | null>(null);
+  /** TBL-02…TBL-04: выделенные ячейки таблицы и ячейка, в которой вводят текст. */
+  const [cells, setCells] = useState<CellSelection | null>(null);
+  const [cellEdit, setCellEdit] = useState<{
+    table: string;
+    cell: string;
+    text: Y.Text;
+  } | null>(null);
+  /** TBL-06, TBL-07: внешняя таблица из буфера ждёт выбора, как её вставить. */
+  const [pasteGrid, setPasteGrid] = useState<Grid | null>(null);
 
   /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
   const goTo = useCallback(
@@ -309,6 +337,21 @@ export function BoardScene({
         setSelection([id]);
         return readScene(objects).find((o) => o.id === id) ?? null;
       }
+      // TBL-01: новая таблица 3×3; попадает во фрейм под собой (FRM-01).
+      if (type === "table") {
+        let id = "";
+        board.doc.transact(() => {
+          id = createTable(
+            objects,
+            placement(type, at, settings.gridStep),
+            emptyGrid(NEW_TABLE_SIZE, NEW_TABLE_SIZE),
+            actor,
+          );
+          placeInFrames(objects, readScene(objects), [id], actor);
+        });
+        setSelection([id]);
+        return readScene(objects).find((o) => o.id === id) ?? null;
+      }
       // SHP-01, SHP-02: фигура — выбранного вида, с его размером и оформлением.
       const shape =
         type === "shape"
@@ -367,6 +410,46 @@ export function BoardScene({
     [board, objects, actor],
   );
 
+  /** Таблица для ячеек: есть на доске, не заблокирована (CVS-19). */
+  const tableById = useCallback(
+    (id: string): SceneObject | null => {
+      const target = readScene(objects).find((o) => o.id === id);
+      return target?.table != null && !target.locked ? target : null;
+    },
+    [objects],
+  );
+
+  /** TBL-02…TBL-04: выделить ячейку (`extend` — диапазон от прежней, Shift). */
+  const selectCell = useCallback(
+    (tableId: string, cell: string, extend: boolean) => {
+      const table = tableById(tableId);
+      const owner = table?.table ? ownerOf(table.table, cell) : null;
+      if (owner === null) return;
+      setSelection([tableId]);
+      setCells((current) =>
+        extend && current?.table === tableId
+          ? { ...current, focus: owner }
+          : { table: tableId, anchor: owner, focus: owner },
+      );
+    },
+    [tableById],
+  );
+
+  /** TBL-04: ввод текста в ячейке — обычное поле поверх неё. */
+  const editCell = useCallback(
+    (tableId: string, cell: string) => {
+      const table = tableById(tableId);
+      const owner = table?.table ? ownerOf(table.table, cell) : null;
+      const map = objectMap(objects, tableId);
+      if (owner === null || map === null) return;
+      const text = cellText(map, owner);
+      setSelection([tableId]);
+      setCells({ table: tableId, anchor: owner, focus: owner });
+      setCellEdit({ table: tableId, cell: owner, text });
+    },
+    [objects, tableById],
+  );
+
   const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
@@ -414,6 +497,8 @@ export function BoardScene({
     setInk,
     erase,
     laser,
+    selectCell,
+    editCell,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -423,6 +508,7 @@ export function BoardScene({
   // CVS-07: сеанс правки текста (и подписи линии) — один шаг отмены.
   const editingId =
     editing?.id ??
+    (cellEdit !== null ? `${cellEdit.table}#${cellEdit.cell}` : null) ??
     (labelState?.editing === true
       ? `${labelState.line}:${labelState.label}`
       : null);
@@ -441,7 +527,64 @@ export function BoardScene({
     }, []),
     onTool: setTool,
     history,
+    onTable: setPasteGrid,
   });
+
+  // Выделенные ячейки живут, пока выделена одна их таблица: другое выделение их снимает.
+  const [cellsFor, setCellsFor] = useState(selection);
+  if (cellsFor !== selection) {
+    setCellsFor(selection);
+    if (
+      cells !== null &&
+      !(selection.length === 1 && selection[0] === cells.table)
+    ) {
+      setCells(null);
+      setCellEdit(null);
+    }
+  }
+  const cellTable =
+    cells !== null && selectedIds.length === 1 && selectedIds[0] === cells.table
+      ? (selected[0] ?? null)
+      : null;
+  // CVS-19: у заблокированной таблицы ячейки не выделяются и не правятся.
+  const cellShape = cellTable?.locked === false ? cellTable.table : null;
+  const activeCells = cellShape === null ? null : cells;
+  const editedCell =
+    cellEdit !== null && cellEdit.table === activeCells?.table
+      ? cellEdit
+      : null;
+
+  useTableKeys(
+    cellShape !== null && activeCells !== null && editedCell === null
+      ? {
+          table: cellShape,
+          cells: activeCells,
+          setCells,
+          edit: (cell) => {
+            editCell(activeCells.table, cell);
+          },
+          clear: (keys) => {
+            if (cellTable === null) return;
+            editTable(objects, cellTable, actor, (map) => {
+              clearCells(map, keys);
+            });
+          },
+          exit: () => {
+            setCells(null);
+          },
+        }
+      : null,
+  );
+
+  /** TBL-04: стрелка на краю текста или Tab переводит ввод в соседнюю ячейку. */
+  function cellEditorKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (cellShape === null || editedCell === null) return;
+    const exit = editorExit(event.key, event.currentTarget, event.shiftKey);
+    if (exit === null) return;
+    event.preventDefault();
+    const next = cellAfter(cellShape, editedCell.cell, exit);
+    if (next !== editedCell.cell) editCell(editedCell.table, next);
+  }
 
   /** Точка доски под точкой окна; `null` — не над холстом. */
   function boardPointAt(client: Point): Point | null {
@@ -535,6 +678,20 @@ export function BoardScene({
   // T6.4: действия одной выделенной линии.
   const lineActions: LineActions | null =
     editableSingle?.line != null ? lineActionsFor(editableSingle) : null;
+
+  // T6.7: действия одной выделенной таблицы.
+  const tableActions =
+    editableSingle?.table != null
+      ? tableActionsFor({
+          objects,
+          scene,
+          table: editableSingle,
+          cells: activeCells,
+          actor,
+          setCells,
+          editCell,
+        })
+      : null;
 
   function lineActionsFor(line: SceneObject): LineActions {
     const label = labelLine?.id === line.id ? activeLabel : null;
@@ -760,7 +917,43 @@ export function BoardScene({
             editing={editing?.id ?? null}
             rich={richHandlers}
             label={labelState}
+            tables={{
+              cells:
+                cellShape !== null && activeCells !== null
+                  ? {
+                      table: activeCells.table,
+                      state: {
+                        keys: new Set(selectedCells(cellShape, activeCells)),
+                        focus:
+                          ownerOf(cellShape, activeCells.focus) ??
+                          activeCells.focus,
+                        editing: editedCell?.cell ?? null,
+                      },
+                    }
+                  : null,
+              handles: editableSingle?.table != null ? editableSingle.id : null,
+            }}
           />
+          {cellTable && editedCell && (
+            <TextEditor
+              key={`${editedCell.table}#${editedCell.cell}`}
+              object={cellTable}
+              text={editedCell.text}
+              label="Table cell"
+              className="table-cell-editor"
+              caretAtEnd
+              style={cellEditorStyle(cellTable, editedCell.cell) ?? {}}
+              onKeyDown={cellEditorKey}
+              onEdit={() => {
+                const map = objectMap(objects, cellTable.id);
+                if (map !== null) touch(map, actor);
+              }}
+              onDone={() => {
+                const done = editedCell;
+                setCellEdit((current) => (current === done ? null : current));
+              }}
+            />
+          )}
           {labelLine && activeLabel && labelState?.editing && (
             <LabelEditor
               key={`${labelLine.id}:${activeLabel.id}`}
@@ -862,6 +1055,7 @@ export function BoardScene({
           author={authorToggle}
           colors={colorActions}
           line={lineActions}
+          table={tableActions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -938,6 +1132,22 @@ export function BoardScene({
               Dismiss
             </Button>
           </FloatingPanel>
+        )}
+        {pasteGrid !== null && (
+          <PasteTableChoice
+            grid={pasteGrid}
+            onTable={() => {
+              setPasteGrid(null);
+              commands.pasteTable(pasteGrid);
+            }}
+            onStickies={() => {
+              setPasteGrid(null);
+              commands.pasteStickies(pasteGrid);
+            }}
+            onCancel={() => {
+              setPasteGrid(null);
+            }}
+          />
         )}
         {menu && (
           <ContextMenu

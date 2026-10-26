@@ -36,12 +36,7 @@ function units(objects: Y.Map<unknown>, ids: string[]): SceneObject[] {
 describe("CVS-17: группы", () => {
   it("группа — объект документа; объекты остаются на месте, координаты — относительно группы", () => {
     const { objects, a, b, c } = setup();
-    const group = groupObjects(
-      objects,
-      readScene(objects),
-      units(objects, [a, b]),
-      "Alice",
-    );
+    const group = groupObjects(objects, units(objects, [a, b]), "Alice");
     if (group === null) throw new Error("группа не создана");
 
     expect(find(objects, a)).toMatchObject({ x: 100, y: 100, parent: group });
@@ -73,12 +68,7 @@ describe("CVS-17: группы", () => {
 
   it("разгруппировка возвращает объекты на верхний уровень на прежние места и в прежнем порядке", () => {
     const { objects, a, b, c } = setup();
-    const group = groupObjects(
-      objects,
-      readScene(objects),
-      units(objects, [a, b]),
-      "Alice",
-    );
+    const group = groupObjects(objects, units(objects, [a, b]), "Alice");
     if (group === null) throw new Error("группа не создана");
     const freed = ungroupObjects(
       objects,
@@ -96,22 +86,13 @@ describe("CVS-17: группы", () => {
   it("группировать можно только объекты одного родителя и без блокировки", () => {
     const { objects, a, b } = setup();
     setLocked(objects, [a], true, "Alice");
-    expect(
-      groupObjects(objects, readScene(objects), units(objects, [a, b]), "A"),
-    ).toBeNull();
-    expect(
-      groupObjects(objects, readScene(objects), units(objects, [b]), "A"),
-    ).toBeNull();
+    expect(groupObjects(objects, units(objects, [a, b]), "A")).toBeNull();
+    expect(groupObjects(objects, units(objects, [b]), "A")).toBeNull();
   });
 
   it("щелчок по объекту группы выделяет группу, двойной — входит в неё", () => {
     const { objects, a, b } = setup();
-    const group = groupObjects(
-      objects,
-      readScene(objects),
-      units(objects, [a, b]),
-      "Alice",
-    );
+    const group = groupObjects(objects, units(objects, [a, b]), "Alice");
     if (group === null) throw new Error("группа не создана");
     const scene = readScene(objects);
     expect(selectionTarget(scene, a, [])).toBe(group);
@@ -123,12 +104,7 @@ describe("CVS-17: группы", () => {
 
   it("CVS-21: удаление группы забирает её объекты; опустевшая группа удаляется", () => {
     const { objects, a, b } = setup();
-    const group = groupObjects(
-      objects,
-      readScene(objects),
-      units(objects, [a, b]),
-      "Alice",
-    );
+    const group = groupObjects(objects, units(objects, [a, b]), "Alice");
     if (group === null) throw new Error("группа не создана");
     const scene = readScene(objects);
     expect(removalSet(scene, [group]).sort()).toEqual([group, a, b].sort());
@@ -138,12 +114,7 @@ describe("CVS-17: группы", () => {
 
   it("CVS-19: заблокированное не удаляется, группа с заблокированным объектом — тоже", () => {
     const { objects, a, b, c } = setup();
-    const group = groupObjects(
-      objects,
-      readScene(objects),
-      units(objects, [a, b]),
-      "Alice",
-    );
+    const group = groupObjects(objects, units(objects, [a, b]), "Alice");
     if (group === null) throw new Error("группа не создана");
     setLocked(objects, [a, c], true, "Alice");
     const scene = readScene(objects);

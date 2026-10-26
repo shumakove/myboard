@@ -15,6 +15,7 @@ import {
 } from "./geometry";
 import type { Gesture } from "./gestures";
 import { ancestors } from "./groups";
+import { cellAt, cellRect } from "./tableData";
 import {
   GROUP_TYPE,
   objectMap,
@@ -43,46 +44,73 @@ function anchor(object: SceneObject): Point {
   return { x: object.x - object.offset.x, y: object.y - object.offset.y };
 }
 
+/** Куда попадает объект: фрейм (FRM-01) или ячейка таблицы (TBL-05). */
+export interface Container {
+  parent: SceneObject;
+  /** Ключ ячейки таблицы; у фрейма — `null`. */
+  cell: string | null;
+}
+
+/** Фрейм или таблица — у них есть содержимое, которое двигается вместе с ними. */
+function isContainer(object: SceneObject): boolean {
+  return isFrame(object) || object.table !== null;
+}
+
 /**
- * Может ли объект сам переходить между фреймами: не фрейм и не линия (её положение
- * задают концы), не заблокирован и лежит на верхнем уровне или во фрейме, а не в группе.
+ * Может ли объект сам переходить между фреймами и ячейками таблиц: не фрейм и не линия
+ * (её положение задают концы), не заблокирован и лежит на верхнем уровне, во фрейме или
+ * в ячейке, а не в группе.
  */
 function movable(object: SceneObject, byId: ReadonlyMap<string, SceneObject>) {
   if (object.type === FRAME_TYPE || object.type === "line" || object.locked) {
     return false;
   }
   const parent = object.parent === null ? undefined : byId.get(object.parent);
-  return parent === undefined || parent.type === FRAME_TYPE;
+  return parent === undefined || isContainer(parent);
 }
 
 /**
- * Фрейм, в который попадает объект: верхний из фреймов, внутри которых его центр.
- * Фрейм со скрытым содержимым (FRM-04) и заблокированный вместе с содержимым (FRM-05)
- * новых объектов не принимают.
+ * Куда попадает объект: верхний из фреймов и ячеек таблиц, внутри которых его центр.
+ * Фрейм со скрытым содержимым (FRM-04) и заблокированный вместе с содержимым (FRM-05),
+ * заблокированная таблица новых объектов не принимают; таблица в таблицу не попадает.
  */
-export function frameUnder(
+export function containerUnder(
   scene: readonly SceneObject[],
   object: SceneObject,
-): SceneObject | null {
+): Container | null {
   const bounds = boundsOf([object]);
   if (bounds === null) return null;
   const point = center(bounds);
   for (let i = scene.length - 1; i >= 0; i--) {
-    const frame = scene[i];
-    if (frame === undefined || frame.frameOptions === null) continue;
-    if (frame.id === object.id || frame.hidden) continue;
-    if (frame.frameOptions.contentHidden || frame.frameOptions.contentLocked) {
+    const target = scene[i];
+    if (target === undefined || target.id === object.id || target.hidden) {
       continue;
     }
-    if (ancestors(scene, frame.id).some((a) => a.id === object.id)) continue;
-    if (rectContains(frame, point)) return frame;
+    const options = target.frameOptions;
+    const table = target.table;
+    if (options !== null) {
+      if (options.contentHidden || options.contentLocked) continue;
+    } else if (table === null || target.locked || object.table !== null) {
+      continue;
+    }
+    if (ancestors(scene, target.id).some((a) => a.id === object.id)) continue;
+    if (table === null) {
+      if (rectContains(target, point)) return { parent: target, cell: null };
+      continue;
+    }
+    const cell = cellAt(table, {
+      x: point.x - target.x,
+      y: point.y - target.y,
+    });
+    if (cell !== null) return { parent: target, cell };
   }
   return null;
 }
 
 /**
- * FRM-01: объекты `ids` переходят во фрейм под своим центром или выходят из фрейма
- * на верхний уровень; на доске они остаются на месте и встают поверх новых соседей.
+ * FRM-01, TBL-05: объекты `ids` переходят во фрейм или ячейку таблицы под своим центром
+ * или выходят из них на верхний уровень; на доске они остаются на месте и встают поверх
+ * новых соседей.
  */
 export function placeInFrames(
   objects: Y.Map<unknown>,
@@ -95,9 +123,10 @@ export function placeInFrames(
     for (const id of ids) {
       const object = byId.get(id);
       if (object === undefined || !movable(object, byId)) continue;
-      const target = frameUnder(scene, object);
-      const parent = target?.id ?? null;
-      if (parent === object.parent) continue;
+      const target = containerUnder(scene, object);
+      const parent = target?.parent.id ?? null;
+      const cell = target?.cell ?? null;
+      if (parent === object.parent && cell === object.cell) continue;
       reparent(objects, scene, object, target, actor);
     }
   });
@@ -131,30 +160,39 @@ export function adoptContained(
   });
   transact(objects, () => {
     for (const object of inside) {
-      reparent(objects, scene, object, frame, actor);
+      reparent(objects, scene, object, { parent: frame, cell: null }, actor);
     }
   });
 }
 
-/** Объект переходит к новому родителю (или на верхний уровень) без сдвига на доске. */
-function reparent(
+/**
+ * Объект переходит к новому родителю — фрейму, ячейке таблицы (TBL-05) или на верхний
+ * уровень (`null`) — без сдвига на доске.
+ */
+export function reparent(
   objects: Y.Map<unknown>,
   scene: readonly SceneObject[],
   object: SceneObject,
-  parent: SceneObject | null,
+  target: Container | null,
   actor: string,
 ): void {
   const map = objectMap(objects, object.id);
   if (map === null) return;
   const at = anchor(object);
+  const parent = target?.parent ?? null;
   const base = parent === null ? { x: 0, y: 0 } : anchor(parent);
+  const table = parent?.table ?? null;
+  const cell = table === null ? null : (target?.cell ?? null);
+  const rect = table === null || cell === null ? null : cellRect(table, cell);
   const parentId = parent?.id ?? null;
   const siblings = scene.filter(
     (o) => o.parent === parentId && o.id !== object.id,
   );
   map.set("parent", parentId);
-  map.set("x", at.x - base.x);
-  map.set("y", at.y - base.y);
+  if (cell === null) map.delete("cell");
+  else map.set("cell", cell);
+  map.set("x", at.x - base.x - (rect?.x ?? 0));
+  map.set("y", at.y - base.y - (rect?.y ?? 0));
   map.set("z", Math.max(0, ...siblings.map((o) => o.z)) + 1);
   touch(map, actor);
 }
@@ -284,14 +322,14 @@ export function frameResizeGesture(
 }
 
 /**
- * Масштаб нескольких объектов (CVS-14): объекты внутри выделенного фрейма не
+ * Масштаб нескольких объектов (CVS-14): объекты внутри выделенного фрейма или таблицы не
  * масштабируются отдельно — они в его системе координат и едут вместе с ним.
  */
 export function scaledLeaves(
   scene: readonly SceneObject[],
   leaves: readonly SceneObject[],
 ): SceneObject[] {
-  const frames = new Set(leaves.filter(isFrame).map((o) => o.id));
+  const frames = new Set(leaves.filter(isContainer).map((o) => o.id));
   return leaves.filter(
     (o) =>
       o.type !== GROUP_TYPE &&

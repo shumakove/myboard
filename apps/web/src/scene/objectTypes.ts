@@ -4,8 +4,8 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
  * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
  * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01), фрейм (T6.6,
- * `frames.ts`, FRM-01…FRM-05). Остальные типы из раздела объектов требований добавляют
- * задачи T6.*, T7.* — тем же описанием.
+ * `frames.ts`, FRM-01…FRM-05), таблица (T6.7, `tables.ts`, TBL-01…TBL-07). Остальные типы
+ * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType =
   | "sticky"
@@ -15,7 +15,8 @@ export type ObjectType =
   | "stack"
   | "line"
   | "drawing"
-  | "frame";
+  | "frame"
+  | "table";
 
 /** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
 export type PlaceableType = Exclude<ObjectType, "drawing">;
@@ -212,6 +213,18 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     rotatable: false,
     editable: false,
     style: { appearance: "fill", fill: "#ffffff" },
+  },
+  // TBL-01…TBL-05: таблица — столбцы, строки и ячейки (`tableData.ts`); размер рамки —
+  // сумма их размеров (3×3 по 160×48). Оформление — у ячеек, текст — в ячейках.
+  table: {
+    type: "table",
+    label: "Table",
+    plural: "tables",
+    width: 480,
+    height: 144,
+    rotatable: false,
+    editable: false,
+    style: {},
   },
 };
 

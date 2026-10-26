@@ -8,6 +8,7 @@ import {
   parseClip,
 } from "./clipboard";
 import { historyKey, toolKey } from "./keymap";
+import { tabularGrid, type Grid } from "./tableExchange";
 import type { ToolId } from "./tools";
 import type { UndoHistory } from "./undoHistory";
 import type { SceneCommands } from "./useSceneCommands";
@@ -34,7 +35,7 @@ export function copyToClipboard(commands: SceneCommands, cut: boolean): void {
 }
 
 /** Пока открыт модальный диалог (полный список инструментов, Share), клавиши — его. */
-function dialogOpen(): boolean {
+export function dialogOpen(): boolean {
   return document.querySelector('[aria-modal="true"]') !== null;
 }
 
@@ -42,6 +43,8 @@ export interface ShortcutActions {
   onEscape: () => void;
   onTool: (tool: ToolId) => void;
   history: UndoHistory;
+  /** TBL-06, TBL-07: из буфера пришла внешняя таблица — спросить, как вставить. */
+  onTable: (grid: Grid) => void;
 }
 
 /**
@@ -55,11 +58,13 @@ export interface ShortcutActions {
  *   работает копия в браузере;
  * - CVS-09: простой текст из буфера становится текстовым объектом;
  * - TXT-07: копия текста — ещё и HTML с форматированием для внешних редакторов;
- * - TXT-08: HTML внешнего документа — текстовый объект с базовым форматированием.
+ * - TXT-08: HTML внешнего документа — текстовый объект с базовым форматированием;
+ * - TBL-06: копия таблицы — текст с табуляцией и HTML-таблица; внешняя таблица из буфера
+ *   (TSV или HTML `<table>`) вставляется таблицей или стикерами по выбору (TBL-07).
  */
 export function useSceneShortcuts(
   commands: SceneCommands,
-  { onEscape, onTool, history }: ShortcutActions,
+  { onEscape, onTool, history, onTable }: ShortcutActions,
 ): void {
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,11 +142,17 @@ export function useSceneShortcuts(
       clearFallback();
       const data = event.clipboardData;
       const clip = parseClip(data?.getData(CLIPBOARD_MIME));
-      const text = data?.getData("text/plain").trim() ?? "";
+      const raw = data?.getData("text/plain") ?? "";
+      const text = raw.trim();
       const html = data?.getData("text/html") ?? "";
       if (clip === null && !text && !html) return;
       event.preventDefault();
-      if (clip !== null) commands.paste(clip);
+      if (clip !== null) {
+        commands.paste(clip);
+        return;
+      }
+      const grid = tabularGrid(raw, html);
+      if (grid !== null) onTable(grid);
       else commands.pasteText(text, html);
     }
 
@@ -155,7 +166,7 @@ export function useSceneShortcuts(
       window.removeEventListener("cut", copyOrCut);
       window.removeEventListener("paste", paste);
     };
-  }, [commands, onEscape, onTool, history]);
+  }, [commands, onEscape, onTool, history, onTable]);
 
   useEffect(
     () => () => {

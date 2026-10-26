@@ -114,7 +114,6 @@ describe("FRM-01: объекты внутри фрейма", () => {
     const b = createObject(objects, "sticky", { x: 1300, y: 300 });
     const group = groupObjects(
       objects,
-      readScene(objects),
       readScene(objects).filter((o) => o.id === a || o.id === b),
       "Alice",
     );

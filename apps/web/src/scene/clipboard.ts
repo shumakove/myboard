@@ -8,6 +8,8 @@ import { topmost, withDescendants } from "./groups";
 import { isRichText } from "./objectTypes";
 import { readEnd, type LineEnd } from "./connectors";
 import { labelsValue } from "./lineEdits";
+import { readTable, tableFieldValue, tableGrid } from "./tableData";
+import { gridToHtml, gridToTsv } from "./tableExchange";
 import {
   creationMeta,
   isNumber,
@@ -22,7 +24,8 @@ import {
  * и между досками. Копия — JSON полей объектов: корни с координатами доски, вложенные
  * объекты групп — относительно своего родителя. Текст с форматированием (текст
  * и документ, TXT-01…TXT-06) копируется дельтой, остальной текст — строкой.
- * TXT-07: для внешних редакторов копия — ещё и HTML с форматированием и простой текст.
+ * TXT-07: для внешних редакторов копия — ещё и HTML с форматированием и простой текст;
+ * TBL-06: таблица — текстом с табуляцией и HTML-таблицей для электронных таблиц.
  */
 
 /** Тип данных копии в системном буфере обмена (событие copy/paste). */
@@ -92,6 +95,7 @@ export function copyObjects(
       // Корень — в координатах доски: у группы это начало координат её объектов.
       fields.x = object.x - object.offset.x;
       fields.y = object.y - object.offset.y;
+      delete fields.cell;
     }
     return [{ id: object.id, parent: root ? null : object.parent, fields }];
   });
@@ -138,31 +142,48 @@ function textOf(object: ClipObject): DeltaOp[] | null {
   return parseDelta(text);
 }
 
-/** Простой текст копии — для вставки в другие программы (CVS-20, TXT-07). */
+/** TBL-06: текст таблицы из копии сеткой; не таблица — `null`. */
+function gridOf(object: ClipObject): string[][] | null {
+  const table =
+    object.fields.type === "table" ? readTable(object.fields) : null;
+  return table === null ? null : tableGrid(table);
+}
+
+/**
+ * Простой текст копии — для вставки в другие программы (CVS-20, TXT-07); таблица —
+ * строками с табуляцией между ячейками (TBL-06).
+ */
 export function clipText(
   clip: Clip,
   label: (id: string) => string = () => "",
 ): string {
   return clip.objects
-    .map(textOf)
-    .filter((delta) => delta !== null)
-    .map((delta) => plainText(delta, label).replace(/\n+$/, ""))
+    .map((object) => {
+      const grid = gridOf(object);
+      if (grid !== null) return gridToTsv(grid);
+      const delta = textOf(object);
+      return delta === null ? "" : plainText(delta, label).replace(/\n+$/, "");
+    })
     .filter((text) => text !== "")
     .join("\n");
 }
 
 /**
  * TXT-07: копия как HTML — заголовки, списки, ссылки и начертание сохраняются при
- * вставке во внешний редактор; текст каждого объекта — своими абзацами.
+ * вставке во внешний редактор; текст каждого объекта — своими абзацами. TBL-06: таблица —
+ * HTML-таблицей.
  */
 export function clipHtml(
   clip: Clip,
   label: (id: string) => string = () => "",
 ): string {
   return clip.objects
-    .map(textOf)
-    .filter((delta) => delta !== null)
-    .map((delta) => deltaToHtml(delta, label))
+    .map((object) => {
+      const grid = gridOf(object);
+      if (grid !== null) return gridToHtml(grid);
+      const delta = textOf(object);
+      return delta === null ? "" : deltaToHtml(delta, label);
+    })
     .join("");
 }
 
@@ -212,8 +233,17 @@ function isRect(value: unknown): value is Rect {
 export type PastePlace =
   /** Центр копии — в точку доски, угол прилипает к сетке. */
   | { kind: "at"; point: Point; gridStep: number }
-  /** Рядом с оригиналом (дублирование) — в том же родителе. */
-  | { kind: "offset"; offset: Point; parent: SceneObject | null };
+  /**
+   * Рядом с оригиналом (дублирование) — в том же родителе и ячейке таблицы; `origin` —
+   * начало координат родителя на доске.
+   */
+  | {
+      kind: "offset";
+      offset: Point;
+      parent: string | null;
+      cell: string | null;
+      origin: Point;
+    };
 
 /**
  * CVS-20: вставка копии новыми объектами поверх остальных. Автор и даты — у вставившего
@@ -228,6 +258,7 @@ export function pasteObjects(
   const ids = new Map(clip.objects.map((o) => [o.id, newObjectId()]));
   let shift: Point;
   let parent: string | null = null;
+  let cell: string | null = null;
   let parentAnchor: Point = { x: 0, y: 0 };
   if (place.kind === "at") {
     const { bounds } = clip;
@@ -238,11 +269,9 @@ export function pasteObjects(
   } else {
     shift = place.offset;
     if (place.parent !== null) {
-      parent = place.parent.id;
-      parentAnchor = {
-        x: place.parent.x - place.parent.offset.x,
-        y: place.parent.y - place.parent.offset.y,
-      };
+      parent = place.parent;
+      cell = place.cell;
+      parentAnchor = place.origin;
     }
   }
   const roots: string[] = [];
@@ -264,6 +293,7 @@ export function pasteObjects(
         map.set("x", Number(source.fields.x) + shift.x - parentAnchor.x);
         map.set("y", Number(source.fields.y) + shift.y - parentAnchor.y);
         map.set("z", z++);
+        if (cell !== null) map.set("cell", cell);
         roots.push(id);
       }
       map.set("parent", root ? parent : sourceParent);
@@ -286,6 +316,9 @@ function fieldValue(
   if (key === "text") return textField(value);
   if (key === "labels") return labelsValue(value);
   if (key === "start" || key === "end") return pastedEnd(value, ids);
+  // T6.7: столбцы, строки, размеры и ячейки таблицы.
+  const table = tableFieldValue(key, value);
+  if (table !== undefined) return table;
   if (key === "tags" && Array.isArray(value)) {
     const tags = new Y.Array<unknown>();
     tags.push(value.filter((tag) => typeof tag === "string"));

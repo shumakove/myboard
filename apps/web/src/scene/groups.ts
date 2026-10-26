@@ -104,13 +104,18 @@ export function enterGroup(
   return chain[chain.indexOf(target) - 1] ?? null;
 }
 
-/** Группировать можно два и больше незаблокированных объекта одного родителя. */
+/**
+ * Группировать можно два и больше незаблокированных объекта одного родителя (и одной
+ * ячейки таблицы, TBL-05).
+ */
 export function canGroup(units: readonly SceneObject[]): boolean {
   const [first] = units;
   return (
     first !== undefined &&
     units.length > 1 &&
-    units.every((o) => o.parent === first.parent && !o.locked)
+    units.every(
+      (o) => o.parent === first.parent && o.cell === first.cell && !o.locked,
+    )
   );
 }
 
@@ -125,21 +130,21 @@ function anchor(object: SceneObject) {
  */
 export function groupObjects(
   objects: Y.Map<unknown>,
-  scene: readonly SceneObject[],
   units: readonly SceneObject[],
   actor: string,
 ): string | null {
   const [first] = units;
   const bounds = boundsOf(units);
   if (first === undefined || bounds === null || !canGroup(units)) return null;
-  const parent = scene.find((o) => o.id === first.parent);
-  const parentAnchor = parent ? anchor(parent) : { x: 0, y: 0 };
+  // Начало координат родителя (у ячейки таблицы — её угол).
+  const parentAnchor = first.origin;
   const members = [...units].sort((a, b) => a.z - b.z);
   const id = newObjectId();
   transact(objects, () => {
     const group = new Y.Map<unknown>();
     group.set("type", GROUP_TYPE);
     group.set("parent", first.parent);
+    if (first.cell !== null) group.set("cell", first.cell);
     group.set("x", bounds.x - parentAnchor.x);
     group.set("y", bounds.y - parentAnchor.y);
     group.set("width", bounds.width);
@@ -187,6 +192,8 @@ export function ungroupObjects(
         if (map === null) continue;
         const at = anchor(member);
         map.set("parent", group.parent);
+        if (group.cell === null) map.delete("cell");
+        else map.set("cell", group.cell);
         map.set("x", at.x - group.origin.x);
         map.set("y", at.y - group.origin.y);
         touch(map, actor);

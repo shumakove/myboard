@@ -16,6 +16,15 @@ import { shapeKind, shapeMarker } from "./shapes";
 import { ShapeView } from "./ShapeView";
 import { LineView, type LabelState } from "./LineView";
 import { DrawingView } from "./DrawingView";
+import { TableView, type TableCellsState } from "./TableView";
+
+/** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
+export interface TableLayerState {
+  /** Таблица с выделенными ячейками и сами ячейки. */
+  cells: { table: string; state: TableCellsState } | null;
+  /** Таблица, у которой показаны маркеры ширины столбцов и высоты строк (TBL-01). */
+  handles: string | null;
+}
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
 export interface RichTextHandlers {
@@ -33,6 +42,7 @@ export interface RichTextHandlers {
  * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04). Рисунок — штрих SVG
  * (T6.5, DRW-01, DRW-06). Фрейм — рамка своего оформления (FRM-02); со скрытым
  * содержимым — с пометкой Content hidden, а его объектов в списке нет (FRM-04).
+ * Таблица — ячейки с оформлением и маркеры границ (T6.7, TBL-01…TBL-04).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -41,6 +51,7 @@ export function SceneLayer({
   editing,
   rich,
   label = null,
+  tables = null,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
@@ -48,6 +59,7 @@ export function SceneLayer({
   rich: RichTextHandlers;
   /** CON-03: выбранная или редактируемая подпись линии. */
   label?: LabelState | null;
+  tables?: TableLayerState | null;
 }) {
   return (
     <>
@@ -59,6 +71,8 @@ export function SceneLayer({
           editing={editing === object.id}
           rich={rich}
           label={label?.line === object.id ? label : null}
+          cells={tables?.cells?.table === object.id ? tables.cells.state : null}
+          handles={tables?.handles === object.id}
         />
       ))}
     </>
@@ -71,12 +85,16 @@ function SceneObjectView({
   editing,
   rich,
   label,
+  cells,
+  handles,
 }: {
   object: SceneObject;
   selected: boolean;
   editing: boolean;
   rich: RichTextHandlers;
   label: LabelState | null;
+  cells: TableCellsState | null;
+  handles: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const group = object.type === GROUP_TYPE;
@@ -119,6 +137,8 @@ function SceneObjectView({
         <LineView object={object} label={label} />
       ) : object.drawing ? (
         <DrawingView object={object} />
+      ) : object.table ? (
+        <TableView object={object} cells={cells} handles={handles} />
       ) : object.frameOptions ? (
         object.frameOptions.contentHidden && (
           <span className="frame-hidden-note">Content hidden</span>

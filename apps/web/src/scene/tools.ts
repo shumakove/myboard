@@ -41,6 +41,7 @@ const CREATE_KEYS: Record<PlaceableType, string> = {
   stack: "KeyK",
   line: "KeyC",
   frame: "KeyF",
+  table: "KeyB",
 };
 
 /** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
@@ -50,6 +51,9 @@ function createHint(type: PlaceableType, label: string): string {
   }
   if (type === "frame") {
     return "Click the board to add a frame. Objects inside it or dropped into it move with the frame.";
+  }
+  if (type === "table") {
+    return "Click the board to add a table. Click a cell to select it, double-click to type; arrow keys move between cells.";
   }
   return `Click the board or drag this button onto it to add a ${label.toLowerCase()}.`;
 }

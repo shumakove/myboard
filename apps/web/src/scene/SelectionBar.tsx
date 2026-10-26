@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LineControls, type LineActions } from "./LineControls";
+import { TableControls, type TableActions } from "./TableControls";
 import {
   MORE_TEXT_KEYS,
   typeName,
@@ -82,7 +83,10 @@ export interface AuthorToggle {
  *   (CVS-26), подписи и их оформление (CON-03, CON-04);
  * - T6.6: у фрейма — оформление и цвет (FRM-02), Keep proportions (FRM-03), Hide content /
  *   Show content и у заблокированного (FRM-04), Lock — с выбором Frame only или Frame
- *   and content (FRM-05).
+ *   and content (FRM-05);
+ * - T6.7: у таблицы — оформление и заливка выделенных ячеек (TBL-02, TBL-03), Merge cells /
+ *   Unmerge cells (TBL-03), Edit cell (TBL-04), Rows & columns — добавить и удалить строки
+ *   и столбцы, ширина столбца и высота строки (TBL-01).
  */
 export function SelectionBar({
   selected,
@@ -101,6 +105,7 @@ export function SelectionBar({
   colors,
   line = null,
   frame = null,
+  table = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -119,6 +124,7 @@ export function SelectionBar({
   colors?: ColorActions;
   line?: LineActions | null;
   frame?: FrameActions | null;
+  table?: TableActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -248,6 +254,7 @@ export function SelectionBar({
       )}
       {tags && tagsOpen && <TagEditor tags={tags} />}
       {line && <LineControls line={line} />}
+      {table && <TableControls table={table} />}
       {frame?.keepRatio && (
         <Switch
           label="Keep proportions"

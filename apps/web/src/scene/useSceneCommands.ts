@@ -49,6 +49,8 @@ import {
 import { estimateHeight } from "./textHeight";
 import { loadTextStyle, rememberTextStyle } from "./textStyle";
 import { placement } from "./tools";
+import { pasteTableGrid, stickiesFromGrid } from "./tables";
+import type { Grid } from "./tableExchange";
 
 /** Команды над выделенным; `null` — команда сейчас недоступна. */
 export interface SceneCommands {
@@ -65,6 +67,10 @@ export interface SceneCommands {
    * с базовым форматированием.
    */
   pasteText: (text: string, html?: string) => void;
+  /** TBL-06: данные внешней таблицы — таблицей. */
+  pasteTable: (grid: Grid) => void;
+  /** TBL-07: данные внешней таблицы — набором стикеров. */
+  pasteStickies: (grid: Grid) => void;
   duplicate: (() => void) | null;
   align: ((op: AlignOp) => void) | null;
   distribute: ((axis: Axis) => void) | null;
@@ -222,9 +228,14 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         // Оценка не знает переносов строк — точную высоту даёт отрисовка.
         onTextLayout?.([id]);
       },
+      pasteTable: (grid) => {
+        select([pasteTableGrid(objects, grid, pastePoint(), gridStep, actor)]);
+      },
+      pasteStickies: (grid) => {
+        select(stickiesFromGrid(objects, grid, pastePoint(), gridStep, actor));
+      },
       duplicate: when(units.length > 0, () => {
-        const current = readScene(objects);
-        const clip = copyObjects(objects, current, selection);
+        const clip = copyObjects(objects, readScene(objects), selection);
         if (clip === null) return;
         // Дубликат — рядом с оригиналом, в той же группе.
         const [first] = units;
@@ -232,13 +243,20 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
           first !== undefined && units.every((o) => o.parent === first.parent)
             ? first.parent
             : null;
-        const parent = current.find((o) => o.id === parentId) ?? null;
+        const cell =
+          first !== undefined && units.every((o) => o.cell === first.cell)
+            ? first.cell
+            : null;
         const offset = { x: DUPLICATE_OFFSET, y: DUPLICATE_OFFSET };
+        const place =
+          parentId !== null && first !== undefined
+            ? { parent: parentId, cell, origin: first.origin }
+            : { parent: null, cell: null, origin: { x: 0, y: 0 } };
         select(
           pasteObjects(
             objects,
             clip,
-            { kind: "offset", offset, parent },
+            { kind: "offset", offset, ...place },
             actor,
           ),
         );
@@ -262,7 +280,7 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         writeFields(objects, changes, actor);
       }),
       group: when(canGroup(units), () => {
-        const id = groupObjects(objects, scene, units, actor);
+        const id = groupObjects(objects, units, actor);
         if (id !== null) select([id]);
       }),
       ungroup: when(groups.length > 0, () => {

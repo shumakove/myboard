@@ -1,4 +1,9 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import type * as Y from "yjs";
 import { objectStyle } from "./objectStyle";
 import type { SceneObject } from "./sceneObjects";
@@ -14,6 +19,9 @@ export function TextEditor({
   text,
   style,
   label = "Object text",
+  className = "",
+  caretAtEnd = false,
+  onKeyDown,
   onEdit,
   onDone,
 }: {
@@ -23,19 +31,31 @@ export function TextEditor({
   label?: string;
   /** Положение и вид поля; по умолчанию — рамка объекта (у фигуры — область текста). */
   style?: CSSProperties;
+  /** Дополнительный класс поля (ячейка таблицы). */
+  className?: string;
+  /** Курсор — в конец текста, а не выделение всего текста (ячейка таблицы, TBL-04). */
+  caretAtEnd?: boolean;
+  /** Клавиши поля до обработки Escape; `preventDefault` отменяет поведение поля. */
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   /** Отметка «изменил» (CVS-22) — в той же транзакции, что и правка текста. */
   onEdit?: () => void;
   onDone: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const shown = useRef(text.toJSON());
+  // Способ выделения важен только при открытии поля.
+  const atEnd = useRef(caretAtEnd);
 
   useEffect(() => {
     const field = ref.current;
     if (field === null) return;
     field.value = shown.current;
     field.focus();
-    field.select();
+    if (atEnd.current) {
+      field.setSelectionRange(field.value.length, field.value.length);
+    } else {
+      field.select();
+    }
     const remote = (event: Y.YTextEvent, transaction: Y.Transaction) => {
       if (transaction.local) return;
       const start = shiftIndex(field.selectionStart, event.delta);
@@ -53,7 +73,7 @@ export function TextEditor({
   return (
     <textarea
       ref={ref}
-      className={`scene-object scene-${object.type} scene-editor`}
+      className={`scene-object scene-${object.type} scene-editor ${className}`.trim()}
       aria-label={label}
       data-canvas-ignore=""
       style={style ?? objectStyle(object)}
@@ -68,6 +88,8 @@ export function TextEditor({
         shown.current = value;
       }}
       onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented) return;
         if (event.key === "Escape") onDone();
       }}
       onBlur={onDone}
