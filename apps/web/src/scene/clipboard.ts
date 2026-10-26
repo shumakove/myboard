@@ -10,6 +10,8 @@ import { readEnd, type LineEnd } from "./connectors";
 import { labelsValue } from "./lineEdits";
 import { readTable, tableFieldValue, tableGrid } from "./tableData";
 import { gridToHtml, gridToTsv } from "./tableExchange";
+import { kanbanFieldValue } from "./kanbanData";
+
 import {
   creationMeta,
   isNumber,
@@ -316,9 +318,11 @@ function fieldValue(
   if (key === "text") return textField(value);
   if (key === "labels") return labelsValue(value);
   if (key === "start" || key === "end") return pastedEnd(value, ids);
-  // T6.7: столбцы, строки, размеры и ячейки таблицы.
+  // T6.7: столбцы, строки, размеры и ячейки таблицы; T6.8: столбцы и названия канбана.
   const table = tableFieldValue(key, value);
   if (table !== undefined) return table;
+  const kanban = kanbanFieldValue(key, value);
+  if (kanban !== undefined) return kanban;
   if (key === "tags" && Array.isArray(value)) {
     const tags = new Y.Array<unknown>();
     tags.push(value.filter((tag) => typeof tag === "string"));

@@ -26,6 +26,12 @@ import {
   type TableShape,
 } from "./tableData";
 import {
+  columnRect,
+  KANBAN_TYPE,
+  readKanban,
+  type KanbanShape,
+} from "./kanbanData";
+import {
   GROUP_TYPE,
   isRichText,
   OBJECT_TYPES,
@@ -95,9 +101,12 @@ export interface SceneObject extends Frame {
   hidden: boolean;
   /** Таблица (T6.7): столбцы, строки и ячейки; у остальных типов `null`. */
   table: TableShape | null;
+  /** Канбан (T6.8): столбцы и их названия; у остальных типов `null`. */
+  kanban: KanbanShape | null;
   /**
-   * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; его `x`, `y`
-   * в документе — относительно левого верхнего угла ячейки. Вне таблицы — `null`.
+   * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; KBN-02: id
+   * столбца канбана-родителя, в котором лежит карточка. `x`, `y` объекта в документе —
+   * относительно левого верхнего угла ячейки или столбца. Вне таблицы и канбана — `null`.
    */
   cell: string | null;
 }
@@ -163,7 +172,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
     const kids: SceneObject[] = [];
     for (const child of sorted(children.get(object.id))) {
       const before = scene.length;
-      const shift = cellOffset(object.table, child.cell);
+      const shift = slotOffset(object, child.cell);
       visit(
         child,
         { x: position.x + shift.x, y: position.y + shift.y },
@@ -185,9 +194,13 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       frame = { ...bounds, rotation: 0 };
     }
     // TBL-01: рамка таблицы — сумма ширин столбцов и высот строк.
-    const { table } = object;
+    const { table, kanban } = object;
     if (table !== null) {
       frame = { ...frame, width: table.width, height: table.height };
+    }
+    // KBN-01: ширина канбана — по числу столбцов.
+    if (kanban !== null) {
+      frame = { ...frame, width: kanban.width, height: kanban.height };
     }
     // CVS-26: привязанный конец линии — в точке привязки объекта, где бы тот ни был.
     const line =
@@ -213,13 +226,16 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       drawing,
       cell,
     } = object;
-    // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек.
+    // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек, канбан —
+    // по названиям столбцов.
     const text =
       line !== null
         ? line.labels.map((l) => l.text).join("\n")
         : table !== null
           ? [...table.cells.values()].map((c) => c.text).join("\n")
-          : object.text;
+          : kanban !== null
+            ? kanban.columns.map((c) => c.title).join("\n")
+            : object.text;
     scene.splice(at, 0, {
       id,
       type,
@@ -243,6 +259,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
           : { ...frameFields, contentLocked: kidsLocked },
       hidden,
       table,
+      kanban,
       cell,
     });
   };
@@ -267,7 +284,8 @@ function connectableFrames(
     const parentId = parents.get(object.id) ?? null;
     const parent = parentId === null ? undefined : raw.get(parentId);
     const base = parent === undefined ? { x: 0, y: 0 } : positionOf(parent);
-    const shift = cellOffset(parent?.table ?? null, object.cell);
+    const shift =
+      parent === undefined ? ORIGIN : slotOffset(parent, object.cell);
     const position = {
       x: base.x + shift.x + object.x,
       y: base.y + shift.y + object.y,
@@ -278,21 +296,40 @@ function connectableFrames(
   const frames = new Map<string, Frame>();
   for (const object of raw.values()) {
     if (!isConnectable(object.type)) continue;
-    const { rotation, table } = object;
-    const width = table?.width ?? object.width;
-    const height = table?.height ?? object.height;
+    const { rotation, table, kanban } = object;
+    const width = table?.width ?? kanban?.width ?? object.width;
+    const height = table?.height ?? kanban?.height ?? object.height;
     frames.set(object.id, { ...positionOf(object), width, height, rotation });
   }
   return frames;
 }
 
+const ORIGIN: Point = { x: 0, y: 0 };
+
+/** Родитель с местами для объектов: ячейки таблицы и столбцы канбана. */
+type SlotParent = Pick<SceneObject, "table" | "kanban">;
+
 /**
- * TBL-05: сдвиг начала координат объекта в ячейке от угла таблицы. Ячейки, которой больше
- * нет (строку удалили одновременно), — угол таблицы.
+ * Место объекта в родителе — ячейка таблицы (TBL-05) или столбец канбана (KBN-02),
+ * относительно угла родителя; у фрейма и группы мест нет — `null`.
  */
-function cellOffset(table: TableShape | null, cell: string | null): Point {
-  const rect = table === null || cell === null ? null : cellRect(table, cell);
-  return rect === null ? { x: 0, y: 0 } : { x: rect.x, y: rect.y };
+export function slotRect(
+  parent: SlotParent,
+  cell: string | null,
+): { x: number; y: number; width: number; height: number } | null {
+  if (cell === null) return null;
+  if (parent.table !== null) return cellRect(parent.table, cell);
+  if (parent.kanban !== null) return columnRect(parent.kanban, cell);
+  return null;
+}
+
+/**
+ * Сдвиг начала координат объекта в ячейке или столбце от угла родителя. Места, которого
+ * больше нет (строку или столбец удалили одновременно), — угол родителя.
+ */
+function slotOffset(parent: SlotParent, cell: string | null): Point {
+  const rect = slotRect(parent, cell);
+  return rect === null ? ORIGIN : { x: rect.x, y: rect.y };
 }
 
 function sorted(list: RawObject[] | undefined): RawObject[] {
@@ -360,6 +397,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     drawing: type === "drawing" ? readDrawing(record, width, height) : null,
     frameFields: type === FRAME_TYPE ? readFrameFields(record) : null,
     table: type === TABLE_TYPE ? readTable(record) : null,
+    kanban: type === KANBAN_TYPE ? readKanban(record) : null,
     cell: typeof record.cell === "string" ? record.cell : null,
   };
 }
@@ -581,12 +619,15 @@ export function patchObjects(
 
 /**
  * Поле рамки, которое вычисляется, а не хранится: размер группы — по её объектам,
- * размер и поворот линии — по её точкам (T6.4), размер таблицы — по столбцам и строкам.
+ * размер и поворот линии — по её точкам (T6.4), размер таблицы — по столбцам и строкам,
+ * ширина канбана — по числу столбцов (T6.8).
  */
 function derivedFrame(type: string, key: string): boolean {
   if (type === GROUP_TYPE || type === TABLE_TYPE) {
     return key === "width" || key === "height";
   }
+  if (type === KANBAN_TYPE) return key === "width";
+
   if (type === "line") {
     return key === "width" || key === "height" || key === "rotation";
   }

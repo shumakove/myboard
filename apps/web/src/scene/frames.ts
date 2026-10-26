@@ -15,11 +15,15 @@ import {
 } from "./geometry";
 import type { Gesture } from "./gestures";
 import { ancestors } from "./groups";
-import { cellAt, cellRect } from "./tableData";
+import { cellAt } from "./tableData";
+import { CARD_TYPE, columnAt } from "./kanbanData";
+import { arrangeKanbans, kanbansOf } from "./kanbans";
 import {
   GROUP_TYPE,
   objectMap,
   patchObjects,
+  readScene,
+  slotRect,
   touch,
   transact,
   writeFields,
@@ -44,16 +48,19 @@ function anchor(object: SceneObject): Point {
   return { x: object.x - object.offset.x, y: object.y - object.offset.y };
 }
 
-/** Куда попадает объект: фрейм (FRM-01) или ячейка таблицы (TBL-05). */
+/**
+ * Куда попадает объект: фрейм (FRM-01), ячейка таблицы (TBL-05) или столбец канбана
+ * (KBN-02).
+ */
 export interface Container {
   parent: SceneObject;
-  /** Ключ ячейки таблицы; у фрейма — `null`. */
+  /** Ключ ячейки таблицы или id столбца канбана; у фрейма — `null`. */
   cell: string | null;
 }
 
-/** Фрейм или таблица — у них есть содержимое, которое двигается вместе с ними. */
+/** Фрейм, таблица или канбан — их содержимое двигается вместе с ними. */
 function isContainer(object: SceneObject): boolean {
-  return isFrame(object) || object.table !== null;
+  return isFrame(object) || object.table !== null || object.kanban !== null;
 }
 
 /**
@@ -70,9 +77,11 @@ function movable(object: SceneObject, byId: ReadonlyMap<string, SceneObject>) {
 }
 
 /**
- * Куда попадает объект: верхний из фреймов и ячеек таблиц, внутри которых его центр.
- * Фрейм со скрытым содержимым (FRM-04) и заблокированный вместе с содержимым (FRM-05),
- * заблокированная таблица новых объектов не принимают; таблица в таблицу не попадает.
+ * Куда попадает объект: верхний из фреймов, ячеек таблиц и столбцов канбанов, внутри
+ * которых его центр. Фрейм со скрытым содержимым (FRM-04) и заблокированный вместе
+ * с содержимым (FRM-05), заблокированные таблица и канбан новых объектов не принимают;
+ * таблица и канбан в ячейку таблицы не попадают; в столбец канбана попадают только
+ * карточки (KBN-02).
  */
 export function containerUnder(
   scene: readonly SceneObject[],
@@ -86,31 +95,43 @@ export function containerUnder(
     if (target === undefined || target.id === object.id || target.hidden) {
       continue;
     }
-    const options = target.frameOptions;
-    const table = target.table;
-    if (options !== null) {
-      if (options.contentHidden || options.contentLocked) continue;
-    } else if (table === null || target.locked || object.table !== null) {
-      continue;
-    }
     if (ancestors(scene, target.id).some((a) => a.id === object.id)) continue;
-    if (table === null) {
-      if (rectContains(target, point)) return { parent: target, cell: null };
-      continue;
-    }
-    const cell = cellAt(table, {
-      x: point.x - target.x,
-      y: point.y - target.y,
-    });
-    if (cell !== null) return { parent: target, cell };
+    const found = slotUnder(target, object, point);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** Место в объекте `target` под точкой `point` для объекта `object`; нет — `null`. */
+function slotUnder(
+  target: SceneObject,
+  object: SceneObject,
+  point: Point,
+): Container | null {
+  const options = target.frameOptions;
+  if (options !== null) {
+    if (options.contentHidden || options.contentLocked) return null;
+    return rectContains(target, point) ? { parent: target, cell: null } : null;
+  }
+  if (target.locked) return null;
+  const local = { x: point.x - target.x, y: point.y - target.y };
+  if (target.table !== null) {
+    if (object.table !== null || object.kanban !== null) return null;
+    const cell = cellAt(target.table, local);
+    return cell === null ? null : { parent: target, cell };
+  }
+  if (target.kanban !== null && object.type === CARD_TYPE) {
+    const column = columnAt(target.kanban, local);
+    return column === null ? null : { parent: target, cell: column };
   }
   return null;
 }
 
 /**
- * FRM-01, TBL-05: объекты `ids` переходят во фрейм или ячейку таблицы под своим центром
- * или выходят из них на верхний уровень; на доске они остаются на месте и встают поверх
- * новых соседей.
+ * FRM-01, TBL-05, KBN-02: объекты `ids` переходят во фрейм, ячейку таблицы или столбец
+ * канбана под своим центром или выходят из них на верхний уровень; на доске они остаются
+ * на месте и встают поверх новых соседей. Карточки канбанов, откуда объекты ушли и куда
+ * пришли, выстраиваются по порядку.
  */
 export function placeInFrames(
   objects: Y.Map<unknown>,
@@ -119,8 +140,10 @@ export function placeInFrames(
   actor: string,
 ): void {
   const byId = new Map(scene.map((o) => [o.id, o]));
+  const list = [...ids];
+  const kanbans = kanbansOf(scene, list);
   transact(objects, () => {
-    for (const id of ids) {
+    for (const id of list) {
       const object = byId.get(id);
       if (object === undefined || !movable(object, byId)) continue;
       const target = containerUnder(scene, object);
@@ -129,6 +152,8 @@ export function placeInFrames(
       if (parent === object.parent && cell === object.cell) continue;
       reparent(objects, scene, object, target, actor);
     }
+    for (const id of kanbansOf(readScene(objects), list)) kanbans.add(id);
+    arrangeKanbans(objects, kanbans, actor);
   });
 }
 
@@ -166,8 +191,8 @@ export function adoptContained(
 }
 
 /**
- * Объект переходит к новому родителю — фрейму, ячейке таблицы (TBL-05) или на верхний
- * уровень (`null`) — без сдвига на доске.
+ * Объект переходит к новому родителю — фрейму, ячейке таблицы (TBL-05), столбцу канбана
+ * (KBN-02) или на верхний уровень (`null`) — без сдвига на доске.
  */
 export function reparent(
   objects: Y.Map<unknown>,
@@ -181,9 +206,8 @@ export function reparent(
   const at = anchor(object);
   const parent = target?.parent ?? null;
   const base = parent === null ? { x: 0, y: 0 } : anchor(parent);
-  const table = parent?.table ?? null;
-  const cell = table === null ? null : (target?.cell ?? null);
-  const rect = table === null || cell === null ? null : cellRect(table, cell);
+  const rect = parent === null ? null : slotRect(parent, target?.cell ?? null);
+  const cell = rect === null ? null : (target?.cell ?? null);
   const parentId = parent?.id ?? null;
   const siblings = scene.filter(
     (o) => o.parent === parentId && o.id !== object.id,
@@ -322,9 +346,10 @@ export function frameResizeGesture(
 }
 
 /**
- * Масштаб нескольких объектов (CVS-14): объекты внутри выделенного фрейма или таблицы не
- * масштабируются отдельно — они в его системе координат и едут вместе с ним.
+ * Масштаб нескольких объектов (CVS-14): объекты внутри выделенного фрейма, таблицы или
+ * канбана не масштабируются отдельно — они в его системе координат и едут вместе с ним.
  */
+
 export function scaledLeaves(
   scene: readonly SceneObject[],
   leaves: readonly SceneObject[],

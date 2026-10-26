@@ -90,6 +90,10 @@ export interface SceneControls {
   selectCell: (table: string, cell: string, extend: boolean) => void;
   /** TBL-04: открыть ячейку таблицы для ввода текста. */
   editCell: (table: string, cell: string) => void;
+  /** KBN-03: выбрать столбец канбана (действия со столбцом — в панели выделения). */
+  selectColumn: (kanban: string, column: string) => void;
+  /** KBN-03: открыть название столбца канбана для правки. */
+  editColumn: (kanban: string, column: string) => void;
 }
 
 function hit(target: EventTarget | null): {
@@ -97,12 +101,23 @@ function hit(target: EventTarget | null): {
   handle: string | null;
   label: string | null;
   cell: string | null;
+  column: string | null;
 } {
   if (!(target instanceof Element)) {
-    return { objectId: null, handle: null, label: null, cell: null };
+    return {
+      objectId: null,
+      handle: null,
+      label: null,
+      cell: null,
+      column: null,
+    };
   }
   return {
     cell: target.closest("[data-cell]")?.getAttribute("data-cell") ?? null,
+    column:
+      target
+        .closest("[data-column-title]")
+        ?.getAttribute("data-column-title") ?? null,
     objectId:
       target.closest("[data-object-id]")?.getAttribute("data-object-id") ??
       null,
@@ -254,7 +269,10 @@ function still(click?: () => void): Gesture {
  * - T6.7: щелчок по ячейке таблицы выделяет таблицу и ячейку, Shift+щелчок по ячейке
  *   выделенной таблицы — диапазон, двойной щелчок открывает ячейку для ввода (TBL-02…
  *   TBL-04); маркеры границ выделенной таблицы меняют ширину столбца и высоту строки
- *   (TBL-01); объект попадает в ячейку под своим центром (TBL-05).
+ *   (TBL-01); объект попадает в ячейку под своим центром (TBL-05);
+ * - T6.8: щелчок по заголовку столбца канбана выделяет канбан и выбирает столбец, двойной
+ *   щелчок открывает название столбца для правки (KBN-03); карточка попадает в столбец под
+ *   своим центром и встаёт в нём по порядку (KBN-02).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -386,7 +404,13 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       start(press, longPress) {
         const c = latest.current;
         const tool = toolById(c.tool);
-        const { objectId: leafId, handle, label, cell } = hit(press.target);
+        const {
+          objectId: leafId,
+          handle,
+          label,
+          cell,
+          column,
+        } = hit(press.target);
 
         const drawing = drawingWith(press);
         if (drawing !== null) return draw(drawing, press);
@@ -506,6 +530,18 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
               },
             };
           }
+          // KBN-03: щелчок по заголовку столбца выбирает столбец.
+          const columnOf = objectId === leafId ? column : null;
+          if (columnOf !== null && !press.shiftKey) {
+            const ids = isSelected ? [...c.selection] : [objectId];
+            c.select(ids);
+            return {
+              ...move(selectedObjects(ids), press),
+              click: () => {
+                latest.current.selectColumn(objectId, columnOf);
+              },
+            };
+          }
           const ids = isSelected
             ? [...c.selection]
             : press.shiftKey
@@ -530,12 +566,15 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
 
       tap(press) {
         const c = latest.current;
-        const { objectId: leafId, cell } = hit(press.target);
+        const { objectId: leafId, cell, column } = hit(press.target);
         if (leafId !== null) {
           const objectId = selectionTarget(c.scene, leafId, c.selection);
           c.select([objectId]);
           if (cell !== null && objectId === leafId) {
             c.selectCell(objectId, cell, false);
+          }
+          if (column !== null && objectId === leafId) {
+            c.selectColumn(objectId, column);
           }
         } else if (!press.shiftKey) c.select([]);
       },
@@ -556,7 +595,13 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         const c = latest.current;
         // Двойное касание пером рисует две точки, а не открывает объект.
         if (drawingWith(press) !== null) return;
-        const { objectId: leafId, handle, label, cell } = hit(press.target);
+        const {
+          objectId: leafId,
+          handle,
+          label,
+          cell,
+          column,
+        } = hit(press.target);
         // CON-06: двойной щелчок по точке изгиба удаляет её.
         const line = editableLine(selectedObjects(c.selection));
         if (line !== null && handle?.startsWith("line-point-")) {
@@ -577,6 +622,12 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           c.editCell(leaf.id, cell);
           return;
         }
+        // KBN-03: двойной щелчок по заголовку столбца — правка названия.
+        if (leaf?.kanban != null && column !== null) {
+          c.editColumn(leaf.id, column);
+          return;
+        }
+
         if (leaf?.type === "line" && leaf.line !== null && !leaf.locked) {
           // CON-03: двойной щелчок по подписи — правка, по линии — новая подпись.
           c.select([leaf.id]);
