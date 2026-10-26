@@ -115,9 +115,9 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | TBL-05 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-05 *, в т. ч. участник по ссылке) | PASS |
 | TBL-06 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-06 *, в т. ч. круговой путь и участник по ссылке) | PASS |
 | TBL-07 | T6.7 | acceptance/e2e/tables.spec.ts (TBL-07 *) | PASS |
-| KBN-01 | T6.8 | — | не проверено |
-| KBN-02 | T6.8 | — | не проверено |
-| KBN-03 | T6.8 | — | не проверено |
+| KBN-01 | T6.8 | acceptance/e2e/kanban.spec.ts (KBN-01 *, в т. ч. участник по ссылке; MOB-06 на телефоне) | PASS |
+| KBN-02 | T6.8 | acceptance/e2e/kanban.spec.ts (KBN-02 *, в т. ч. перенос участником, второй клиент) | PASS |
+| KBN-03 | T6.8 | acceptance/e2e/kanban.spec.ts (KBN-03 *, оба варианта судьбы карточек, участник по ссылке) | PASS |
 | KBN-04 | T10.1 | — | не проверено |
 | MAP-01 | T6.9 | — | не проверено |
 | MAP-02 | T6.9 | — | не проверено |
