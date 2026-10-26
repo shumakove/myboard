@@ -578,9 +578,9 @@ classDiagram
   }
   FrameFields <|-- FrameOptions
   SceneObject --> FrameOptions : frameOptions (у остальных типов null)
-  sceneObjects ..> frameOptions : readFrameFields у type frame; contentLocked, hidden — при обходе детей
+  sceneObjects ..> frameOptions : readFrameFields у type frame, contentLocked, hidden — при обходе детей
   frameOptions ..> FrameFields
-  frames ..> SceneObjectMap : parent, x, y, z детей; z фрейма; keepRatio, contentHidden, locked + lockContent — writeFields
+  frames ..> SceneObjectMap : parent, x, y, z детей, z фрейма, keepRatio, contentHidden, locked + lockContent — writeFields
   frames ..> sceneObjects : objectMap, patchObjects, writeFields, transact, touch
   frames ..> groups : ancestors
 ```
