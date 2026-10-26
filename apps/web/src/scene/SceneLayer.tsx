@@ -31,7 +31,8 @@ export interface RichTextHandlers {
  * с автоподгоном шрифта, тегами и автором (STK-02, STK-03), стопка — с тегами (STK-05).
  * Фигура — контур SVG её вида с маркером BPMN и текстом (SHP-01…SHP-03). Линия —
  * контур SVG с наконечниками и подписями (T6.4, CON-01…CON-04). Рисунок — штрих SVG
- * (T6.5, DRW-01, DRW-06).
+ * (T6.5, DRW-01, DRW-06). Фрейм — рамка своего оформления (FRM-02); со скрытым
+ * содержимым — с пометкой Content hidden, а его объектов в списке нет (FRM-04).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -94,6 +95,14 @@ function SceneObjectView({
       data-type={object.type}
       data-locked={object.locked ? "true" : undefined}
       data-font-fit={autoFit ? "auto" : undefined}
+      data-appearance={
+        object.frameOptions
+          ? String(object.style.appearance ?? "fill")
+          : undefined
+      }
+      data-content-hidden={
+        object.frameOptions?.contentHidden === true ? "true" : undefined
+      }
       data-shape={shape?.id}
       data-marker={
         shape
@@ -110,6 +119,10 @@ function SceneObjectView({
         <LineView object={object} label={label} />
       ) : object.drawing ? (
         <DrawingView object={object} />
+      ) : object.frameOptions ? (
+        object.frameOptions.contentHidden && (
+          <span className="frame-hidden-note">Content hidden</span>
+        )
       ) : (
         !group && !editing && <ObjectContent object={object} rich={rich} />
       )}

@@ -109,6 +109,7 @@ import { useDrawSettings } from "./drawSettings";
 import { useLaser } from "./laser";
 import { LaserView } from "./LaserView";
 import { useSceneCommands } from "./useSceneCommands";
+import { adoptContained, placeInFrames, sendToBack } from "./frames";
 import { useSceneGestures } from "./useSceneGestures";
 import { useSceneObjects } from "./useSceneObjects";
 import { copyToClipboard, useSceneShortcuts } from "./useSceneShortcuts";
@@ -143,7 +144,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * T6.3 — SHP-01…SHP-04 наборы фигур, маркеры BPMN, оформление фигуры и недавние цвета;
  * T6.4 — CON-01…CON-07, CVS-26 соединительные линии, их подписи и привязка к объектам;
  * T6.5 — DRW-01…DRW-06 перо, маркер, пресеты толщины, ластик, прямой штрих, лазер и
- * масштаб штриха, MOB-04 отсев ладони (`BoardCanvas`), MOB-05 «стилус сразу рисует».
+ * масштаб штриха, MOB-04 отсев ладони (`BoardCanvas`), MOB-05 «стилус сразу рисует»;
+ * T6.6 — FRM-01…FRM-05 фреймы: содержимое, оформление, пропорции, скрытие содержимого
+ * и выбор блокировки.
  */
 export function BoardScene({
   board,
@@ -185,6 +188,8 @@ export function BoardScene({
   const { objects } = board;
   const actor = userName;
   const scene = useSceneObjects(objects);
+  // FRM-04: скрытое содержимое фреймов не показывается и не выделяется.
+  const visible = useMemo(() => scene.filter((o) => !o.hidden), [scene]);
   const settings = useBoardSettings(board.settings);
   const [tool, setTool] = useState<ToolId>("select");
   const [selection, setSelection] = useState<string[]>([]);
@@ -244,8 +249,8 @@ export function BoardScene({
 
   // Объект, удалённый другим участником, пропадает из выделения сам.
   const selected = useMemo(
-    () => scene.filter((o) => selection.includes(o.id)),
-    [scene, selection],
+    () => visible.filter((o) => selection.includes(o.id)),
+    [visible, selection],
   );
   const selectedIds = useMemo(() => selected.map((o) => o.id), [selected]);
   const editedObject = scene.find((o) => o.id === editing?.id) ?? null;
@@ -309,25 +314,36 @@ export function BoardScene({
         type === "shape"
           ? newShapeFields(shapeKind(choice.shape ?? shapeChoice))
           : null;
-      const id = createObject(
-        objects,
-        type,
-        placement(type, at, settings.gridStep, shape ?? undefined),
-        "",
-        actor,
-        // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом;
-        // STK-01, STK-05: стикер и стопка — выбранного до постановки цвета.
-        type === "text"
-          ? loadTextStyle()
-          : type === "sticky" || type === "stack"
-            ? { fill: choice.fill ?? stickyColor }
-            : (shape?.style ?? {}),
-        shape ?? undefined,
-      );
+      let id = "";
+      board.doc.transact(() => {
+        id = createObject(
+          objects,
+          type,
+          placement(type, at, settings.gridStep, shape ?? undefined),
+          "",
+          actor,
+          // TXT-05: новый текст — с последним выбранным в этой вкладке размером и цветом;
+          // STK-01, STK-05: стикер и стопка — выбранного до постановки цвета.
+          type === "text"
+            ? loadTextStyle()
+            : type === "sticky" || type === "stack"
+              ? { fill: choice.fill ?? stickyColor }
+              : (shape?.style ?? {}),
+          shape ?? undefined,
+        );
+        // FRM-01: новый фрейм — под объектами и забирает лежащие в нём; новый объект
+        // внутри фрейма попадает в него.
+        if (type === "frame") {
+          sendToBack(objects, readScene(objects), id);
+          adoptContained(objects, readScene(objects), id, actor);
+        } else {
+          placeInFrames(objects, readScene(objects), [id], actor);
+        }
+      });
       setSelection([id]);
       return readScene(objects).find((o) => o.id === id) ?? null;
     },
-    [objects, settings.gridStep, actor, stickyColor, shapeChoice],
+    [board, objects, settings.gridStep, actor, stickyColor, shapeChoice],
   );
 
   /** STK-05: стикер из стопки. */
@@ -367,7 +383,7 @@ export function BoardScene({
 
   const sceneGestures = useSceneGestures({
     objects,
-    scene,
+    scene: visible,
     selection,
     tool,
     gridStep: settings.gridStep,
@@ -632,8 +648,8 @@ export function BoardScene({
           selectAll: () => {
             setSelection(
               topmost(
-                scene,
-                scene.map((o) => o.id),
+                visible,
+                visible.map((o) => o.id),
               ).map((o) => o.id),
             );
           },
@@ -739,7 +755,7 @@ export function BoardScene({
           }}
         >
           <SceneLayer
-            objects={scene}
+            objects={visible}
             selected={new Set(selectedIds)}
             editing={editing?.id ?? null}
             rich={richHandlers}
@@ -846,6 +862,15 @@ export function BoardScene({
           author={authorToggle}
           colors={colorActions}
           line={lineActions}
+          frame={
+            commands.lockFrames || commands.frameContent || commands.keepRatio
+              ? {
+                  lock: commands.lockFrames,
+                  content: commands.frameContent,
+                  keepRatio: commands.keepRatio,
+                }
+              : null
+          }
         />
         {(tool === "sticky" || tool === "stack") && (
           <StickyPalette
@@ -894,7 +919,7 @@ export function BoardScene({
         {stageOverlay}
         {searching && (
           <BoardSearch
-            scene={scene}
+            scene={visible}
             onGoTo={goTo}
             onClose={() => {
               setSearching(false);

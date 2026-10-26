@@ -25,6 +25,12 @@ import {
 } from "./groups";
 import { renumber, reorder, type LayerOp } from "./layers";
 import { setLocked, unlockAll } from "./lock";
+import {
+  isFrame,
+  lockWithFrames,
+  setContentHidden,
+  setKeepRatio,
+} from "./frames";
 import { detachFrom } from "./lineEdits";
 import { htmlToDelta } from "../richtext/html";
 import { plainText } from "../richtext/delta";
@@ -65,8 +71,18 @@ export interface SceneCommands {
   layer: ((op: LayerOp) => void) | null;
   group: (() => void) | null;
   ungroup: (() => void) | null;
+  /** CVS-19: блокировка; у выделенного с фреймами — `null`, нужен выбор (FRM-05). */
   lock: (() => void) | null;
+  /** FRM-05: блокировка с фреймами — только рамка или вместе с содержимым. */
+  lockFrames: ((withContent: boolean) => void) | null;
   unlock: (() => void) | null;
+  /**
+   * FRM-04: скрыть или показать содержимое выделенных фреймов, и заблокированных тоже;
+   * `hidden` — скрыто у всех; `null` — фреймов в выделении нет.
+   */
+  frameContent: { hidden: boolean; toggle: () => void } | null;
+  /** FRM-03: фиксация пропорций одного выделенного незаблокированного фрейма. */
+  keepRatio: { on: boolean; set: (on: boolean) => void } | null;
   unlockAll: (() => void) | null;
   setStyle: (key: StyleKey, value: string | number) => void;
   /** Подпись объекта по id (ссылки документа, TXT-06); `null` — объекта нет. */
@@ -156,6 +172,17 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
 
     const groups = editable.filter((o) => o.type === GROUP_TYPE);
     const lockedUnits = units.filter((o) => o.locked);
+    const frames = units.filter(isFrame);
+    const withFrames = editable.some(isFrame);
+    // Содержимое считается скрытым, когда оно скрыто у всех выделенных фреймов.
+    const allHidden =
+      frames.length > 0 &&
+      frames.every((o) => o.frameOptions?.contentHidden === true);
+    const [onlyFrame] = editable;
+    const ratioFrame =
+      units.length === 1 && onlyFrame !== undefined && isFrame(onlyFrame)
+        ? onlyFrame
+        : null;
 
     return {
       units,
@@ -241,9 +268,30 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
       ungroup: when(groups.length > 0, () => {
         select(ungroupObjects(objects, scene, groups, actor));
       }),
-      lock: when(editable.length > 0, () => {
+      lock: when(editable.length > 0 && !withFrames, () => {
         setLocked(objects, ids, true, actor);
       }),
+      lockFrames: when(withFrames, (withContent: boolean) => {
+        lockWithFrames(objects, editable, withContent, actor);
+      }),
+      frameContent:
+        frames.length === 0
+          ? null
+          : {
+              hidden: allHidden,
+              toggle: () => {
+                setContentHidden(objects, frames, !allHidden, actor);
+              },
+            },
+      keepRatio:
+        ratioFrame === null
+          ? null
+          : {
+              on: ratioFrame.frameOptions?.keepRatio === true,
+              set: (on: boolean) => {
+                setKeepRatio(objects, ratioFrame, on, actor);
+              },
+            },
       // Снимается собственная блокировка; вложенные в заблокированную группу
       // разблокируются вместе с ней.
       unlock: when(lockedUnits.length > 0, () => {

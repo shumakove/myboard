@@ -3,11 +3,19 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
 /**
  * Типы объектов сцены и их свойства (CVS-09, CVS-11, CVS-14): стикер, фигура и текст
  * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
- * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01). Остальные типы
- * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
+ * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01), фрейм (T6.6,
+ * `frames.ts`, FRM-01…FRM-05). Остальные типы из раздела объектов требований добавляют
+ * задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType =
-  "sticky" | "shape" | "text" | "document" | "stack" | "line" | "drawing";
+  | "sticky"
+  | "shape"
+  | "text"
+  | "document"
+  | "stack"
+  | "line"
+  | "drawing"
+  | "frame";
 
 /** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
 export type PlaceableType = Exclude<ObjectType, "drawing">;
@@ -21,9 +29,11 @@ export function isPlaceable(type: ObjectType): type is PlaceableType {
  * шрифт, размер, цвет, начертание, выравнивание, межстрочный интервал и фон (TXT-01).
  * Фигура: вид и маркер BPMN (SHP-01, SHP-02), заливка, обводка и её толщина,
  * скругление углов, текст с межстрочным интервалом (SHP-03). Линия: вид (прямая,
- * ломаная, кривая) и наконечники концов (CON-01, CON-07), цвет и толщина.
+ * ломаная, кривая) и наконечники концов (CON-01, CON-07), цвет и толщина. Фрейм:
+ * вид оформления и цвет (FRM-02).
  */
 export type StyleKey =
+  | "appearance"
   | "shape"
   | "marker"
   | "lineStyle"
@@ -191,6 +201,18 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     editable: false,
     style: { stroke: "#1f2937", strokeWidth: 4 },
   },
+  // FRM-01: фрейм — родитель объектов, попавших в него (`frames.ts`); FRM-02: вид
+  // оформления и цвет. Поворота нет: дети лежат в его системе координат по осям.
+  frame: {
+    type: "frame",
+    label: "Frame",
+    plural: "frames",
+    width: 640,
+    height: 480,
+    rotatable: false,
+    editable: false,
+    style: { appearance: "fill", fill: "#ffffff" },
+  },
 };
 
 /** Тип объекта-группы (CVS-17): рамка группы — описанный прямоугольник её объектов. */
@@ -270,6 +292,15 @@ export const STYLE_KEYS: Record<
   StyleKey,
   { label: string; options: StyleOption[] }
 > = {
+  // FRM-02: заливка цветом; цвет только у границы (фон белый); граница цветом без фона.
+  appearance: {
+    label: "Frame style",
+    options: [
+      { value: "fill", label: "Fill" },
+      { value: "border", label: "Border only" },
+      { value: "outline", label: "No background" },
+    ],
+  },
   shape: {
     label: "Shape",
     options: SHAPE_KINDS.map((kind) => ({

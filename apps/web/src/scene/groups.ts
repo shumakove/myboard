@@ -58,6 +58,19 @@ export function topmost(
 }
 
 /**
+ * Объект и его группы снизу вверх до первого родителя, который не группа: объект внутри
+ * фрейма выделяется сам, а не вместе с фреймом (FRM-01).
+ */
+function groupChain(scene: readonly SceneObject[], leafId: string): string[] {
+  const chain = [leafId];
+  for (const ancestor of ancestors(scene, leafId)) {
+    if (ancestor.type !== GROUP_TYPE) break;
+    chain.push(ancestor.id);
+  }
+  return chain;
+}
+
+/**
  * CVS-17: что выделяет щелчок по объекту `leafId`. Объект в группе выделяется вместе
  * с группой, пока в неё не «вошли»: выделен сам объект группы или его сосед.
  */
@@ -66,7 +79,7 @@ export function selectionTarget(
   leafId: string,
   selection: readonly string[],
 ): string {
-  const chain = [leafId, ...ancestors(scene, leafId).map((o) => o.id)];
+  const chain = groupChain(scene, leafId);
   const selected = new Set(selection);
   const inside = (groupId: string) =>
     selection.some((id) =>
@@ -87,7 +100,7 @@ export function enterGroup(
 ): string | null {
   const target = selectionTarget(scene, leafId, selection);
   if (target === leafId) return null;
-  const chain = [leafId, ...ancestors(scene, leafId).map((o) => o.id)];
+  const chain = groupChain(scene, leafId);
   return chain[chain.indexOf(target) - 1] ?? null;
 }
 
