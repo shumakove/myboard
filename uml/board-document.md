@@ -25,7 +25,7 @@ classDiagram
   }
   class SceneObjectMap {
     <<Y.Map, объект сцены>>
-    type: sticky | shape | text | document | stack | line | drawing | frame | table | kanban | card | group
+    type: sticky | shape | text | document | stack | line | drawing | frame | table | kanban | card | mindmap | group
     parent: string | null
     cell?: string — ключ ячейки таблицы-родителя или id столбца канбана
     x: number
@@ -66,7 +66,9 @@ classDiagram
     sizes?: Y.Map~number~ — table, id линии → ширина или высота
     cells?: Y.Map~TableCellMap~ — table, ключ строка:столбец
     titles?: Y.Map~Y.Text~ — kanban, id столбца → название
-    text?: Y.Text — нет у drawing и kanban
+    root?: string — mindmap, id корневого узла
+    nodes?: Y.Map~MindmapNodeMap~ — mindmap, id узла → узел
+    text?: Y.Text — нет у drawing, kanban и mindmap
     tags?: Y.Array~string~
     showAuthor?: false
     locked?: true
@@ -218,6 +220,7 @@ classDiagram
     hidden: boolean
     table: TableShape | null
     kanban: KanbanShape | null
+    mindmap: MindmapShape | null
     cell: string | null
   }
   class ObjectMeta {
@@ -743,6 +746,84 @@ classDiagram
   frames ..> kanbanData : columnAt — карточка в столбце (KBN-02)
   frames ..> kanbans : arrangeKanbans, kanbansOf — после placeInFrames
   clipboard ..> kanbanData : kanbanFieldValue
+  class MindmapNodeMap {
+    <<Y.Map, узел интеллект-карты>>
+    parent: string | null — у корня null
+    order: number — порядок среди братьев, дробный
+    text: Y.Text — название
+    color: string
+    collapsed: boolean
+  }
+  class MindmapShape {
+    <<interface, scene/mindmapData.ts>>
+    root: string
+    nodes: MindmapNode[] — видимые, корень первым
+    byId: ReadonlyMap — все узлы по id, и скрытые
+    width: number
+    height: number
+    anchorY: number — середина корня от верха рамки
+  }
+  class MindmapNode {
+    <<interface, scene/mindmapData.ts>>
+    id: string
+    parent: string | null — после восстановления дерева
+    text: string
+    color: string
+    collapsed: boolean
+    children: string[]
+    descendants: number
+    depth: number
+    x: number — от левого края карты
+    y: number — от верха карты
+    width: number
+    height: number
+  }
+  class NodeDrop {
+    <<interface, scene/mindmapData.ts>>
+    target: string
+    place: DropPlace — child | before | after
+  }
+  class mindmapData {
+    <<apps/web scene/mindmapData.ts>>
+    MINDMAP_TYPE = mindmap$
+    NODE_HEIGHT = 40, ROOT_HEIGHT = 56$
+    NODE_MIN_WIDTH = 96, NODE_MAX_WIDTH = 280$
+    LEVEL_GAP = 56, SIBLING_GAP = 12, TOGGLE_SIZE = 20$
+    ROOT_COLOR, NEW_ROOT_TEXT = Main topic$
+    NEW_CHILD_TEXTS = Idea 1, Idea 2$
+    nodeId() string$
+    nodeWidth(text, root) number$
+    readMindmap(record) MindmapShape | null$
+    subtree(shape, id) string[]$
+    dropAt(shape, dragged, point) NodeDrop | null$
+    nodeMaps(mindmap) Y.Map$
+    nodeMap(mindmap, id) Y.Map | null$
+    nodeText(mindmap, id) Y.Text | null$
+    createNode(fields) Y.Map$
+    mindmapFieldValue(key, value) — вставка копии$
+  }
+  class mindmaps {
+    <<apps/web scene/mindmaps.ts>>
+    createMindmap(objects, at, actor) string$
+    addChild(objects, mindmap, parent, actor) string | null$
+    addSibling(objects, mindmap, sibling, actor) string | null$
+    recolorNode(objects, mindmap, id, color, withChildren, actor) void$
+    deleteNode(objects, mindmap, id, actor) void$
+    toggleNode(objects, mindmap, id, actor) void$
+    moveNode(objects, mindmap, id, drop, actor) void$
+    nodeEditorStyle(object, node) CSSProperties | null$
+  }
+  SceneObjectMap *-- MindmapNodeMap : nodes (mindmap)
+  SceneObject --> MindmapShape : mindmap (у остальных типов null)
+  MindmapShape *-- MindmapNode
+  sceneObjects ..> mindmapData : readMindmap у type mindmap, верх рамки по anchorY
+  mindmapData ..> SceneObjectMap : root, nodes
+  mindmapData ..> MindmapShape
+  mindmapData ..> NodeDrop
+  mindmaps ..> mindmapData : readMindmap, nodeMaps, nodeMap, createNode, subtree
+  mindmaps ..> sceneObjects : createObject, objectMap, transact, touch
+  mindmaps ..> NodeDrop
+  clipboard ..> mindmapData : mindmapFieldValue
 ```
 
 - Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` | `line` | `drawing` | `frame` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2, `line` — T6.4, `drawing` — T6.5, `frame` — T6.6, `table` — T6.7, `kanban`, `card` — T6.8) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.9…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `shape`, `marker`, `fill`, `stroke`, `strokeWidth`, `radius`, `fontSize`, `color`, `align`, `lineHeight`, T6.3; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
@@ -755,6 +836,7 @@ classDiagram
 - Фрейм (T6.6, FRM-01…FRM-05): `type: "frame"`, рамка `x`, `y`, `width`, `height` (новый — 640×480 центром в точке), `rotation` не меняется (`rotatable: false`), `z`; `appearance` — `fill` | `border` | `outline` (FRM-02: фон цветом; граница цветом и белый фон; граница цветом без фона), `fill` — цвет (у нового `appearance: fill`, `fill: #ffffff`); `keepRatio` — размер за угол в прежнем соотношении сторон (FRM-03); `contentHidden` — содержимое скрыто у всех (FRM-04); `lockContent` — при `locked: true` блокировка переходит на содержимое (FRM-05; нет поля — `true`, как у группы; `false` — «Frame only»). Поля `text` нет в показе (`editable: false`, `Y.Text` от `createObject` пустой). Дети фрейма — объекты с `parent` = id фрейма, `x`, `y` относительно его левого верхнего угла, `z` — среди детей; `readScene` отдаёт фрейм перед его детьми, поэтому они двигаются вместе с ним (FRM-01) без записи в детей. Попадание во фрейм (`placeInFrames`) — после перемещения, постановки или штриха: объект верхнего уровня или ребёнок фрейма, не фрейм, не линия, не заблокированный, переходит к верхнему фрейму под центром своей рамки (`containerUnder`, с T6.7 — фрейм или ячейка таблицы) или на верхний уровень, когда центр снаружи; `reparent` пишет `parent`, `x`, `y` в новой системе координат (на доске объект на месте), `z` — поверх новых соседей, и `touch`. Фрейм со скрытым содержимым или заблокированный вместе с содержимым (`FrameOptions.contentLocked`) новых объектов не принимает; вложенных фреймов нет. Новый фрейм в той же транзакции, что `createObject`, встаёт под объекты верхнего уровня (`sendToBack`: `z` = наименьший − 1) и забирает лежащие в нём целиком (`adoptContained`). Изменение размера одного фрейма (`frameResizeGesture`) переписывает `x`, `y` его детей, когда сдвинулся левый верхний угол, — на доске они остаются на месте; при масштабе нескольких выделенных дети выделенного фрейма не масштабируются (`scaledLeaves`). `readScene`: `SceneObject.frameOptions` — поля фрейма и `contentLocked`, `hidden` — у всех потомков фрейма с `contentHidden` (их не рисуют, не выделяют, не ищут: `BoardScene` отдаёт сцене, поиску и жестам только `visible`). Удаление и копирование фрейма — с его детьми, как у группы (`removalSet`, `copyObjects`).
 - Таблица (T6.7, TBL-01…TBL-07): `type: "table"`, `x`, `y`, `z`, `rotation` не меняется (`rotatable: false`), `editable: false` (`Y.Text` объекта пустой). `columns`, `rows` — `Y.Array<string>` id столбцов и строк по порядку; `sizes` — `Y.Map` id линии → ширина столбца или высота строки (не меньше `MIN_CELL_SIZE` = 24; новая — 3×3 по 160×48); `width`, `height` — суммы размеров, их пересчитывает `syncFrame` при каждой правке структуры, а `readScene` берёт рамку из `TableShape`, поэтому `patchObjects` их не пишет (`derivedFrame`): размер за угол (CVS-14) — `resizeTable`, пропорционально всем столбцам и строкам. `cells` — `Y.Map` ключ `"<id строки>:<id столбца>"` → `Y.Map` ячейки (`TableCellMap`): `text` — `Y.Text` без атрибутов (правка — `TextEditor` `Table cell` поверх ячейки, `touch` таблицы), оформление ячейки `color`, `fontStyle`, `align`, `valign`, `fill` (TBL-02, TBL-03; нет поля — `CELL_DEFAULTS`), `rowSpan`/`colSpan` у левой верхней ячейки объединения. Пустой ячейки в `cells` может не быть — её `Y.Map` создаётся при первой правке (`cellMap`). Объединение (`mergeCells`) дописывает текст закрытых ячеек в левую верхнюю с новой строки и удаляет их записи; разъединение (`unmergeCells`) снимает `rowSpan`/`colSpan`. Добавление строки или столбца (`insertLine`) — новый id в `rows`/`columns`, размер соседа, объединения через линию растягиваются; удаление (`deleteLine`) — удаляет id, размер и ячейки линии, объединения сжимаются; последнюю строку и последний столбец не удаляют. Каждая правка структуры — одна транзакция с `touch` таблицы (`editTable`). Объект в ячейке (TBL-05): `parent` = id таблицы, `cell` — ключ ячейки, `x`, `y` — относительно её левого верхнего угла; `readScene` прибавляет `cellRect` ячейки, поэтому объект едет с таблицей и с ячейкой при изменении размеров без записи в объект. `containerUnder` выбирает верхний фрейм или ячейку под центром объекта (таблица в таблицу не попадает, заблокированная таблица не принимает), `reparent` пишет `parent`, `cell`, `x`, `y`, `z`; выход из таблицы удаляет `cell`. Объединение переносит объекты закрытых ячеек в объединённую (`mergeSelection`), удаление строки или столбца переносит объекты её ячеек к родителю таблицы (`removeLine`); ключ ячейки, которой больше нет, читается как угол таблицы. Группа в ячейке тоже получает `cell`, дубликат — `cell` оригинала. `SceneObject.text` таблицы — тексты ячеек через перевод строки (поиск, CVS-08). Копия (TBL-06) — JSON полей таблицы (`tableFieldValue` при вставке снова делает `Y.Array`/`Y.Map`/`Y.Text`), корень копии без `cell`; в системный буфер — ещё TSV (`gridToTsv`) и HTML `<table>` (`gridToHtml`). Внешняя таблица из буфера (`tabularGrid`: HTML `<table>` или текст с табуляцией, до 500 × 100) — в документ попадает только после выбора: новая таблица (`pasteTableGrid`) или стикеры на непустые ячейки с шагом `STICKY_GRID_STEP` = 220 (`stickiesFromGrid`, TBL-07), одной транзакцией с `placeInFrames`. Выделенные ячейки, активная ячейка и ячейка ввода — состояние вкладки, в документ не входят.
 - Канбан (T6.8, KBN-01…KBN-03): `type: "kanban"`, `x`, `y`, `z`, `height` (новый — 480), `rotation` не меняется (`rotatable: false`), `editable: false`, поля `text` нет (`createKanban` удаляет его после `createObject`). `columns` — `Y.Array<string>` id столбцов слева направо (новый — три: `To do`, `In progress`, `Done`); `titles` — `Y.Map` id столбца → `Y.Text` названия (правки названия сливаются по символам, правка — `TextEditor` `Column title` поверх заголовка). `width` = число столбцов × `COLUMN_WIDTH` (280) — пишется при добавлении и удалении столбца; `readScene` берёт рамку из `KanbanShape`. `SceneObject.text` канбана — названия столбцов через перевод строки (поиск, CVS-08). Карточка (KBN-02): `type: "card"`, 240×96, `fill` (`#ffffff`), `text` — `Y.Text` без атрибутов, `tags` — `Y.Array<string>` (как у стикера, STK-03). Карточка в столбце: `parent` = id канбана, `cell` = id столбца, `x`, `y` — относительно левого верхнего угла столбца (`columnRect`, `slotRect` в `readScene`), поэтому карточки едут с канбаном и со своим столбцом при добавлении столбца левее без записи в карточку. В столбец попадают только карточки (`containerUnder` → `columnAt`, заблокированный канбан не принимает, канбан не попадает в таблицу); после `placeInFrames`, удаления, дубликата и `addCard` затронутые канбаны перестраиваются (`arrangeKanbans`): карточки столбца по порядку середины по вертикали (при равенстве — `z`) встают с `x` = 20, первая `y` = 48, шаг — высота + 12, ширина 240; карточка, чей столбец удалили одновременно, уходит в первый столбец; `height` канбана растёт, если карточки не помещаются (сама не уменьшается). Добавление столбца (`addColumn`) — новый id справа от выбранного или последним, название `New column`; удаление (`deleteColumn`, не последнего) — одной транзакцией убирает id из `columns` и `titles`, а карточки по `ColumnFate` переходят в конец другого столбца или уходят в корзину вместе с `detachFrom` привязанных линий. Копия канбана — с карточками; `kanbanFieldValue` при вставке снова делает `Y.Array`/`Y.Map`/`Y.Text`. Выбранный столбец и столбец в правке — состояние вкладки, в документ не входят.
+- Интеллект-карта (T6.9, MAP-01…MAP-04): `type: "mindmap"`, `x`, `y` — середина левого края корня (корень стоит на месте, когда дерево растёт или сворачивается), `z`; `width`, `height`, `rotation` не пишутся (`derivedFrame`), `rotatable: false`, `editable: false`, поля `text` нет (`createMindmap` удаляет его после `createObject`). `root` — id корня, `nodes` — `Y.Map` id узла → `Y.Map` узла (`MindmapNodeMap`): `parent` (у корня `null`), `order` — дробный порядок среди братьев (вставка между соседями не трогает их), `text` — `Y.Text` (правки названия сливаются по символам), `color`, `collapsed` (MAP-03, свёрнуто у всех участников). Каждый узел — свой `Y.Map`, поэтому одновременные правки разных узлов не затирают друг друга. Положения узлов не хранятся: `readMindmap` строит дерево (узел, чья цепочка родителей не доходит до корня — родитель удалён или два участника вложили узлы друг в друга, — показывается дочерним узлом корня) и раскладывает его — корень слева, дети правее на `LEVEL_GAP` друг под другом через `SIBLING_GAP`, родитель по середине высоты своих видимых детей; рамка объекта на сцене — `MindmapShape.width`/`height`, её верх — `y − anchorY`. Новая карта (`createMindmap`): корень `Main topic` и дети `Idea 1`, `Idea 2` цвета `ROOT_COLOR` (`#81d4fa`), верх рамки — в точке постановки. Операции `scene/mindmaps.ts` — одна транзакция с `touch` карты (CVS-22): `addChild` (в конец детей, цвет родителя, свёрнутый родитель раскрывается), `addSibling` (сразу после узла), `deleteNode` (узел с веткой, корень не удаляется), `moveNode` (`NodeDrop`: `child` — в конец детей цели, `before`/`after` — среди её братьев, в свою ветку и перенос корня не допускаются), `toggleNode`, `recolorNode` (`withChildren` — и все узлы под ним, MAP-04). Поиск (CVS-08) ищет по названиям всех узлов. Копия (CVS-20) переносит `nodes` Y-типами (`mindmapFieldValue`). Интеллект-карта не входит в ячейку таблицы.
 - Недавние свои цвета (T6.3, SHP-04) — не данные документа: `localStorage` `myboard.recentColors` = `{"text":[],"sticky":[],"shape":[],"line":[],"drawing":[]}` (`#rrggbb`, до 8 в категории, последний — первым), общие для всех досок браузера. Категория — по типу объекта (`colorCategory`: `text`/`document` → `text`, `sticky`/`stack` → `sticky`, `shape` → `shape`, `line` → `line`, `drawing` → `drawing`, T6.5). Настройки пера и маркера (цвет, три пресета толщины, выбранный пресет) и режим «стилус сразу рисует» — тоже не данные документа: `localStorage` `myboard.drawSettings` (`drawSettings.ts`, DRW-02, MOB-05). В документ попадает только сам цвет в поле объекта (`fill`, `stroke`, `color`, `background` через `setStyle`); цвет следующего стикера (`stickyColor`) принимает и свой `#rrggbb`.
 - Стопка стикеров (T6.2, STK-05): `type: "stack"`, рамка 200×200, `fill`, `tags` (`Y.Array<string>`), `text` пустой (`editable: false` — поле правки не открывается). Стикер из стопки (`pullSticky`) — новый `sticky` верхнего уровня размера типа, центром в точке, `fill` стопки и копия её тегов, одной транзакцией; сама стопка не меняется.
 - Новый текст (TXT-05) получает `fontSize` и `color` из `sessionStorage` `myboard.textStyle` (`loadTextStyle`; запоминаются при выборе у текстового блока) — это поля объекта, сама память вкладки в документ не входит. `createObject` принимает текст строкой или дельтой и оформление поверх значений типа; вставка HTML внешнего документа (`htmlToDelta`, TXT-08) создаёт `text` с дельтой и оценкой высоты (`estimateHeight`) одной транзакцией.
@@ -775,4 +857,4 @@ classDiagram
 - Присутствие (курсоры, вид камеры, слежение, список участников — T4.2; след лазерной указки — T6.5, DRW-05) в документ не входит; запомненный вид камеры (CVS-05) хранится в `localStorage` браузера, а не в документе: оно идёт сообщениями `awareness`/`presence` и живёт только в памяти соединений ([ws-protocol.md](ws-protocol.md)).
 - Серверная копия собирается из последнего снимка `board_snapshots` и хвоста `board_updates` при первом подключении к доске (`Hub.join` → `store.load_journal` → `BoardRoom(board_id, journal)`) и выгружается, когда уходит последнее соединение (`Hub.leave`, с этим — сжатие журнала). Снимок — полное состояние `Doc.get_update()`; присутствия в нём нет. См. [data-model.md](data-model.md), [sequences/sync.md](sequences/sync.md).
 
-Актуально на: T6.8, ad223be (канбан и карточка: `type: kanban`, `columns`, `titles`, `type: card`, карточка в столбце — `parent` и `cell`, `kanbanData.ts`, `kanbans.ts`, `SceneObject.kanban`, `slotRect`, `ColumnFate`; T6.7, 88f9e7e — таблица: `type: table`, `columns`, `rows`, `sizes`, `cells` с `TableCellMap`, поле `cell` объекта в ячейке, `tableData.ts`, `tables.ts`, `tableExchange.ts`, `SceneObject.table`, `cell`, `containerUnder`, `Container`, копия таблицы; T6.6, e94fd44 — фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: KBN-01…KBN-03 (канбан, карточки в столбцах, правка столбцов), TBL-01…TBL-07 (таблица, ячейки, объединение, объекты в ячейках, обмен с электронными таблицами), FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
+Актуально на: T6.9, 211b781 (интеллект-карта: `type: mindmap`, `root`, `nodes` с `MindmapNodeMap`, `mindmapData.ts`, `mindmaps.ts`, `SceneObject.mindmap`, `NodeDrop`; T6.8, ad223be — канбан и карточка: `type: kanban`, `columns`, `titles`, `type: card`, карточка в столбце — `parent` и `cell`, `kanbanData.ts`, `kanbans.ts`, `SceneObject.kanban`, `slotRect`, `ColumnFate`; T6.7, 88f9e7e — таблица: `type: table`, `columns`, `rows`, `sizes`, `cells` с `TableCellMap`, поле `cell` объекта в ячейке, `tableData.ts`, `tables.ts`, `tableExchange.ts`, `SceneObject.table`, `cell`, `containerUnder`, `Container`, копия таблицы; T6.6, e94fd44 — фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: MAP-01…MAP-04 (интеллект-карта, узлы, сворачивание веток, перекраска с потомками), KBN-01…KBN-03 (канбан, карточки в столбцах, правка столбцов), TBL-01…TBL-07 (таблица, ячейки, объединение, объекты в ячейках, обмен с электронными таблицами), FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
