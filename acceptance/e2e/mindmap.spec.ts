@@ -429,19 +429,18 @@ test('MAP-02 negative: a node dropped into its own branch does not create a cycl
     await expect(nodeEl(page, t.i2)).toBeVisible();
     console.log(`наблюдение MAP-02: пустое название показано как «${(await nodeEl(page, t.i2).textContent())?.trim()}»`);
     await clickNode(page, t.i2);
-    // корень: нет Delete node, клавиша Delete не удаляет корень
+    // корень: нет Delete node; Delete и Backspace при выбранном корне не удаляют ни корень, ни карту (BUG-025)
     await clickNode(page, t.root);
     await expect(mapButton(page, 'Delete node')).toHaveCount(0);
-    await page.keyboard.press('Delete');
-    await page.waitForTimeout(500);
-    const after = await untilRaw(page, owner.boardId, () => undefined);
-    console.log(`наблюдение MAP-02: Delete при выбранном корне — карта ${after[mid] ? 'осталась' : 'удалена целиком'}`);
-    if (after[mid]) expect(M(after, mid).nodes[t.root]).toBeTruthy();
-    if (!after[mid]) {
-      // карта удалена целиком — не потеряна: отмена возвращает её со всеми узлами
-      await deselect(page);
-      await page.keyboard.press('ControlOrMeta+z');
-      await untilRaw(page, owner.boardId, (o) => expect(Object.keys(M(o, mid)?.nodes ?? {})).toHaveLength(Object.keys(before.nodes).length));
+    const count = Object.keys(M(await untilRaw(page, owner.boardId, (o) => expect(M(o, mid)).toBeTruthy()), mid).nodes).length;
+    for (const key of ['Delete', 'Backspace']) {
+      await page.keyboard.press(key);
+      await page.waitForTimeout(500);
+      const after = await untilRaw(page, owner.boardId, () => undefined);
+      expect(after[mid], `${key} при выбранном корне: карта остаётся`).toBeTruthy();
+      expect(M(after, mid).nodes[t.root], `${key}: корень на месте`).toBeTruthy();
+      expect(Object.keys(M(after, mid).nodes), `${key}: узлы не удалены`).toHaveLength(count);
+      await expect(page.locator(`[data-object-id="${mid}"]`)).toBeVisible();
     }
   } finally {
     await owner.close();
