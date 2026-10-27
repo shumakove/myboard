@@ -56,7 +56,7 @@ export interface MindmapNodes {
  * перекраска с вопросом о детях (MAP-04), сворачивание (MAP-03), перестановка (MAP-02).
  * Пока выбран узел (и его название не правят), клавиши работают с узлом: Tab — новый
  * дочерний, Enter — новый соседний, F2 — правка названия, Delete и Backspace — удалить
- * узел (а не карту), Escape — снять выбор узла.
+ * узел (а не карту; у корня клавиши ничего не делают), Escape — снять выбор узла.
  */
 export function useMindmapNodes({
   objects,
@@ -351,9 +351,11 @@ function useNodeKeys(target: NodeKeys | null): void {
         Backspace: keys.remove,
         Escape: keys.exit,
       }[event.key];
-      if (action == null) return;
+      if (action === undefined) return;
+      // Клавиша узла поглощается, даже если действия нет: Delete у корня не должен
+      // уйти в команды сцены и удалить всю карту (BUG-025, MAP-02).
       event.preventDefault();
-      action();
+      action?.();
     }
     window.addEventListener("keydown", keydown, { capture: true });
     return () => {
