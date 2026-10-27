@@ -10,8 +10,9 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
-import { focusOn, screenToBoard, type Size } from "../canvas/camera";
+import { centerOn, focusOn, screenToBoard, type Size } from "../canvas/camera";
 import type { WheelMode } from "../canvas/wheel";
+import { useBoardComments } from "../comments/useBoardComments";
 import { moveToTrash, type BoardDocument } from "../realtime/boardDocument";
 import type { CameraView, LaserTrail, Point } from "../realtime/messages";
 import { ObjectLinkDialog } from "../sharing/ObjectLinkDialog";
@@ -188,10 +189,13 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * столбцами, карточки задач с текстом и тегами, перенос карточек между столбцами,
  * добавление, переименование и удаление столбца с выбором судьбы его карточек; T6.9 —
  * MAP-01…MAP-04 интеллект-карты: узлы, их правка и перестановка, сворачивание веток,
- * вопрос о перекраске дочерних узлов (`useMindmapNodes`).
+ * вопрос о перекраске дочерних узлов (`useMindmapNodes`); T6.10 — CMT-01…CMT-04
+ * комментарии: ветки у объекта или точки, переписка, «решено», непрочитанные, цвет и
+ * фильтр по участникам (`useBoardComments`).
  */
 export function BoardScene({
   board,
+  boardId,
   camera,
   wheelMode,
   userName,
@@ -207,6 +211,8 @@ export function BoardScene({
   onLaser,
 }: {
   board: BoardDocument;
+  /** Доска: свои отметки прочитанных комментариев — по ней (CMT-02). */
+  boardId: string;
   camera: CameraView;
   wheelMode: WheelMode;
   /** Имя участника: автор правок (CVS-22) и удаливший в корзине. */
@@ -262,6 +268,27 @@ export function BoardScene({
   const { pinned, update: updatePinned } = usePinnedTools();
   const viewport = useRef<Size>({ width: 0, height: 0 });
   const [searching, setSearching] = useState(false);
+  /** T6.10: комментарии; их панель и поиск занимают одно место — открыт один. */
+  const comments = useBoardComments({
+    comments: board.comments,
+    scene: visible,
+    boardId,
+    self: actor,
+    goTo: useCallback(
+      (point: Point) => {
+        onMove((current) => centerOn(current, point));
+      },
+      [onMove],
+    ),
+  });
+  const { start: openDraft } = comments;
+  const startComment = useCallback(
+    (object: SceneObject | null, at: Point) => {
+      setSearching(false);
+      openDraft(object, at);
+    },
+    [openDraft],
+  );
   const [linkFor, setLinkFor] = useState<string | null>(null);
   const [linkMissing, setLinkMissing] = useState(false);
   /** TXT-06: открыт выбор объекта для ссылки документа — куда вернуть выбор. */
@@ -604,6 +631,7 @@ export function BoardScene({
     toggleNode: mindmap.toggleNode,
     dragNode: mindmap.dragNode,
     dropNode: mindmap.dropNode,
+    comment: startComment,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -989,10 +1017,23 @@ export function BoardScene({
                   setLinkFor(single.id);
                 }
               : null,
+          // CMT-01: ветка у правого верхнего угла объекта.
+          comment:
+            single !== undefined && units.length === 1
+              ? () => {
+                  startComment(single, {
+                    x: single.x + single.width,
+                    y: single.y,
+                  });
+                }
+              : null,
         });
       case "canvas":
         return boardMenu(commands, current.board, current.clip, {
           create,
+          comment: (at) => {
+            startComment(null, at);
+          },
           selectAll: () => {
             setSelection(
               topmost(
@@ -1045,10 +1086,34 @@ export function BoardScene({
             title="Find objects by text or tag."
             aria-pressed={searching}
             onClick={() => {
+              if (!searching) comments.close();
               setSearching((open) => !open);
             }}
           >
             Search
+          </Button>
+          <Button
+            variant="ghost"
+            className="tool-button"
+            title="Show comment threads on this board."
+            aria-pressed={comments.open}
+            aria-label={
+              comments.unreadTotal > 0
+                ? `Comments, ${String(comments.unreadTotal)} unread`
+                : "Comments"
+            }
+            data-unread={comments.unreadTotal > 0 ? "true" : undefined}
+            onClick={() => {
+              setSearching(false);
+              comments.toggle();
+            }}
+          >
+            Comments
+            {comments.unreadTotal > 0 && (
+              <span className="comment-badge" aria-hidden="true">
+                {comments.unreadTotal}
+              </span>
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -1255,6 +1320,7 @@ export function BoardScene({
             color={OWN_LASER_COLOR}
             label="Your laser"
           />
+          {comments.pins}
           {worldOverlay}
         </BoardCanvas>
         <SelectionBar
@@ -1344,6 +1410,7 @@ export function BoardScene({
           />
         )}
         {stageOverlay}
+        {comments.panel}
         {searching && (
           <BoardSearch
             scene={visible}

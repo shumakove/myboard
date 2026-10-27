@@ -33,6 +33,7 @@ export function renderScene(
         <BoardSettingsControls settings={board.settings} />
         <BoardScene
           board={board}
+          boardId="test-board"
           camera={camera}
           wheelMode="zoom"
           userName={userName}

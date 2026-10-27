@@ -15,7 +15,8 @@ import {
  * - `lasso` — выделение областью произвольной формы (CVS-10);
  * - `create` — ставит объект своего типа (CVS-09); линия рисуется протяжкой (CON-01);
  * - `draw` — перо и маркер рисуют штрих (DRW-01), ластик стирает штрихи (DRW-03), лазер
- *   оставляет временный след (DRW-05).
+ *   оставляет временный след (DRW-05);
+ * - `comment` — щелчок по объекту или пустому месту начинает ветку комментария (CMT-01).
  *
  * `key` — горячая клавиша инструмента без модификаторов (CVS-25): код клавиши
  * `KeyboardEvent.code`, чтобы она работала при любой раскладке.
@@ -25,6 +26,7 @@ export type Tool = { label: string; hint: string; key: string } & (
   | { kind: "lasso"; id: "lasso" }
   | { kind: "create"; id: PlaceableType }
   | { kind: "draw"; id: DrawToolId }
+  | { kind: "comment"; id: "comment" }
 );
 
 /** Инструменты рисования (T6.5). */
@@ -120,6 +122,13 @@ export const TOOLS: readonly Tool[] = [
     label: "Laser",
     key: "KeyR",
     hint: "Point at things for everyone: the trail fades in a few seconds and is not saved.",
+  },
+  {
+    kind: "comment",
+    id: "comment",
+    label: "Comment",
+    key: "KeyO",
+    hint: "Click an object or the board to start a comment thread.",
   },
 ];
 
