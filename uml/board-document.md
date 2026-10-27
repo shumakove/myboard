@@ -107,7 +107,29 @@ classDiagram
   class comments {
     <<Y.Map>>
     doc.getMap(comments)
-    id → ветка комментария
+    id → CommentThreadMap
+  }
+  class CommentThreadMap {
+    <<Y.Map, ветка комментария>>
+    anchor: CommentAnchor — запись-JSON
+    color: string — #rrggbb
+    resolved: boolean
+    createdAt: string — ISO 8601
+    createdBy: string — имя автора
+    messages: Y.Array~CommentMessage~
+  }
+  class CommentAnchor {
+    <<type, comments/commentData.ts>>
+    object: string | null
+    u, v: number — доли рамки объекта без поворота
+    x, y: number — точка доски при object null
+  }
+  class CommentMessage {
+    <<interface, comments/commentData.ts>>
+    id: string
+    author: string — имя из сессии
+    text: string
+    at: string — ISO 8601
   }
   class timer {
     <<Y.Map>>
@@ -163,6 +185,9 @@ classDiagram
   objects *-- SceneObjectMap
   SceneObjectMap *-- RichTextContent : text (text, document, sticky)
   trash *-- TrashEntry
+  comments *-- CommentThreadMap
+  CommentThreadMap *-- CommentAnchor : anchor
+  CommentThreadMap *-- CommentMessage : messages
   BoardRoom ..> Journal : загрузка
   Journal *-- StoredUpdate
   BoardRoom ..> StoredUpdate : _journal — строки до сжатия
@@ -824,6 +849,41 @@ classDiagram
   mindmaps ..> sceneObjects : createObject, objectMap, transact, touch
   mindmaps ..> NodeDrop
   clipboard ..> mindmapData : mindmapFieldValue
+  class CommentThread {
+    <<interface, comments/commentData.ts>>
+    id: string
+    anchor: CommentAnchor
+    color: string
+    resolved: boolean
+    messages: CommentMessage[]
+    createdAt: string
+  }
+  class commentData {
+    <<apps/web comments/commentData.ts>>
+    COMMENT_COLORS — Yellow … Gray$
+    DEFAULT_COMMENT_COLOR = #f9a825$
+    readThreads(comments) CommentThread[]$
+    createThread(comments, anchor, color, author, text, now) ids$
+    addReply(comments, id, author, text, now) string | null$
+    setResolved(comments, id, resolved) void$
+    setThreadColor(comments, id, color) void$
+    anchorAt(object, at) CommentAnchor$
+    pinPoint(anchor, scene) Point | null$
+    participants(threads) string[]$
+    filterThreads(threads, people, hideResolved) CommentThread[]$
+  }
+  class commentReads {
+    <<apps/web comments/commentReads.ts>>
+    COMMENT_READS_PREFIX = myboard.commentReads.$
+    loadReads(boardId, self) Set~string~$
+    unreadCount(thread, reads, self) number$
+    useCommentReads(boardId, self) unread, markRead$
+  }
+  commentData ..> comments : чтение и запись веток
+  commentData ..> CommentThread
+  commentData ..> SceneObject : anchorAt, pinPoint — рамка и поворот объекта
+  CommentThread *-- CommentMessage
+  commentReads ..> CommentThread : чужие непрочитанные
 ```
 
 - Корни объявлены в `BoardDocument` как `unknown`; поля объекта сцены разбирает модуль `scene` (T5.2). Объект в `objects` — `Y.Map`, каждое поле — свой ключ, чтобы одновременные правки разных полей не затирали друг друга (COL-01): `type` — `sticky` | `shape` | `text` | `document` | `stack` | `line` | `drawing` | `frame` (`OBJECT_TYPES` в `scene/objectTypes.ts`, `document` — T6.1, `stack` — T6.2, `line` — T6.4, `drawing` — T6.5, `frame` — T6.6, `table` — T6.7, `kanban`, `card` — T6.8) или `group` (`GROUP_TYPE`, T5.3; другие типы — T6.9…, T7.*), `parent` (`null` — верхний уровень; `x`, `y` дочернего — относительно родителя, `readScene` прибавляет позиции предков, цикл и потерянный родитель дают 0), `width`, `height`, `rotation` (градусы вокруг центра, по умолчанию 0), `z` (целое; новый — `topZ` = наибольший `z` + 1, учитываются и записи-JSON, BUG-008), оформление по типу (`sticky` — `fill`, `fontSize`; `stack` — `fill`; `shape` — `shape`, `marker`, `fill`, `stroke`, `strokeWidth`, `radius`, `fontSize`, `color`, `align`, `lineHeight`, T6.3; `text` и `document` — `fontFamily`, `fontSize`, `color`, `fontStyle`, `align`, `lineHeight`, `background`, T6.1), `text` — `Y.Text` (у фигуры правки сливаются по символам: `applyTextChange` меняет только изменившуюся середину, `shiftIndex` держит курсор при чужой правке; у текста, документа и стикера — см. ниже; у стопки — пустой).
@@ -852,9 +912,10 @@ classDiagram
 - Корзина (T4.3, основа COL-08): `moveToTrash(board, ids, deletedBy)` одной транзакцией Yjs для каждого известного id кладёт в `trash[id]` `Y.Map { object: копия объекта (вложенный общий тип — `clone()`), deletedAt: ISO 8601, deletedBy: имя }` и удаляет ключ из `objects`; неизвестные id пропускаются. Восстановления из корзины пока нет (T8.2). Жизненный цикл — [states/board-object.md](states/board-object.md).
 - Отложенные обновления (T6.2, BUG-018): обновление, пришедшее раньше той правки, от которой оно зависит, `pycrdt` держит отложенным — в `get_update()` и снимок оно не входит. `BoardRoom._journal` хранит строки журнала (`StoredUpdate(seq, update)`), ещё не отрезанные сжатием; `compact` оставляет в `board_updates` те из них, где есть структуры, которых нет в документе (`_has_unapplied`: разница обновления и вектора версии не пуста), и не пишет снимок, если отрезать нечего. Когда недостающая правка доезжает, следующее сжатие отрезает и их.
 - Сервер не разбирает объекты, но подписан на корень `trash` своей копии (`_on_trash_change`): ключи с действием `add`/`update` в принятом обновлении (`_integrate`) попадают в `JournalEntry.trashed`, и `store.append` пишет запись `board_events` `objects_deleted` с именем из сессии соединения ([data-model.md](data-model.md)). Подписка ставится после загрузки, поэтому состояние из снимка/журнала записей не порождает.
-- Интерфейс пишет в `objects`, `settings` и `trash`: создание, правки, группы, порядок слоёв, блокировку, вставку и удаление (`moveToTrash` с именем своего участника, CVS-21; вместе с выбранным — вложенные объекты и опустевшие группы, `removalSet`) — [states/board-object.md](states/board-object.md). Выделение, инструмент, черновик рамки/лассо и меню — состояние вкладки, в документ не входят. Документ создаётся заново на каждую открытую доску (`useBoardConnection`) и наполняется из `STEP2` сервера.
-- Отмена и повтор (T5.4, CVS-07): `UndoHistory` (`scene/undoHistory.ts`) держит `Y.UndoManager` над корнями `objects`, `trash` и `settings` и записывает только локальные транзакции (origin `null`); обновления других участников он не отменяет. Отмена — обычная транзакция Yjs: структура документа и поля объектов не меняются, новых корней нет. Стек отмены в документ, снимки и резервные копии не входит.
+- Комментарии (T6.10, CMT-01…CMT-04): корень `comments` — `Y.Map` id ветки (как id объекта, 32 hex) → `CommentThreadMap`. Ветка пишется одной транзакцией вместе с первым сообщением (`createThread`); пустых веток в документе нет. `anchor` — запись-JSON: у объекта — `{object, u, v}`, доли ширины и высоты его рамки в системе объекта без поворота (`anchorAt`, зажаты в 0…1), у точки доски — `{object: null, x, y}`. Точку метки считает `pinPoint` по текущей рамке объекта из `readScene` (с поворотом), поэтому метка едет, тянется и поворачивается вместе с объектом; объекта нет среди видимых (корзина, скрытое содержимое фрейма) — метки нет, ветка остаётся. `messages` — `Y.Array` записей-JSON `{id, author, text, at}`, ответы дописываются в конец (`addReply`), правки и удаления сообщений нет. `resolved` и `color` (палитра `COMMENT_COLORS`) — поля ветки, их меняют `setResolved`, `setThreadColor`. `readThreads` пропускает записи с неверной привязкой или без `messages`, сообщения неверного вида и сортирует ветки по `createdAt`, затем по id. Фильтр по участникам (`participants`, `filterThreads`) — авторы сообщений, объединение выбранных. Непрочитанные (CMT-02) в документ не входят: `localStorage` `myboard.commentReads.<boardId>.<имя>` — id прочитанных сообщений (не больше 2000), свои сообщения прочитаны всегда; цвет следующей ветки — `localStorage` `myboard.commentColor`.
+- Интерфейс пишет в `objects`, `settings`, `trash` и `comments`: создание, правки, группы, порядок слоёв, блокировку, вставку и удаление (`moveToTrash` с именем своего участника, CVS-21; вместе с выбранным — вложенные объекты и опустевшие группы, `removalSet`) — [states/board-object.md](states/board-object.md). Выделение, инструмент, черновик рамки/лассо и меню — состояние вкладки, в документ не входят. Документ создаётся заново на каждую открытую доску (`useBoardConnection`) и наполняется из `STEP2` сервера.
+- Отмена и повтор (T5.4, CVS-07): `UndoHistory` (`scene/undoHistory.ts`) держит `Y.UndoManager` над корнями `objects`, `trash` и `settings` и записывает только локальные транзакции (origin `null`); обновления других участников он не отменяет. Корень `comments` (T6.10) в область отмены не входит. Отмена — обычная транзакция Yjs: структура документа и поля объектов не меняются, новых корней нет. Стек отмены в документ, снимки и резервные копии не входит.
 - Присутствие (курсоры, вид камеры, слежение, список участников — T4.2; след лазерной указки — T6.5, DRW-05) в документ не входит; запомненный вид камеры (CVS-05) хранится в `localStorage` браузера, а не в документе: оно идёт сообщениями `awareness`/`presence` и живёт только в памяти соединений ([ws-protocol.md](ws-protocol.md)).
 - Серверная копия собирается из последнего снимка `board_snapshots` и хвоста `board_updates` при первом подключении к доске (`Hub.join` → `store.load_journal` → `BoardRoom(board_id, journal)`) и выгружается, когда уходит последнее соединение (`Hub.leave`, с этим — сжатие журнала). Снимок — полное состояние `Doc.get_update()`; присутствия в нём нет. См. [data-model.md](data-model.md), [sequences/sync.md](sequences/sync.md).
 
-Актуально на: T6.9, 211b781 (интеллект-карта: `type: mindmap`, `root`, `nodes` с `MindmapNodeMap`, `mindmapData.ts`, `mindmaps.ts`, `SceneObject.mindmap`, `NodeDrop`; T6.8, ad223be — канбан и карточка: `type: kanban`, `columns`, `titles`, `type: card`, карточка в столбце — `parent` и `cell`, `kanbanData.ts`, `kanbans.ts`, `SceneObject.kanban`, `slotRect`, `ColumnFate`; T6.7, 88f9e7e — таблица: `type: table`, `columns`, `rows`, `sizes`, `cells` с `TableCellMap`, поле `cell` объекта в ячейке, `tableData.ts`, `tables.ts`, `tableExchange.ts`, `SceneObject.table`, `cell`, `containerUnder`, `Container`, копия таблицы; T6.6, e94fd44 — фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: MAP-01…MAP-04 (интеллект-карта, узлы, сворачивание веток, перекраска с потомками), KBN-01…KBN-03 (канбан, карточки в столбцах, правка столбцов), TBL-01…TBL-07 (таблица, ячейки, объединение, объекты в ячейках, обмен с электронными таблицами), FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
+Актуально на: T6.10, 003afc0 (комментарии: `comments` с `CommentThreadMap`, `CommentAnchor`, `CommentMessage`, `commentData.ts`, `commentReads.ts`, непрочитанные вне документа; T6.9, 211b781 — интеллект-карта: `type: mindmap`, `root`, `nodes` с `MindmapNodeMap`, `mindmapData.ts`, `mindmaps.ts`, `SceneObject.mindmap`, `NodeDrop`; T6.8, ad223be — канбан и карточка: `type: kanban`, `columns`, `titles`, `type: card`, карточка в столбце — `parent` и `cell`, `kanbanData.ts`, `kanbans.ts`, `SceneObject.kanban`, `slotRect`, `ColumnFate`; T6.7, 88f9e7e — таблица: `type: table`, `columns`, `rows`, `sizes`, `cells` с `TableCellMap`, поле `cell` объекта в ячейке, `tableData.ts`, `tables.ts`, `tableExchange.ts`, `SceneObject.table`, `cell`, `containerUnder`, `Container`, копия таблицы; T6.6, e94fd44 — фрейм: `type: frame`, `appearance`, `keepRatio`, `contentHidden`, `lockContent`, дети с `parent` = фрейм, `frameOptions.ts`, `frames.ts`, `SceneObject.frameOptions`, `hidden`; T6.5, d31412e — рисунок: `type: drawing`, `points`, `baseWidth`, `baseHeight`, `brush`, `drawingShape.ts`, `drawEdits.ts`, категория недавних цветов `drawing`, ластик — в корзину, лазер вне документа; T6.4, e2e079f — линия: `type: line`, `start`, `end`, `points`, `lineStyle`, `startCap`, `endCap`, `labels`, привязка концов, `connectors.ts`, `lineEdits.ts`, копирование линий; T6.3, 0de9f87 — фигура: `shape`, `marker`, `strokeWidth`, `radius`, прозрачная заливка, размер вида в `createObject`, каталог `shapes.ts`, `styleOptions.ts`, недавние цвета вне документа; стикер — T6.2, ce46d3f: стикер с `Y.Text` с атрибутами, `fontSize: auto`, `showAuthor`, теги `Y.Array`, тип `stack`, отложенные обновления в журнале сервера — BUG-018; тип `document` — T6.1, 986b7b2; поле `tags`, поиск — T5.5, 044e3c2; область отмены — T5.4, e2d1150; `topZ` с записями-JSON — T5.6, 298b639, BUG-008; поля объектов — T5.3, 1c15594). Требования: CMT-01…CMT-04 (ветки у объекта или точки, ответы, «решено», цвет, фильтр по участникам; непрочитанные — вне документа), MAP-01…MAP-04 (интеллект-карта, узлы, сворачивание веток, перекраска с потомками), KBN-01…KBN-03 (канбан, карточки в столбцах, правка столбцов), TBL-01…TBL-07 (таблица, ячейки, объединение, объекты в ячейках, обмен с электронными таблицами), FRM-01…FRM-05 (фрейм, его дети, оформление, пропорции, скрытие и блокировка содержимого), DRW-01…DRW-04, DRW-06 (рисунок, его запись, стирание и масштаб), DRW-05 (вне документа), CON-01…CON-07, CVS-26 (соединительные линии, подписи, привязка), SHP-01…SHP-04 (фигуры, BPMN, оформление фигуры, свой цвет), STK-01…STK-05 (стикер, теги, автор, стопка), CVS-06 (`settings`), CVS-07 (область отмены), CVS-09…CVS-14, CVS-21 (объекты сцены, их запись и удаление), CVS-15…CVS-20, CVS-22 (группы, слои, блокировка, буфер обмена, автор и даты), CVS-08 (`tags`, чтение поиском), TXT-01…TXT-08 (текст и документ, форматирование, буфер обмена), COL-01, COL-07 и COL-08 (основа: снимки, корзина), CVS-04 (чтение `objects` миникартой), COL-02…COL-04, COL-09, CVS-05 (вне документа); ARCHITECTURE.md, раздел 6 (структура документа, корзина).
