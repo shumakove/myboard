@@ -142,6 +142,8 @@ import {
 } from "./kanbans";
 import { DeleteColumnDialog, type KanbanActions } from "./KanbanControls";
 import { columnEditorStyle } from "./kanbans";
+import { createMindmap } from "./mindmaps";
+import { useMindmapNodes } from "./useMindmapNodes";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
@@ -184,7 +186,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * оформление и объединение ячеек, переход стрелками, объекты в ячейках, обмен с внешними
  * электронными таблицами и вставка таблицы стикерами; T6.8 — KBN-01…KBN-03 канбан со
  * столбцами, карточки задач с текстом и тегами, перенос карточек между столбцами,
- * добавление, переименование и удаление столбца с выбором судьбы его карточек.
+ * добавление, переименование и удаление столбца с выбором судьбы его карточек; T6.9 —
+ * MAP-01…MAP-04 интеллект-карты: узлы, их правка и перестановка, сворачивание веток,
+ * вопрос о перекраске дочерних узлов (`useMindmapNodes`).
  */
 export function BoardScene({
   board,
@@ -362,6 +366,20 @@ export function BoardScene({
         setSelection([id]);
         return readScene(objects).find((o) => o.id === id) ?? null;
       }
+      // MAP-01: новая интеллект-карта с корнем и детьми; попадает во фрейм (FRM-01).
+      if (type === "mindmap") {
+        let id = "";
+        board.doc.transact(() => {
+          id = createMindmap(
+            objects,
+            placement(type, at, settings.gridStep),
+            actor,
+          );
+          placeInFrames(objects, readScene(objects), [id], actor);
+        });
+        setSelection([id]);
+        return readScene(objects).find((o) => o.id === id) ?? null;
+      }
       // KBN-01: новый канбан со столбцами; попадает во фрейм под собой (FRM-01).
       if (type === "kanban") {
         let id = "";
@@ -521,6 +539,15 @@ export function BoardScene({
     [objects, kanbanById],
   );
 
+  // T6.9: узлы интеллект-карты — выбор, правка, перестановка, перекраска.
+  const mindmap = useMindmapNodes({
+    objects,
+    scene: visible,
+    selection,
+    select: setSelection,
+    actor,
+  });
+
   const fitText = useTextFit(objects, stageRef, history, actor);
   const commands = useSceneCommands({
     board,
@@ -572,6 +599,11 @@ export function BoardScene({
     editCell,
     selectColumn,
     editColumn,
+    selectNode: mindmap.selectNode,
+    editNode: mindmap.editNode,
+    toggleNode: mindmap.toggleNode,
+    dragNode: mindmap.dragNode,
+    dropNode: mindmap.dropNode,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -585,6 +617,7 @@ export function BoardScene({
     (columnEdit !== null
       ? `${columnEdit.kanban}#${columnEdit.column}`
       : null) ??
+    mindmap.editingKey ??
     (labelState?.editing === true
       ? `${labelState.line}:${labelState.label}`
       : null);
@@ -1102,7 +1135,9 @@ export function BoardScene({
                   }
                 : null
             }
+            mindmap={mindmap.layer}
           />
+          {mindmap.editor}
           {editableSingle && editedColumn && (
             <TextEditor
               key={`${editedColumn.kanban}#${editedColumn.column}`}
@@ -1253,6 +1288,7 @@ export function BoardScene({
           line={lineActions}
           table={tableActions}
           kanban={kanbanActions}
+          mindmap={mindmap.actions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1346,6 +1382,7 @@ export function BoardScene({
             }}
           />
         )}
+        {mindmap.dialog}
         {deleting && deletingColumn && (
           <DeleteColumnDialog
             title={deletingColumn.title}

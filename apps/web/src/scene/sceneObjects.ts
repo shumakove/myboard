@@ -31,6 +31,7 @@ import {
   readKanban,
   type KanbanShape,
 } from "./kanbanData";
+import { MINDMAP_TYPE, readMindmap, type MindmapShape } from "./mindmapData";
 import {
   GROUP_TYPE,
   isRichText,
@@ -103,6 +104,11 @@ export interface SceneObject extends Frame {
   table: TableShape | null;
   /** Канбан (T6.8): столбцы и их названия; у остальных типов `null`. */
   kanban: KanbanShape | null;
+  /**
+   * Интеллект-карта (T6.9): узлы и их раскладка; у остальных типов `null`. Записанные
+   * `x`, `y` карты — середина левого края корня, рамка начинается выше на `anchorY`.
+   */
+  mindmap: MindmapShape | null;
   /**
    * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; KBN-02: id
    * столбца канбана-родителя, в котором лежит карточка. `x`, `y` объекта в документе —
@@ -194,13 +200,23 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       frame = { ...bounds, rotation: 0 };
     }
     // TBL-01: рамка таблицы — сумма ширин столбцов и высот строк.
-    const { table, kanban } = object;
+    const { table, kanban, mindmap } = object;
     if (table !== null) {
       frame = { ...frame, width: table.width, height: table.height };
     }
     // KBN-01: ширина канбана — по числу столбцов.
     if (kanban !== null) {
       frame = { ...frame, width: kanban.width, height: kanban.height };
+    }
+    // MAP-01: рамка карты — по раскладке узлов, корень стоит в записанной точке.
+    if (mindmap !== null) {
+      frame = {
+        ...frame,
+        y: frame.y - mindmap.anchorY,
+        width: mindmap.width,
+        height: mindmap.height,
+        rotation: 0,
+      };
     }
     // CVS-26: привязанный конец линии — в точке привязки объекта, где бы тот ни был.
     const line =
@@ -227,7 +243,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       cell,
     } = object;
     // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек, канбан —
-    // по названиям столбцов.
+    // по названиям столбцов, интеллект-карту — по названиям узлов.
     const text =
       line !== null
         ? line.labels.map((l) => l.text).join("\n")
@@ -235,7 +251,9 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
           ? [...table.cells.values()].map((c) => c.text).join("\n")
           : kanban !== null
             ? kanban.columns.map((c) => c.title).join("\n")
-            : object.text;
+            : mindmap !== null
+              ? [...mindmap.byId.values()].map((n) => n.text).join("\n")
+              : object.text;
     scene.splice(at, 0, {
       id,
       type,
@@ -260,6 +278,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       hidden,
       table,
       kanban,
+      mindmap,
       cell,
     });
   };
@@ -296,10 +315,14 @@ function connectableFrames(
   const frames = new Map<string, Frame>();
   for (const object of raw.values()) {
     if (!isConnectable(object.type)) continue;
-    const { rotation, table, kanban } = object;
-    const width = table?.width ?? kanban?.width ?? object.width;
-    const height = table?.height ?? kanban?.height ?? object.height;
-    frames.set(object.id, { ...positionOf(object), width, height, rotation });
+    const { rotation, table, kanban, mindmap } = object;
+    const width =
+      table?.width ?? kanban?.width ?? mindmap?.width ?? object.width;
+    const height =
+      table?.height ?? kanban?.height ?? mindmap?.height ?? object.height;
+    const { x, y } = positionOf(object);
+    const top = mindmap === null ? y : y - mindmap.anchorY;
+    frames.set(object.id, { x, y: top, width, height, rotation });
   }
   return frames;
 }
@@ -398,6 +421,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     frameFields: type === FRAME_TYPE ? readFrameFields(record) : null,
     table: type === TABLE_TYPE ? readTable(record) : null,
     kanban: type === KANBAN_TYPE ? readKanban(record) : null,
+    mindmap: type === MINDMAP_TYPE ? readMindmap(record) : null,
     cell: typeof record.cell === "string" ? record.cell : null,
   };
 }
@@ -620,9 +644,13 @@ export function patchObjects(
 /**
  * Поле рамки, которое вычисляется, а не хранится: размер группы — по её объектам,
  * размер и поворот линии — по её точкам (T6.4), размер таблицы — по столбцам и строкам,
- * ширина канбана — по числу столбцов (T6.8).
+ * ширина канбана — по числу столбцов (T6.8), размер и поворот интеллект-карты — по её
+ * узлам (T6.9).
  */
 function derivedFrame(type: string, key: string): boolean {
+  if (type === MINDMAP_TYPE) {
+    return key === "width" || key === "height" || key === "rotation";
+  }
   if (type === GROUP_TYPE || type === TABLE_TYPE) {
     return key === "width" || key === "height";
   }

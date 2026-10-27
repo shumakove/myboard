@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LineControls, type LineActions } from "./LineControls";
 import { TableControls, type TableActions } from "./TableControls";
 import { KanbanControls, type KanbanActions } from "./KanbanControls";
+import { MindmapControls, type MindmapActions } from "./MindmapControls";
 import {
   MORE_TEXT_KEYS,
   typeName,
@@ -89,7 +90,9 @@ export interface AuthorToggle {
  *   Unmerge cells (TBL-03), Edit cell (TBL-04), Rows & columns — добавить и удалить строки
  *   и столбцы, ширина столбца и высота строки (TBL-01);
  * - T6.8: у канбана — выбранный столбец, Add card (KBN-02), Add column, Rename column,
- *   Delete column (KBN-03); у карточки — Tags (KBN-02).
+ *   Delete column (KBN-03); у карточки — Tags (KBN-02);
+ * - T6.9: у интеллект-карты — выбранный узел, Add child, Add sibling, Rename, Node color,
+ *   Collapse/Expand, Delete node (MAP-02…MAP-04).
  */
 export function SelectionBar({
   selected,
@@ -110,6 +113,7 @@ export function SelectionBar({
   frame = null,
   table = null,
   kanban = null,
+  mindmap = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -130,6 +134,7 @@ export function SelectionBar({
   frame?: FrameActions | null;
   table?: TableActions | null;
   kanban?: KanbanActions | null;
+  mindmap?: MindmapActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -261,6 +266,7 @@ export function SelectionBar({
       {line && <LineControls line={line} />}
       {table && <TableControls table={table} />}
       {kanban && <KanbanControls kanban={kanban} />}
+      {mindmap && <MindmapControls mindmap={mindmap} />}
 
       {frame?.keepRatio && (
         <Switch

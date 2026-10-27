@@ -44,6 +44,7 @@ const CREATE_KEYS: Record<PlaceableType, string> = {
   table: "KeyB",
   kanban: "KeyJ",
   card: "KeyA",
+  mindmap: "KeyI",
 };
 
 /** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
@@ -62,6 +63,9 @@ function createHint(type: PlaceableType, label: string): string {
   }
   if (type === "card") {
     return "Click the board or a kanban column to add a task card. Double-click it to type; add tags in the selection bar.";
+  }
+  if (type === "mindmap") {
+    return "Click the board to add a mind map. Click a node to select it, double-click to rename; drag a selected node onto another to move it.";
   }
 
   return `Click the board or drag this button onto it to add a ${label.toLowerCase()}.`;

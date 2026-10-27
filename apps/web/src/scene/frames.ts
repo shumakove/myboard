@@ -80,7 +80,7 @@ function movable(object: SceneObject, byId: ReadonlyMap<string, SceneObject>) {
  * Куда попадает объект: верхний из фреймов, ячеек таблиц и столбцов канбанов, внутри
  * которых его центр. Фрейм со скрытым содержимым (FRM-04) и заблокированный вместе
  * с содержимым (FRM-05), заблокированные таблица и канбан новых объектов не принимают;
- * таблица и канбан в ячейку таблицы не попадают; в столбец канбана попадают только
+ * таблица, канбан и интеллект-карта в ячейку таблицы не попадают; в столбец канбана попадают только
  * карточки (KBN-02).
  */
 export function containerUnder(
@@ -116,7 +116,13 @@ function slotUnder(
   if (target.locked) return null;
   const local = { x: point.x - target.x, y: point.y - target.y };
   if (target.table !== null) {
-    if (object.table !== null || object.kanban !== null) return null;
+    if (
+      object.table !== null ||
+      object.kanban !== null ||
+      object.mindmap !== null
+    ) {
+      return null;
+    }
     const cell = cellAt(target.table, local);
     return cell === null ? null : { parent: target, cell };
   }

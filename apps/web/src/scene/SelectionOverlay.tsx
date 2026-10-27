@@ -11,7 +11,8 @@ const CORNERS: readonly Corner[] = ["nw", "ne", "sw", "se"];
  * только если поворот предусмотрен у всех выделенных типов, и маркерами промежутка
  * у нескольких объектов (CVS-15). У одного объекта рамка повёрнута вместе с ним,
  * у нескольких — общая рамка по осям. У заблокированного маркеров нет (CVS-19).
- * У одной линии вместо рамки — маркеры концов и точек изгиба (T6.4).
+ * У одной линии вместо рамки — маркеры концов и точек изгиба (T6.4). У одной
+ * интеллект-карты маркеров размера нет: её размер задают узлы (T6.9).
  */
 export function SelectionOverlay({
   selected,
@@ -29,6 +30,7 @@ export function SelectionOverlay({
     return <LineHandles line={single} />;
   }
   const rotatable = selected.every((o) => typeSpec(o.type)?.rotatable === true);
+  const resizable = !(selected.length === 1 && single.mindmap !== null);
   return (
     <>
       {selected.length > 1 &&
@@ -46,6 +48,7 @@ export function SelectionOverlay({
         style={frameStyle(frame)}
       >
         {!locked &&
+          resizable &&
           CORNERS.map((corner) => (
             <div
               key={corner}
