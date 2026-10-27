@@ -8,6 +8,7 @@ import { createObject } from "./sceneObjects";
 import {
   canvas,
   click,
+  drag,
   element,
   object,
   renderScene,
@@ -115,6 +116,22 @@ describe("RCT-01…RCT-04: инструмент Reaction", () => {
     expect(
       within(palette).getByRole("button", { name: "Rocket reaction" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("RCT-01: реакцию не стаскивают с объекта; она едет, когда тянут объект", () => {
+    const board = createBoardDocument();
+    const sticky = createObject(board.objects, "sticky", { x: 0, y: 0 });
+    renderScene(board);
+    pressKey("KeyU", "u");
+    click(element(sticky), [100, 100]);
+    pressKey("Escape", "Escape");
+    const [placed] = reactions(board);
+    const id = placed?.id ?? "";
+    drag(element(id), [100, 100], [[400, 400]]);
+    expect(object(board, id)).toMatchObject({ x: 76, y: 76 });
+    drag(element(sticky), [10, 10], [[310, 10]]);
+    expect(object(board, sticky).x).toBe(300);
+    expect(object(board, id)).toMatchObject({ x: 376, y: 76 });
   });
 
   it("щелчок по реакции ставит новую на тот же объект", () => {

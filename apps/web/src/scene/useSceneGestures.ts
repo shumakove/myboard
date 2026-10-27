@@ -358,7 +358,10 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       press: CanvasPress,
     ): Gesture => {
       const c = latest.current;
-      const targets = objects.filter((o) => !o.locked);
+      // RCT-01: реакция держится на своём объекте — её не тащат, она едет с объектом.
+      const targets = objects.filter(
+        (o) => !o.locked && o.reaction === null && o.type !== "reaction",
+      );
       if (targets.length === 0) return still();
       const gesture = moveGesture(c.objects, targets, press.board, {
         gridStep: c.gridStep,
