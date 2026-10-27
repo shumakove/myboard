@@ -18,6 +18,7 @@ import { LineView, type LabelState } from "./LineView";
 import { DrawingView } from "./DrawingView";
 import { TableView, type TableCellsState } from "./TableView";
 import { KanbanView, type KanbanColumnsState } from "./KanbanView";
+import { MindmapView, type MindmapNodesState } from "./MindmapView";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -31,6 +32,12 @@ export interface TableLayerState {
 export interface KanbanLayerState {
   kanban: string;
   state: KanbanColumnsState;
+}
+
+/** Интеллект-карта с выбранным, редактируемым или перетаскиваемым узлом (T6.9). */
+export interface MindmapLayerState {
+  mindmap: string;
+  state: MindmapNodesState;
 }
 
 /** Действия форматированного текста на холсте (TXT-02, TXT-06). */
@@ -50,7 +57,8 @@ export interface RichTextHandlers {
  * (T6.5, DRW-01, DRW-06). Фрейм — рамка своего оформления (FRM-02); со скрытым
  * содержимым — с пометкой Content hidden, а его объектов в списке нет (FRM-04).
  * Таблица — ячейки с оформлением и маркеры границ (T6.7, TBL-01…TBL-04). Канбан — столбцы
- * с заголовками, карточка — текст и теги (T6.8, KBN-01…KBN-03).
+ * с заголовками, карточка — текст и теги (T6.8, KBN-01…KBN-03). Интеллект-карта — узлы,
+ * ветки и кнопки сворачивания (T6.9, MAP-01…MAP-03).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -61,6 +69,7 @@ export function SceneLayer({
   label = null,
   tables = null,
   kanban = null,
+  mindmap = null,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
@@ -70,6 +79,7 @@ export function SceneLayer({
   label?: LabelState | null;
   tables?: TableLayerState | null;
   kanban?: KanbanLayerState | null;
+  mindmap?: MindmapLayerState | null;
 }) {
   return (
     <>
@@ -84,6 +94,7 @@ export function SceneLayer({
           cells={tables?.cells?.table === object.id ? tables.cells.state : null}
           handles={tables?.handles === object.id}
           columns={kanban?.kanban === object.id ? kanban.state : null}
+          nodes={mindmap?.mindmap === object.id ? mindmap.state : null}
         />
       ))}
     </>
@@ -99,6 +110,7 @@ function SceneObjectView({
   cells,
   handles,
   columns,
+  nodes,
 }: {
   object: SceneObject;
   selected: boolean;
@@ -108,6 +120,7 @@ function SceneObjectView({
   cells: TableCellsState | null;
   handles: boolean;
   columns: KanbanColumnsState | null;
+  nodes: MindmapNodesState | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const group = object.type === GROUP_TYPE;
@@ -154,6 +167,8 @@ function SceneObjectView({
         <TableView object={object} cells={cells} handles={handles} />
       ) : object.kanban ? (
         <KanbanView object={object} columns={columns} />
+      ) : object.mindmap ? (
+        <MindmapView object={object} nodes={nodes} />
       ) : object.frameOptions ? (
         object.frameOptions.contentHidden && (
           <span className="frame-hidden-note">Content hidden</span>

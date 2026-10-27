@@ -5,7 +5,8 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
  * (T5.2), документ (T6.1, TXT-06), стопка стикеров (T6.2, STK-05); виды фигур — T6.3
  * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01), фрейм (T6.6,
  * `frames.ts`, FRM-01…FRM-05), таблица (T6.7, `tables.ts`, TBL-01…TBL-07), канбан и карточка
- * задачи (T6.8, `kanbans.ts`, KBN-01…KBN-03). Остальные типы
+ * задачи (T6.8, `kanbans.ts`, KBN-01…KBN-03), интеллект-карта (T6.9, `mindmaps.ts`,
+ * MAP-01…MAP-04). Остальные типы
  * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
  */
 export type ObjectType =
@@ -19,7 +20,8 @@ export type ObjectType =
   | "frame"
   | "table"
   | "kanban"
-  | "card";
+  | "card"
+  | "mindmap";
 
 /** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
 export type PlaceableType = Exclude<ObjectType, "drawing">;
@@ -251,6 +253,18 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     rotatable: false,
     editable: true,
     style: { fill: "#ffffff" },
+  },
+  // MAP-01…MAP-04: интеллект-карта — дерево узлов (`mindmapData.ts`); рамка — по раскладке
+  // узлов. Оформление и названия — у узлов.
+  mindmap: {
+    type: "mindmap",
+    label: "Mind map",
+    plural: "mind maps",
+    width: 400,
+    height: 120,
+    rotatable: false,
+    editable: false,
+    style: {},
   },
 };
 

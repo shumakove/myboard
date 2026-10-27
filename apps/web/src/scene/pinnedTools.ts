@@ -19,6 +19,7 @@ const LISTED_ONLY: readonly ToolId[] = [
   "table", // T6.7
   "kanban", // T6.8
   "card", // T6.8
+  "mindmap", // T6.9
 ];
 
 /** По умолчанию закреплены инструменты T5.4 и перо (T6.5) в порядке полного списка. */

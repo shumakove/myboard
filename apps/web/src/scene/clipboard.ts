@@ -11,6 +11,7 @@ import { labelsValue } from "./lineEdits";
 import { readTable, tableFieldValue, tableGrid } from "./tableData";
 import { gridToHtml, gridToTsv } from "./tableExchange";
 import { kanbanFieldValue } from "./kanbanData";
+import { mindmapFieldValue } from "./mindmapData";
 
 import {
   creationMeta,
@@ -323,6 +324,9 @@ function fieldValue(
   if (table !== undefined) return table;
   const kanban = kanbanFieldValue(key, value);
   if (kanban !== undefined) return kanban;
+  // T6.9: узлы интеллект-карты.
+  const mindmap = mindmapFieldValue(key, value);
+  if (mindmap !== undefined) return mindmap;
   if (key === "tags" && Array.isArray(value)) {
     const tags = new Y.Array<unknown>();
     tags.push(value.filter((tag) => typeof tag === "string"));

@@ -47,6 +47,9 @@ import {
   type ConnectHint,
   type LineGestureContext,
 } from "./lineGestures";
+import type { NodeDrop } from "./mindmapData";
+import { nodeDragGesture } from "./mindmapGesture";
+import type { NodeDragState } from "./MindmapView";
 
 /** Что сцена даёт жестам. Значения читаются в момент жеста — всегда свежие. */
 export interface SceneControls {
@@ -94,6 +97,16 @@ export interface SceneControls {
   selectColumn: (kanban: string, column: string) => void;
   /** KBN-03: открыть название столбца канбана для правки. */
   editColumn: (kanban: string, column: string) => void;
+  /** MAP-02: выбрать узел интеллект-карты (действия с узлом — в панели выделения). */
+  selectNode: (mindmap: string, node: string) => void;
+  /** MAP-02: открыть название узла для правки. */
+  editNode: (mindmap: string, node: string) => void;
+  /** MAP-03: свернуть или развернуть ветку узла. */
+  toggleNode: (mindmap: string, node: string) => void;
+  /** MAP-02: перетаскиваемый узел и цель под указателем; `null` — не тащат. */
+  dragNode: (drag: (NodeDragState & { mindmap: string }) | null) => void;
+  /** MAP-02: переставить узел на цель. */
+  dropNode: (mindmap: string, node: string, drop: NodeDrop) => void;
 }
 
 function hit(target: EventTarget | null): {
@@ -102,6 +115,8 @@ function hit(target: EventTarget | null): {
   label: string | null;
   cell: string | null;
   column: string | null;
+  node: string | null;
+  toggle: string | null;
 } {
   if (!(target instanceof Element)) {
     return {
@@ -110,9 +125,15 @@ function hit(target: EventTarget | null): {
       label: null,
       cell: null,
       column: null,
+      node: null,
+      toggle: null,
     };
   }
   return {
+    node: target.closest("[data-node]")?.getAttribute("data-node") ?? null,
+    toggle:
+      target.closest("[data-node-toggle]")?.getAttribute("data-node-toggle") ??
+      null,
     cell: target.closest("[data-cell]")?.getAttribute("data-cell") ?? null,
     column:
       target
@@ -272,7 +293,10 @@ function still(click?: () => void): Gesture {
  *   (TBL-01); объект попадает в ячейку под своим центром (TBL-05);
  * - T6.8: щелчок по заголовку столбца канбана выделяет канбан и выбирает столбец, двойной
  *   щелчок открывает название столбца для правки (KBN-03); карточка попадает в столбец под
- *   своим центром и встаёт в нём по порядку (KBN-02).
+ *   своим центром и встаёт в нём по порядку (KBN-02);
+ * - T6.9: щелчок по узлу интеллект-карты выделяет карту и выбирает узел, двойной щелчок
+ *   открывает название узла (MAP-02); узел выделенной карты перетаскивается на другой
+ *   узел (MAP-02); кнопка у узла сворачивает и разворачивает его ветку (MAP-03).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -410,6 +434,8 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           label,
           cell,
           column,
+          node,
+          toggle,
         } = hit(press.target);
 
         const drawing = drawingWith(press);
@@ -530,6 +556,49 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
               },
             };
           }
+          // MAP-03: кнопка у узла сворачивает и разворачивает его ветку.
+          if (toggle !== null) {
+            return still(() => {
+              latest.current.toggleNode(leafId, toggle);
+            });
+          }
+          // MAP-02: щелчок по узлу выбирает узел; узел выделенной карты перетаскивается.
+          const nodeOf = objectId === leafId ? node : null;
+          if (nodeOf !== null && !press.shiftKey) {
+            const map = c.scene.find((o) => o.id === objectId);
+            const draggable =
+              isSelected &&
+              c.selection.length === 1 &&
+              map?.mindmap != null &&
+              !map.locked &&
+              nodeOf !== map.mindmap.root;
+            if (draggable) {
+              return nodeDragGesture(
+                {
+                  show: (drag) => {
+                    latest.current.dragNode(drag);
+                  },
+                  drop: (id, dragged, target) => {
+                    latest.current.dropNode(id, dragged, target);
+                  },
+                  select: (id, picked) => {
+                    latest.current.selectNode(id, picked);
+                  },
+                },
+                map,
+                nodeOf,
+                press.board,
+              );
+            }
+            const ids = isSelected ? [...c.selection] : [objectId];
+            c.select(ids);
+            return {
+              ...move(selectedObjects(ids), press),
+              click: () => {
+                latest.current.selectNode(objectId, nodeOf);
+              },
+            };
+          }
           // KBN-03: щелчок по заголовку столбца выбирает столбец.
           const columnOf = objectId === leafId ? column : null;
           if (columnOf !== null && !press.shiftKey) {
@@ -566,10 +635,24 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
 
       tap(press) {
         const c = latest.current;
-        const { objectId: leafId, cell, column } = hit(press.target);
+        const {
+          objectId: leafId,
+          cell,
+          column,
+          node,
+          toggle,
+        } = hit(press.target);
+        // MAP-03: касание кнопки у узла сворачивает и разворачивает ветку.
+        if (leafId !== null && toggle !== null) {
+          c.toggleNode(leafId, toggle);
+          return;
+        }
         if (leafId !== null) {
           const objectId = selectionTarget(c.scene, leafId, c.selection);
           c.select([objectId]);
+          if (node !== null && objectId === leafId) {
+            c.selectNode(objectId, node);
+          }
           if (cell !== null && objectId === leafId) {
             c.selectCell(objectId, cell, false);
           }
@@ -601,7 +684,11 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           label,
           cell,
           column,
+          node,
+          toggle,
         } = hit(press.target);
+        // MAP-03: двойной щелчок по кнопке ветки — два переключения, не правка.
+        if (toggle !== null) return;
         // CON-06: двойной щелчок по точке изгиба удаляет её.
         const line = editableLine(selectedObjects(c.selection));
         if (line !== null && handle?.startsWith("line-point-")) {
@@ -625,6 +712,11 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         // KBN-03: двойной щелчок по заголовку столбца — правка названия.
         if (leaf?.kanban != null && column !== null) {
           c.editColumn(leaf.id, column);
+          return;
+        }
+        // MAP-02: двойной щелчок по узлу — правка названия.
+        if (leaf?.mindmap != null && node !== null) {
+          c.editNode(leaf.id, node);
           return;
         }
 
