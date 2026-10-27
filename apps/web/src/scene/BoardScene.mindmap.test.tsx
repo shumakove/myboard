@@ -199,6 +199,19 @@ describe("MAP-02: операции с узлами", () => {
     ).toBeNull();
   });
 
+  it("BUG-025: Delete и Backspace при выбранном корне не удаляют карту", () => {
+    const { board, id } = mindmapBoard();
+    renderScene(board);
+    const root = nodeAt(board, id, "Main topic");
+    click(root.element, root.at);
+    expect(root.element.getAttribute("data-active")).toBe("true");
+
+    fireEvent.keyDown(document.body, { key: "Delete" });
+    fireEvent.keyDown(document.body, { key: "Backspace" });
+    expect(board.objects.has(id)).toBe(true);
+    expect(shownTexts(id)).toEqual(["Main topic", "Idea 1", "Idea 2"]);
+  });
+
   it("перетаскивание узла выделенной карты переставляет его — видно второму участнику", () => {
     const [docA, docB] = linkedDocs();
     const { board, id } = mindmapBoard(createBoardDocument(docA));
