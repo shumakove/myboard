@@ -123,10 +123,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | MAP-02 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-02 *, в т. ч. участник по ссылке, второй клиент; COL-01, CVS-07) | PASS |
 | MAP-03 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-03 *, второй клиент, перезагрузка) | PASS |
 | MAP-04 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-04 *, оба ответа и Cancel, участник по ссылке) | PASS |
-| CMT-01 | T6.10 | — | не проверено |
-| CMT-02 | T6.10 | — | не проверено |
-| CMT-03 | T6.10 | — | не проверено |
-| CMT-04 | T6.10 | — | не проверено |
+| CMT-01 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-01 *: объект и точка, сдвиг/масштаб, участник по ссылке, удаление и Ctrl+Z; MOB-01 на телефоне) | PASS |
+| CMT-02 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-02 *: переписка, Resolve/Reopen, непрочитанные у трёх клиентов) | PASS (BUG-026 minor) |
+| CMT-03 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-03 *, второй клиент, перезагрузка) | PASS |
+| CMT-04 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-04 *, фильтр по имени участника по ссылке) | PASS (BUG-026 minor) |
 | RCT-01 | T6.11 | — | не проверено |
 | RCT-02 | T6.11 | — | не проверено |
 | RCT-03 | T6.11 | — | не проверено |
