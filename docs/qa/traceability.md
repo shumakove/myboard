@@ -127,16 +127,16 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CMT-02 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-02 *: переписка, Resolve/Reopen, непрочитанные у трёх клиентов) | PASS (BUG-026 minor) |
 | CMT-03 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-03 *, второй клиент, перезагрузка) | PASS |
 | CMT-04 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-04 *, фильтр по имени участника по ссылке) | PASS (BUG-026 minor) |
-| RCT-01 | T6.11 | — | не проверено |
-| RCT-02 | T6.11 | — | не проверено |
-| RCT-03 | T6.11 | — | не проверено |
-| RCT-04 | T6.11 | — | не проверено |
-| FLP-01 | T6.11 | — | не проверено |
-| FLP-02 | T6.11 | — | не проверено |
-| FLP-03 | T6.11 | — | не проверено |
-| DICE-01 | T6.11 | — | не проверено |
-| DICE-02 | T6.11 | — | не проверено |
-| DICE-03 | T6.11 | — | не проверено |
+| RCT-01 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-01 *: едет с объектом у себя/второго клиента/после перезагрузки, участник по ссылке, удаление объекта) | PASS |
+| RCT-02 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-02 *: имя участника по ссылке у владельца и наоборот) | PASS |
+| RCT-03 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-03 *: удержание мыши; MOB-01 удержание пальца) | PASS |
+| RCT-04 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-04 *: наборы Emotions/Votes/Stamps, Recent) | PASS |
+| FLP-01 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-01 FLP-03 *, FLP-01 ARCH … (Q-006)) | BLOCKED (Q-006 — хранение картинки стороны) |
+| FLP-02 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-02 *: одна, угловая кнопка у участника, Flip all; MOB-01 касанием) | PASS |
+| FLP-03 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-01 FLP-03 *: размер и начертание по сторонам) | PASS |
+| DICE-01 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-01 *: грани 4…20, цвет, второй клиент) | PASS |
+| DICE-02 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-02 *: 480 бросков d4/d6/d20 в диапазоне, одновременные броски двух клиентов) | PASS |
+| DICE-03 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-03 *: сумма, пересчёт, Roll all, не-кубики) | PASS |
 | IMG-01 | T7.1 | — | не проверено |
 | IMG-02 | T7.1 | — | не проверено |
 | IMG-03 | T7.1 | — | не проверено |
