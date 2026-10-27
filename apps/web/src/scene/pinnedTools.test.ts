@@ -33,10 +33,13 @@ describe("CVS-24 закреплённые инструменты", () => {
       "kanban",
       "card",
       "mindmap",
+      "flipcard",
+      "dice",
       "marker",
       "eraser",
       "laser",
       "comment",
+      "reaction",
     ]);
   });
 
@@ -95,11 +98,14 @@ describe("CVS-24 закреплённые инструменты", () => {
       "kanban",
       "card",
       "mindmap",
+      "flipcard",
+      "dice",
       "pen",
       "marker",
       "eraser",
       "laser",
       "comment",
+      "reaction",
     ]);
   });
 });

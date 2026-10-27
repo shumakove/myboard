@@ -64,12 +64,18 @@ function isContainer(object: SceneObject): boolean {
 }
 
 /**
- * Может ли объект сам переходить между фреймами и ячейками таблиц: не фрейм и не линия
- * (её положение задают концы), не заблокирован и лежит на верхнем уровне, во фрейме или
+ * Может ли объект сам переходить между фреймами и ячейками таблиц: не фрейм, не линия
+ * (её положение задают концы) и не реакция, не заблокирован и лежит на верхнем уровне, во фрейме или
  * в ячейке, а не в группе.
  */
 function movable(object: SceneObject, byId: ReadonlyMap<string, SceneObject>) {
-  if (object.type === FRAME_TYPE || object.type === "line" || object.locked) {
+  // RCT-01: реакция остаётся на своём объекте и во фреймы не переходит.
+  if (
+    object.type === FRAME_TYPE ||
+    object.type === "line" ||
+    object.type === "reaction" ||
+    object.locked
+  ) {
     return false;
   }
   const parent = object.parent === null ? undefined : byId.get(object.parent);

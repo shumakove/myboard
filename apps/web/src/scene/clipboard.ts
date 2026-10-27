@@ -316,7 +316,8 @@ function fieldValue(
   value: unknown,
   ids: ReadonlyMap<string, string>,
 ): unknown {
-  if (key === "text") return textField(value);
+  // T6.11: текст оборотной стороны флип-карточки — тоже `Y.Text`.
+  if (key === "text" || key === "backText") return textField(value);
   if (key === "labels") return labelsValue(value);
   if (key === "start" || key === "end") return pastedEnd(value, ids);
   // T6.7: столбцы, строки, размеры и ячейки таблицы; T6.8: столбцы и названия канбана.

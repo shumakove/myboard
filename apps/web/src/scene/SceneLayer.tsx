@@ -19,6 +19,11 @@ import { DrawingView } from "./DrawingView";
 import { TableView, type TableCellsState } from "./TableView";
 import { KanbanView, type KanbanColumnsState } from "./KanbanView";
 import { MindmapView, type MindmapNodesState } from "./MindmapView";
+import { ReactionView } from "./ReactionView";
+import { reactionTitle } from "./reactionData";
+import { FlipCardView } from "./FlipCardView";
+import { DiceView } from "./DiceView";
+import { diceTitle } from "./diceData";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -58,7 +63,8 @@ export interface RichTextHandlers {
  * содержимым — с пометкой Content hidden, а его объектов в списке нет (FRM-04).
  * Таблица — ячейки с оформлением и маркеры границ (T6.7, TBL-01…TBL-04). Канбан — столбцы
  * с заголовками, карточка — текст и теги (T6.8, KBN-01…KBN-03). Интеллект-карта — узлы,
- * ветки и кнопки сворачивания (T6.9, MAP-01…MAP-03).
+ * ветки и кнопки сворачивания (T6.9, MAP-01…MAP-03). Реакция — изображение с автором по
+ * наведению, флип-карточка — две стороны с переворотом, кубик — грани и значение (T6.11).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -153,7 +159,16 @@ function SceneObjectView({
           ? (shapeMarker(shape, object.style.marker) ?? undefined)
           : undefined
       }
-      aria-label={typeName(object.type)}
+      data-side={
+        object.flip ? (object.flip.flipped ? "back" : "front") : undefined
+      }
+      aria-label={
+        object.reaction
+          ? reactionTitle(object)
+          : object.dice
+            ? diceTitle(object)
+            : typeName(object.type)
+      }
       aria-selected={selected}
       style={group ? frameStyle(object) : objectStyle(object)}
     >
@@ -169,6 +184,12 @@ function SceneObjectView({
         <KanbanView object={object} columns={columns} />
       ) : object.mindmap ? (
         <MindmapView object={object} nodes={nodes} />
+      ) : object.reaction ? (
+        <ReactionView object={object} />
+      ) : object.flip ? (
+        <FlipCardView object={object} editing={editing} />
+      ) : object.dice ? (
+        <DiceView object={object} />
       ) : object.frameOptions ? (
         object.frameOptions.contentHidden && (
           <span className="frame-hidden-note">Content hidden</span>

@@ -16,7 +16,9 @@ import {
  * - `create` — ставит объект своего типа (CVS-09); линия рисуется протяжкой (CON-01);
  * - `draw` — перо и маркер рисуют штрих (DRW-01), ластик стирает штрихи (DRW-03), лазер
  *   оставляет временный след (DRW-05);
- * - `comment` — щелчок по объекту или пустому месту начинает ветку комментария (CMT-01).
+ * - `comment` — щелчок по объекту или пустому месту начинает ветку комментария (CMT-01);
+ * - `react` — нажатие на объект ставит на него реакцию, удержание её растит (RCT-01,
+ *   RCT-03).
  *
  * `key` — горячая клавиша инструмента без модификаторов (CVS-25): код клавиши
  * `KeyboardEvent.code`, чтобы она работала при любой раскладке.
@@ -27,6 +29,7 @@ export type Tool = { label: string; hint: string; key: string } & (
   | { kind: "create"; id: PlaceableType }
   | { kind: "draw"; id: DrawToolId }
   | { kind: "comment"; id: "comment" }
+  | { kind: "react"; id: "reaction" }
 );
 
 /** Инструменты рисования (T6.5). */
@@ -47,6 +50,8 @@ const CREATE_KEYS: Record<PlaceableType, string> = {
   kanban: "KeyJ",
   card: "KeyA",
   mindmap: "KeyI",
+  flipcard: "KeyH",
+  dice: "KeyX",
 };
 
 /** Подсказка инструмента создания; у линии — протяжка и привязка к объектам (T6.4). */
@@ -65,6 +70,12 @@ function createHint(type: PlaceableType, label: string): string {
   }
   if (type === "card") {
     return "Click the board or a kanban column to add a task card. Double-click it to type; add tags in the selection bar.";
+  }
+  if (type === "flipcard") {
+    return "Click the board to add a flip card. Double-click it to type on the shown side; Flip in the selection bar turns it over.";
+  }
+  if (type === "dice") {
+    return "Click the board to add a dice. Double-click it or press Roll in the selection bar to roll.";
   }
   if (type === "mindmap") {
     return "Click the board to add a mind map. Click a node to select it, double-click to rename; drag a selected node onto another to move it.";
@@ -129,6 +140,13 @@ export const TOOLS: readonly Tool[] = [
     label: "Comment",
     key: "KeyO",
     hint: "Click an object or the board to start a comment thread.",
+  },
+  {
+    kind: "react",
+    id: "reaction",
+    label: "Reaction",
+    key: "KeyU",
+    hint: "Click an object to stamp the chosen reaction on it; hold to make it bigger.",
   },
 ];
 
