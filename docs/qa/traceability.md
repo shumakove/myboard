@@ -119,10 +119,10 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | KBN-02 | T6.8 | acceptance/e2e/kanban.spec.ts (KBN-02 *, в т. ч. перенос участником, второй клиент) | PASS |
 | KBN-03 | T6.8 | acceptance/e2e/kanban.spec.ts (KBN-03 *, оба варианта судьбы карточек, участник по ссылке) | PASS |
 | KBN-04 | T10.1 | — | не проверено |
-| MAP-01 | T6.9 | — | не проверено |
-| MAP-02 | T6.9 | — | не проверено |
-| MAP-03 | T6.9 | — | не проверено |
-| MAP-04 | T6.9 | — | не проверено |
+| MAP-01 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-01 *, в т. ч. участник по ссылке; MOB-06 на телефоне) | PASS |
+| MAP-02 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-02 *, в т. ч. участник по ссылке, второй клиент; COL-01, CVS-07) | PASS |
+| MAP-03 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-03 *, второй клиент, перезагрузка) | PASS |
+| MAP-04 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-04 *, оба ответа и Cancel, участник по ссылке) | PASS |
 | CMT-01 | T6.10 | — | не проверено |
 | CMT-02 | T6.10 | — | не проверено |
 | CMT-03 | T6.10 | — | не проверено |
