@@ -1,0 +1,208 @@
+/* T6.10: метки комментариев на холсте и панель комментариев. */
+
+.comment-pins {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Метка — постоянного экранного размера; хвост капли указывает в точку привязки. */
+.comment-pin {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-1);
+  border: 2px solid var(--color-surface);
+  border-radius: 14px 14px 14px 2px;
+  background: var(--comment-color, var(--color-highlight));
+  box-shadow: var(--shadow-md);
+  color: var(--color-on-inverse);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: scale(var(--inverse-zoom, 1)) translate(0, -100%);
+  transform-origin: 0 0;
+}
+
+.comment-pin[data-resolved="true"] {
+  opacity: 0.6;
+}
+
+.comment-pin[aria-pressed="true"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* CMT-02: непрочитанное — точка в углу метки. */
+.comment-pin[data-unread="true"]::after {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  content: "";
+}
+
+.comment-pin[data-comment-draft] {
+  cursor: default;
+  pointer-events: none;
+}
+
+@media (pointer: coarse) {
+  .comment-pin {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 18px 18px 18px 2px;
+  }
+}
+
+.comment-panel {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--layer-panel);
+  display: grid;
+  gap: var(--space-2);
+  width: min(340px, calc(100% - 2 * var(--space-2)));
+  max-height: calc(100% - 2 * var(--space-2));
+  box-sizing: border-box;
+  padding: var(--space-2);
+  overflow-y: auto;
+  font-size: var(--font-size-md);
+}
+
+.comment-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.comment-panel-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.comment-people,
+.comment-actions,
+.comment-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.comment-color {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--color-border-strong);
+  cursor: pointer;
+}
+
+.comment-color[aria-checked="true"] {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+@media (pointer: coarse) {
+  .comment-color {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+.comment-list,
+.comment-messages {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comment-item {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  padding-block: var(--space-1);
+  text-align: left;
+  white-space: normal;
+}
+
+.comment-item[data-unread="true"] {
+  background: var(--color-accent-soft);
+}
+
+.comment-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.comment-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+}
+
+.comment-author {
+  font-weight: 600;
+}
+
+.comment-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.comment-meta,
+.comment-place,
+.comment-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.comment-badge {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  color: var(--color-on-danger);
+  font-size: var(--font-size-xs);
+}
+
+.comment-resolved {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.comment-message {
+  display: grid;
+  gap: var(--space-0);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.comment-form {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.comment-input {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}

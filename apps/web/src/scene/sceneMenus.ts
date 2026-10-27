@@ -97,6 +97,8 @@ export function objectMenu(
     copyToClipboard: (cut: boolean) => void;
     /** SHR-07: ссылка на один выделенный объект. */
     copyLink: (() => void) | null;
+    /** CMT-01: комментарий к одному выделенному объекту. */
+    comment: (() => void) | null;
   },
 ): MenuItem[] {
   const count = commands.units.length;
@@ -114,6 +116,7 @@ export function objectMenu(
     ),
     ...item("Duplicate", commands.duplicate),
     ...item("Copy link to object", actions.copyLink),
+    ...item("Add comment", actions.comment),
     ...item("Group", commands.group),
     ...item("Ungroup", commands.ungroup),
     ...item("Lock", commands.lock),
@@ -131,7 +134,7 @@ export function objectMenu(
   ];
 }
 
-/** Меню пустого места холста: вставка, создание, выделить всё, разблокировать всё. */
+/** Меню пустого места холста: вставка, создание, комментарий, выделить всё, разблокировать всё. */
 export function boardMenu(
   commands: SceneCommands,
   at: Point,
@@ -139,6 +142,8 @@ export function boardMenu(
   actions: {
     create: (type: PlaceableType, at: Point) => void;
     selectAll: () => void;
+    /** CMT-01: комментарий в точке холста. */
+    comment: (at: Point) => void;
   },
 ): MenuItem[] {
   return [
@@ -154,6 +159,9 @@ export function boardMenu(
         actions.create(type, at);
       }),
     ),
+    ...item("Add comment here", () => {
+      actions.comment(at);
+    }),
     ...item("Select all", actions.selectAll),
     ...item("Unlock all", commands.unlockAll),
   ];

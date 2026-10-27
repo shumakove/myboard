@@ -107,6 +107,8 @@ export interface SceneControls {
   dragNode: (drag: (NodeDragState & { mindmap: string }) | null) => void;
   /** MAP-02: переставить узел на цель. */
   dropNode: (mindmap: string, node: string, drop: NodeDrop) => void;
+  /** CMT-01: начать ветку комментария у объекта (`null` — в точке холста). */
+  comment: (object: SceneObject | null, at: Point) => void;
 }
 
 function hit(target: EventTarget | null): {
@@ -296,7 +298,9 @@ function still(click?: () => void): Gesture {
  *   своим центром и встаёт в нём по порядку (KBN-02);
  * - T6.9: щелчок по узлу интеллект-карты выделяет карту и выбирает узел, двойной щелчок
  *   открывает название узла (MAP-02); узел выделенной карты перетаскивается на другой
- *   узел (MAP-02); кнопка у узла сворачивает и разворачивает его ветку (MAP-03).
+ *   узел (MAP-02); кнопка у узла сворачивает и разворачивает его ветку (MAP-03);
+ * - T6.10: инструмент Comment начинает ветку комментария у объекта под указателем или в
+ *   точке холста (CMT-01).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -458,6 +462,12 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           };
         }
         if (tool.kind === "lasso") return area("lasso", press);
+        // CMT-01: инструмент Comment — ветка у объекта под указателем или в точке.
+        if (tool.kind === "comment") {
+          c.setTool("select");
+          c.comment(c.scene.find((o) => o.id === leafId) ?? null, press.board);
+          return still();
+        }
 
         const selected = selectedObjects(c.selection);
         // TBL-01: граница столбца или строки одной выделенной таблицы.

@@ -116,6 +116,7 @@ export function BoardWorkspace({
         </FloatingPanel>
         <BoardScene
           board={board}
+          boardId={boardId}
           camera={camera}
           wheelMode={wheelMode}
           userName={selfName}
