@@ -23,6 +23,7 @@ import { ContextMenu, type MenuItem } from "./ContextMenu";
 import type { AreaDraft } from "./gestures";
 import { topmost } from "./groups";
 import type { Guide } from "./guides";
+import { useBoardNote } from "../notes/useBoardNote";
 import { ObjectPicker } from "../richtext/ObjectPicker";
 import { RichTextEditor } from "../richtext/RichTextEditor";
 import { objectLabel } from "./objectLabel";
@@ -219,6 +220,7 @@ export function BoardScene({
   focusObject = null,
   boardLink,
   onLaser,
+  loaded = true,
 }: {
   board: BoardDocument;
   /** Доска: свои отметки прочитанных комментариев — по ней (CMT-02). */
@@ -242,6 +244,8 @@ export function BoardScene({
   boardLink?: () => Promise<string>;
   /** DRW-05: свой след лазера — в присутствие для остальных; `null` — следа нет. */
   onLaser?: (trail: LaserTrail | null) => void;
+  /** NTE-02: документ сверен с сервером — закреплённая заметка открывается. */
+  loaded?: boolean;
 }) {
   const { objects } = board;
   const actor = userName;
@@ -283,7 +287,35 @@ export function BoardScene({
   const { pinned, update: updatePinned } = usePinnedTools();
   const viewport = useRef<Size>({ width: 0, height: 0 });
   const [searching, setSearching] = useState(false);
-  /** T6.10: комментарии; их панель и поиск занимают одно место — открыт один. */
+  /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
+  const goTo = useCallback(
+    (id: string): boolean => {
+      const target = readScene(objects).find((o) => o.id === id);
+      if (target === undefined) return false;
+      setSelection([id]);
+      onMove(() => focusOn(target, viewport.current));
+      return true;
+    },
+    [objects, onMove],
+  );
+
+  const label = useCallback((id: string) => objectLabel(scene, id), [scene]);
+  /** TXT-06, NTE-03: открыт выбор объекта для ссылки — куда вернуть выбор. */
+  const [picker, setPicker] = useState<{
+    done: (id: string | null) => void;
+  } | null>(null);
+  /** NTE-01…NTE-03: заметка доски; её панель на месте поиска и комментариев. */
+  const note = useBoardNote({
+    notes: board.notes,
+    loaded,
+    objectLabel: label,
+    onOpenObject: goTo,
+    onPickObject: (done) => {
+      setPicker({ done });
+    },
+  });
+  const { close: closeNote } = note;
+  /** T6.10: комментарии; их панель, поиск и заметка занимают одно место — открыт один. */
   const comments = useBoardComments({
     comments: board.comments,
     scene: visible,
@@ -300,16 +332,13 @@ export function BoardScene({
   const startComment = useCallback(
     (object: SceneObject | null, at: Point) => {
       setSearching(false);
+      closeNote();
       openDraft(object, at);
     },
-    [openDraft],
+    [openDraft, closeNote],
   );
   const [linkFor, setLinkFor] = useState<string | null>(null);
   const [linkMissing, setLinkMissing] = useState(false);
-  /** TXT-06: открыт выбор объекта для ссылки документа — куда вернуть выбор. */
-  const [picker, setPicker] = useState<{
-    done: (id: string | null) => void;
-  } | null>(null);
   /** TBL-02…TBL-04: выделенные ячейки таблицы и ячейка, в которой вводят текст. */
   const [cells, setCells] = useState<CellSelection | null>(null);
   const [cellEdit, setCellEdit] = useState<{
@@ -325,18 +354,6 @@ export function BoardScene({
     (KanbanColumn & { text: Y.Text }) | null
   >(null);
   const [columnDelete, setColumnDelete] = useState<KanbanColumn | null>(null);
-
-  /** CVS-08, SHR-07: вид — к объекту, объект выделен. `false` — объекта на доске нет. */
-  const goTo = useCallback(
-    (id: string): boolean => {
-      const target = readScene(objects).find((o) => o.id === id);
-      if (target === undefined) return false;
-      setSelection([id]);
-      onMove(() => focusOn(target, viewport.current));
-      return true;
-    },
-    [objects, onMove],
-  );
 
   // SHR-07: переход по ссылке — один раз на объект из ссылки.
   const linkedRef = useRef<string | null>(null);
@@ -1018,7 +1035,6 @@ export function BoardScene({
     },
   };
 
-  const label = useCallback((id: string) => objectLabel(scene, id), [scene]);
   const richHandlers: RichTextHandlers = {
     // TXT-02: отметка пункта списка дел прямо на холсте, без редактора.
     onCheck: (id, end, checked) => {
@@ -1137,7 +1153,10 @@ export function BoardScene({
             title="Find objects by text or tag."
             aria-pressed={searching}
             onClick={() => {
-              if (!searching) comments.close();
+              if (!searching) {
+                comments.close();
+                note.close();
+              }
               setSearching((open) => !open);
             }}
           >
@@ -1156,6 +1175,7 @@ export function BoardScene({
             data-unread={comments.unreadTotal > 0 ? "true" : undefined}
             onClick={() => {
               setSearching(false);
+              note.close();
               comments.toggle();
             }}
           >
@@ -1165,6 +1185,21 @@ export function BoardScene({
                 {comments.unreadTotal}
               </span>
             )}
+          </Button>
+          <Button
+            variant="ghost"
+            className="tool-button"
+            title="Open the board note."
+            aria-pressed={note.open}
+            onClick={() => {
+              if (!note.open) {
+                setSearching(false);
+                comments.close();
+              }
+              note.toggle();
+            }}
+          >
+            Note
           </Button>
           <Button
             variant="ghost"
@@ -1476,6 +1511,7 @@ export function BoardScene({
         )}
         {stageOverlay}
         {comments.panel}
+        {note.panel}
         {searching && (
           <BoardSearch
             scene={visible}

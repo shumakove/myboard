@@ -46,6 +46,9 @@ interface Range {
   length: number;
 }
 
+/** Типы с блоками документа: разделитель и ссылка на объект (TXT-06, NTE-01). */
+const DOCUMENT_BLOCKS: ReadonlySet<string> = new Set(["document", "note"]);
+
 /** Кнопки начертания панели редактора (TXT-02). */
 const MARKS = [
   { format: "bold", label: "Bold", text: "B", keys: "Control+B Meta+B" },
@@ -70,7 +73,8 @@ const MARKS = [
  * - вставка из других редакторов с базовым форматированием — модуль буфера Quill (TXT-08);
  * - стикер: шрифт подгоняется под стикер по мере ввода (STK-02), Tab создаёт следующий
  *   стикер (STK-04) вместо отступа пункта списка.
- * Escape или уход фокуса за пределы редактора завершают правку.
+ * Escape или уход фокуса за пределы редактора завершают правку. Заметка доски (`type`
+ * `note`, NTE-01) — блоки и меню «/» документа, редактор в панели вне холста.
  */
 export function RichTextEditor({
   type,
@@ -83,6 +87,8 @@ export function RichTextEditor({
   onPickObject,
   autoFit = false,
   onTab,
+  className,
+  selectAll = true,
 }: {
   type: string;
   text: Y.Text;
@@ -100,8 +106,12 @@ export function RichTextEditor({
   autoFit?: boolean;
   /** STK-04: Tab (без Shift) вне меню «/» — своё действие вместо отступа. */
   onTab?: () => void;
+  /** Свои классы рамки вместо классов объекта холста (заметка в панели). */
+  className?: string;
+  /** При открытии выделить весь текст; `false` — курсор в конце. */
+  selectAll?: boolean;
 }) {
-  const isDocument = type === "document";
+  const isDocument = DOCUMENT_BLOCKS.has(type);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -205,7 +215,9 @@ export function RichTextEditor({
     editor.on("editor-change", onChange);
 
     editor.focus();
-    editor.setSelection(0, editor.getLength() - 1, "silent");
+    const end = editor.getLength() - 1;
+    if (selectAll) editor.setSelection(0, end, "silent");
+    else editor.setSelection(end, 0, "silent");
     setQuill(editor);
     return () => {
       editor.off("text-change", onText);
@@ -215,7 +227,7 @@ export function RichTextEditor({
       host.innerHTML = "";
       host.className = "";
     };
-  }, [text, isDocument]);
+  }, [text, isDocument, selectAll]);
 
   const closeSlash = () => {
     slashRef.current = null;
@@ -345,7 +357,7 @@ export function RichTextEditor({
   return (
     <div
       ref={wrapperRef}
-      className={`scene-object scene-${type} scene-editor rich-editor`}
+      className={`${className ?? `scene-object scene-${type} scene-editor`} rich-editor`}
       data-canvas-ignore=""
       style={style}
       onKeyDownCapture={onKeyDownCapture}

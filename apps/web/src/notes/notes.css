@@ -1,0 +1,65 @@
+/* NTE-01: панель заметки доски — на месте панелей поиска и комментариев. */
+.note-panel {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: var(--layer-panel);
+  display: grid;
+  gap: var(--space-2);
+  width: min(380px, calc(100% - 2 * var(--space-2)));
+  max-height: calc(100% - 2 * var(--space-2));
+  box-sizing: border-box;
+  padding: var(--space-2);
+  overflow-y: auto;
+  font-size: var(--font-size-md);
+}
+
+/* Телефон: панель снизу, верх холста с объектом из ссылки остаётся виден (NTE-03). */
+@media (max-width: 640px) {
+  .note-panel {
+    top: auto;
+    bottom: var(--space-2);
+    max-height: 50%;
+  }
+}
+
+.note-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.note-panel-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.note-view {
+  min-height: 3em;
+  padding: var(--space-1);
+  cursor: text;
+}
+
+.note-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Редактор в панели: панель оформления над полем в потоке, меню «/» — от поля. */
+.note-editor {
+  position: relative;
+  min-height: 3em;
+  padding: var(--space-1);
+  outline: 2px solid var(--color-accent);
+  cursor: text;
+}
+
+.note-editor .rich-toolbar,
+.note-editor .rich-toolbar--below {
+  position: static;
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-1);
+  white-space: normal;
+  transform: none;
+}

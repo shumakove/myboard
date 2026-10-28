@@ -36,6 +36,7 @@ export function BoardWorkspace({
   userName = "",
   focusObject = null,
   boardLink,
+  loaded = true,
 }: {
   boardId: string;
   board: BoardDocument;
@@ -46,6 +47,8 @@ export function BoardWorkspace({
   focusObject?: string | null;
   /** SHR-07: действующая ссылка на доску — для ссылки на объект. */
   boardLink?: () => Promise<string>;
+  /** NTE-02: документ сверен с сервером. */
+  loaded?: boolean;
 }) {
   const { peers } = usePresence(presence);
   const [camera, setCamera] = usePersistentCamera(boardId);
@@ -122,6 +125,7 @@ export function BoardWorkspace({
           userName={selfName}
           focusObject={focusObject}
           boardLink={boardLink}
+          loaded={loaded}
           stageStyle={
             followed ? { outlineColor: peerColor(followed.peer) } : undefined
           }
