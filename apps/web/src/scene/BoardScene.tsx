@@ -26,7 +26,7 @@ import type { Guide } from "./guides";
 import { ObjectPicker } from "../richtext/ObjectPicker";
 import { RichTextEditor } from "../richtext/RichTextEditor";
 import { objectLabel } from "./objectLabel";
-import { objectStyle } from "./objectStyle";
+import { objectStyle, sideTextStyle } from "./objectStyle";
 import {
   AUTO_FONT_SIZE,
   GROUP_TYPE,
@@ -145,6 +145,14 @@ import { DeleteColumnDialog, type KanbanActions } from "./KanbanControls";
 import { columnEditorStyle } from "./kanbans";
 import { createMindmap } from "./mindmaps";
 import { useMindmapNodes } from "./useMindmapNodes";
+import { createDice } from "./dice";
+import { createFlipCard, sideText } from "./flipCards";
+import { shownSide } from "./flipData";
+import { useFlipAndDice } from "./useFlipAndDice";
+import { createReaction } from "./reactions";
+import { useReactionChoice } from "./reactionChoice";
+import { ReactionPalette } from "./ReactionPalette";
+import { ReactionDraftView, type ReactionDraft } from "./ReactionView";
 import { useUndoHistory, withUndoSteps } from "./undoHistory";
 import "./scene.css";
 
@@ -191,7 +199,9 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * MAP-01…MAP-04 интеллект-карты: узлы, их правка и перестановка, сворачивание веток,
  * вопрос о перекраске дочерних узлов (`useMindmapNodes`); T6.10 — CMT-01…CMT-04
  * комментарии: ветки у объекта или точки, переписка, «решено», непрочитанные, цвет и
- * фильтр по участникам (`useBoardComments`).
+ * фильтр по участникам (`useBoardComments`); T6.11 — RCT-01…RCT-04 реакции на объектах
+ * (инструмент Reaction, наборы и недавние), FLP-01…FLP-03 флип-карточки и DICE-01…DICE-03
+ * кубики (`useFlipAndDice`).
  */
 export function BoardScene({
   board,
@@ -251,6 +261,11 @@ export function BoardScene({
   const [stickyColor, setStickyColor] = useState(loadStickyColor);
   /** SHP-01, SHP-02: вид следующей фигуры — выбирается до постановки. */
   const [shapeChoice, setShapeChoice] = useState(loadShapeKind);
+  /** RCT-04: выбранная реакция и недавние; RCT-03: реакция, которую растят удержанием. */
+  const reactions = useReactionChoice();
+  const [reactionDraft, setReactionDraft] = useState<ReactionDraft | null>(
+    null,
+  );
   /** SHP-04: недавние свои цвета по категориям объектов. */
   const recentColors = useRecentColors();
   /** CVS-26: точки привязки под концом линии, пока его тянут. */
@@ -355,7 +370,11 @@ export function BoardScene({
       // CVS-19: текст заблокированного объекта не меняется; у стопки текста нет.
       if (target?.locked !== false || typeSpec(target.type)?.editable !== true)
         return;
-      const text = objectText(objects, id);
+      // FLP-01: у флип-карточки правят текст показанной стороны.
+      const text =
+        target.flip === null
+          ? objectText(objects, id)
+          : sideText(objects, id, shownSide(target.flip));
       setEditing(text === null ? null : { id, text });
     },
     [objects],
@@ -402,6 +421,20 @@ export function BoardScene({
             placement(type, at, settings.gridStep),
             actor,
           );
+          placeInFrames(objects, readScene(objects), [id], actor);
+        });
+        setSelection([id]);
+        return readScene(objects).find((o) => o.id === id) ?? null;
+      }
+      // FLP-01, DICE-01: флип-карточка и кубик со своими полями; попадают во фрейм.
+      if (type === "flipcard" || type === "dice") {
+        let id = "";
+        board.doc.transact(() => {
+          const corner = placement(type, at, settings.gridStep);
+          id =
+            type === "dice"
+              ? createDice(objects, corner, actor)
+              : createFlipCard(objects, corner, actor);
           placeInFrames(objects, readScene(objects), [id], actor);
         });
         setSelection([id]);
@@ -588,6 +621,9 @@ export function BoardScene({
     onTextLayout: fitText,
   });
   const { units, editable } = commands;
+  // T6.11: флип-карточки и кубики в выделении.
+  const flipAndDice = useFlipAndDice({ objects, units, actor });
+  const { choice: reactionChoice, used: reactionUsed } = reactions;
 
   const sceneGestures = useSceneGestures({
     objects,
@@ -632,6 +668,21 @@ export function BoardScene({
     dragNode: mindmap.dragNode,
     dropNode: mindmap.dropNode,
     comment: startComment,
+    reactionImage: reactionChoice.current,
+    showReaction: setReactionDraft,
+    react: (target, center, size) => {
+      createReaction(
+        objects,
+        target,
+        center,
+        size,
+        reactionChoice.current,
+        actor,
+      );
+      reactionUsed(reactionChoice.current);
+    },
+    flip: flipAndDice.flipOne,
+    roll: flipAndDice.rollOne,
   });
   const gestures = useMemo(
     () => withUndoSteps(sceneGestures, history),
@@ -1302,6 +1353,10 @@ export function BoardScene({
                   ...shapeEditorStyle(editedObject),
                 },
               })}
+              {...(editedObject.flip !== null && {
+                label: "Flip card side text",
+                style: flipEditorStyle(editedObject, editedObject.flip),
+              })}
               text={editing.text}
               onEdit={() => {
                 const map = objectMap(objects, editedObject.id);
@@ -1315,6 +1370,7 @@ export function BoardScene({
           <GuidesOverlay guides={guides} />
           <ConnectOverlay hint={hint} />
           <InkOverlay ink={ink} />
+          <ReactionDraftView draft={reactionDraft} />
           <LaserView
             lines={laser.trail}
             color={OWN_LASER_COLOR}
@@ -1355,6 +1411,8 @@ export function BoardScene({
           table={tableActions}
           kanban={kanbanActions}
           mindmap={mindmap.actions}
+          flip={flipAndDice.flip}
+          dice={flipAndDice.dice}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1395,6 +1453,13 @@ export function BoardScene({
               recentColors.remember(["drawing"], color);
             }}
             onStylusDraws={drawing.setStylusDraws}
+          />
+        )}
+        {tool === "reaction" && (
+          <ReactionPalette
+            current={reactionChoice.current}
+            recent={reactionChoice.recent}
+            onPick={reactions.pick}
           />
         )}
         {tool === "shape" && (
@@ -1567,6 +1632,19 @@ function editorStyle(object: SceneObject): CSSProperties {
   return object.type === "sticky"
     ? { ...style, background: "transparent", boxShadow: "none" }
     : style;
+}
+
+/** FLP-03: поле правки стороны флип-карточки — её цвет, размер и форматирование текста. */
+function flipEditorStyle(
+  object: SceneObject,
+  flip: NonNullable<SceneObject["flip"]>,
+): CSSProperties {
+  const side = flip[shownSide(flip)];
+  return {
+    ...objectStyle(object),
+    ...sideTextStyle(side),
+    background: side.fill,
+  };
 }
 
 /**

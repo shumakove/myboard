@@ -6,8 +6,9 @@ import { DEFAULT_SHAPE, SHAPE_KINDS, SHAPE_SETS } from "./shapes";
  * (`shapes.ts`, SHP-01, SHP-02), линия (T6.4), рисунок (T6.5, DRW-01), фрейм (T6.6,
  * `frames.ts`, FRM-01…FRM-05), таблица (T6.7, `tables.ts`, TBL-01…TBL-07), канбан и карточка
  * задачи (T6.8, `kanbans.ts`, KBN-01…KBN-03), интеллект-карта (T6.9, `mindmaps.ts`,
- * MAP-01…MAP-04). Остальные типы
- * из раздела объектов требований добавляют задачи T6.*, T7.* — тем же описанием.
+ * MAP-01…MAP-04), реакция, флип-карточка и кубик (T6.11, `reactionData.ts`, `flipData.ts`,
+ * `diceData.ts`; RCT-01…RCT-04, FLP-01…FLP-03, DICE-01…DICE-03). Остальные типы
+ * из раздела объектов требований добавляют задачи T7.* — тем же описанием.
  */
 export type ObjectType =
   | "sticky"
@@ -21,13 +22,19 @@ export type ObjectType =
   | "table"
   | "kanban"
   | "card"
-  | "mindmap";
+  | "mindmap"
+  | "reaction"
+  | "flipcard"
+  | "dice";
 
-/** Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01). */
-export type PlaceableType = Exclude<ObjectType, "drawing">;
+/**
+ * Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01),
+ * реакция — только на объект своим инструментом (RCT-01).
+ */
+export type PlaceableType = Exclude<ObjectType, "drawing" | "reaction">;
 
 export function isPlaceable(type: ObjectType): type is PlaceableType {
-  return type !== "drawing";
+  return type !== "drawing" && type !== "reaction";
 }
 
 /**
@@ -265,6 +272,41 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     rotatable: false,
     editable: false,
     style: {},
+  },
+  // RCT-01…RCT-03: реакция-штамп — изображение из набора на объекте-родителе; размер —
+  // каким его вырастили удержанием. Оформления и текста нет.
+  reaction: {
+    type: "reaction",
+    label: "Reaction",
+    plural: "reactions",
+    width: 48,
+    height: 48,
+    rotatable: false,
+    editable: false,
+    style: {},
+  },
+  // FLP-01…FLP-03: флип-карточка — две стороны со своим текстом, оформлением текста,
+  // цветом и картинкой (`flipData.ts`); общий текст объекта — лицевая сторона.
+  flipcard: {
+    type: "flipcard",
+    label: "Flip card",
+    plural: "flip cards",
+    width: 240,
+    height: 160,
+    rotatable: false,
+    editable: true,
+    style: {},
+  },
+  // DICE-01: кубик — число граней и цвет; DICE-02: последнее выпавшее значение.
+  dice: {
+    type: "dice",
+    label: "Dice",
+    plural: "dice",
+    width: 96,
+    height: 96,
+    rotatable: false,
+    editable: false,
+    style: { fill: "#ffffff" },
   },
 };
 

@@ -3,6 +3,8 @@ import { LineControls, type LineActions } from "./LineControls";
 import { TableControls, type TableActions } from "./TableControls";
 import { KanbanControls, type KanbanActions } from "./KanbanControls";
 import { MindmapControls, type MindmapActions } from "./MindmapControls";
+import { FlipControls, type FlipActions } from "./FlipControls";
+import { DiceControls, type DiceActions } from "./DiceControls";
 import {
   MORE_TEXT_KEYS,
   typeName,
@@ -92,7 +94,10 @@ export interface AuthorToggle {
  * - T6.8: у канбана — выбранный столбец, Add card (KBN-02), Add column, Rename column,
  *   Delete column (KBN-03); у карточки — Tags (KBN-02);
  * - T6.9: у интеллект-карты — выбранный узел, Add child, Add sibling, Rename, Node color,
- *   Collapse/Expand, Delete node (MAP-02…MAP-04).
+ *   Collapse/Expand, Delete node (MAP-02…MAP-04);
+ * - T6.11: у флип-карточек — Flip (FLP-02), у одной — направление, картинка, цвет и текст
+ *   показанной стороны (FLP-01, FLP-03); у кубиков — Roll, Faces и сумма значений
+ *   (DICE-01…DICE-03).
  */
 export function SelectionBar({
   selected,
@@ -114,6 +119,8 @@ export function SelectionBar({
   table = null,
   kanban = null,
   mindmap = null,
+  flip = null,
+  dice = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -135,6 +142,8 @@ export function SelectionBar({
   table?: TableActions | null;
   kanban?: KanbanActions | null;
   mindmap?: MindmapActions | null;
+  flip?: FlipActions | null;
+  dice?: DiceActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -267,6 +276,8 @@ export function SelectionBar({
       {table && <TableControls table={table} />}
       {kanban && <KanbanControls kanban={kanban} />}
       {mindmap && <MindmapControls mindmap={mindmap} />}
+      {flip && <FlipControls flip={flip} />}
+      {dice && <DiceControls dice={dice} />}
 
       {frame?.keepRatio && (
         <Switch

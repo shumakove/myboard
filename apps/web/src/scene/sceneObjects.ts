@@ -32,6 +32,13 @@ import {
   type KanbanShape,
 } from "./kanbanData";
 import { MINDMAP_TYPE, readMindmap, type MindmapShape } from "./mindmapData";
+import { DICE_TYPE, readDice, type DiceShape } from "./diceData";
+import { FLIP_TYPE, readFlip, type FlipShape } from "./flipData";
+import {
+  REACTION_TYPE,
+  readReaction,
+  type ReactionShape,
+} from "./reactionData";
 import {
   GROUP_TYPE,
   isRichText,
@@ -109,6 +116,12 @@ export interface SceneObject extends Frame {
    * `x`, `y` карты — середина левого края корня, рамка начинается выше на `anchorY`.
    */
   mindmap: MindmapShape | null;
+  /** Реакция (T6.11): изображение из набора (RCT-04); у остальных типов `null`. */
+  reaction: ReactionShape | null;
+  /** Флип-карточка (T6.11): стороны и переворот (FLP-01…FLP-03); у остальных `null`. */
+  flip: FlipShape | null;
+  /** Кубик (T6.11): грани и последнее значение (DICE-01, DICE-02); у остальных `null`. */
+  dice: DiceShape | null;
   /**
    * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; KBN-02: id
    * столбца канбана-родителя, в котором лежит карточка. `x`, `y` объекта в документе —
@@ -241,9 +254,13 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       meta,
       drawing,
       cell,
+      reaction,
+      flip,
+      dice,
     } = object;
     // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек, канбан —
-    // по названиям столбцов, интеллект-карту — по названиям узлов.
+    // по названиям столбцов, интеллект-карту — по названиям узлов, флип-карточку — по
+    // тексту обеих сторон (T6.11).
     const text =
       line !== null
         ? line.labels.map((l) => l.text).join("\n")
@@ -253,7 +270,9 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
             ? kanban.columns.map((c) => c.title).join("\n")
             : mindmap !== null
               ? [...mindmap.byId.values()].map((n) => n.text).join("\n")
-              : object.text;
+              : flip !== null
+                ? [flip.front.text, flip.back.text].join("\n")
+                : object.text;
     scene.splice(at, 0, {
       id,
       type,
@@ -279,6 +298,9 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       table,
       kanban,
       mindmap,
+      reaction,
+      flip,
+      dice,
       cell,
     });
   };
@@ -422,6 +444,9 @@ function readObject(id: string, value: unknown): RawObject | null {
     table: type === TABLE_TYPE ? readTable(record) : null,
     kanban: type === KANBAN_TYPE ? readKanban(record) : null,
     mindmap: type === MINDMAP_TYPE ? readMindmap(record) : null,
+    reaction: type === REACTION_TYPE ? readReaction(record) : null,
+    flip: type === FLIP_TYPE ? readFlip(record) : null,
+    dice: type === DICE_TYPE ? readDice(record) : null,
     cell: typeof record.cell === "string" ? record.cell : null,
   };
 }

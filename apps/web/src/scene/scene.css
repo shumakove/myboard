@@ -1226,3 +1226,238 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/*
+ * T6.11, RCT-01…RCT-03: реакция — изображение во весь свой размер поверх объекта; по
+ * наведению — подпись с автором (RCT-02). Подпись выходит за рамку реакции.
+ */
+.scene-object.scene-reaction {
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  overflow: visible;
+  line-height: 1;
+  user-select: none;
+}
+
+.reaction-image,
+.reaction-draft {
+  line-height: 1;
+  pointer-events: none;
+}
+
+.reaction-author {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  z-index: 1;
+  display: none;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.scene-reaction:hover .reaction-author,
+.scene-reaction[aria-selected="true"] .reaction-author {
+  display: block;
+}
+
+.reaction-draft {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.reaction-palette {
+  position: absolute;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--layer-panel);
+  max-width: min(420px, calc(100% - 2 * var(--space-2)));
+  padding: var(--space-1);
+}
+
+.reaction-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: var(--space-1);
+}
+
+.reaction-swatch {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.reaction-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.reaction-empty {
+  padding: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+/*
+ * FLP-01, FLP-02: флип-карточка — две стороны друг за другом; переворот поворачивает
+ * их вокруг вертикальной (horizontal) или горизонтальной (vertical) оси.
+ */
+.scene-object.scene-flipcard {
+  padding: 0;
+  overflow: visible;
+  perspective: 900px;
+}
+
+.flip-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 0.45s ease;
+}
+
+.flip-inner[data-flipped="true"][data-direction="horizontal"] {
+  transform: rotateY(180deg);
+}
+
+.flip-inner[data-flipped="true"][data-direction="vertical"] {
+  transform: rotateX(180deg);
+}
+
+.flip-face {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  justify-content: center;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  backface-visibility: hidden;
+}
+
+.flip-back {
+  transform: rotateY(180deg);
+}
+
+.flip-inner[data-direction="vertical"] .flip-back {
+  transform: rotateX(180deg);
+}
+
+.flip-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.flip-text {
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+/* FLP-01: поле правки показанной стороны — поверх неё, с её цветом и текстом. */
+.scene-editor.scene-flipcard {
+  padding: 12px;
+  border-radius: var(--radius-md);
+}
+
+.flip-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.flip-toggle svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.scene-flipcard:hover .flip-toggle,
+.scene-flipcard[aria-selected="true"] .flip-toggle {
+  opacity: 1;
+}
+
+/* UI-04: на сенсорном экране кнопка видна всегда и крупнее. */
+@media (pointer: coarse) {
+  .flip-toggle {
+    width: 44px;
+    height: 44px;
+    opacity: 1;
+  }
+}
+
+/* DICE-01, DICE-02: кубик — тело по числу граней, значение по центру, подпись d<N>. */
+.scene-object.scene-dice {
+  padding: 0;
+  overflow: visible;
+  user-select: none;
+}
+
+.dice-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--color-border-strong);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dice-faces {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.dice-value[data-rolling="true"] {
+  animation: dice-roll 0.5s ease-out;
+}
+
+@keyframes dice-roll {
+  0% {
+    transform: rotate(-200deg) scale(0.4);
+    opacity: 0.2;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-inner,
+  .dice-value[data-rolling="true"] {
+    transition: none;
+    animation: none;
+  }
+}

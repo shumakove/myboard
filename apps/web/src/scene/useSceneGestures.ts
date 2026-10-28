@@ -50,6 +50,9 @@ import {
 import type { NodeDrop } from "./mindmapData";
 import { nodeDragGesture } from "./mindmapGesture";
 import type { NodeDragState } from "./MindmapView";
+import { canReactTo } from "./reactions";
+import { reactionGesture } from "./reactionGesture";
+import type { ReactionDraft } from "./ReactionView";
 
 /** Что сцена даёт жестам. Значения читаются в момент жеста — всегда свежие. */
 export interface SceneControls {
@@ -109,6 +112,16 @@ export interface SceneControls {
   dropNode: (mindmap: string, node: string, drop: NodeDrop) => void;
   /** CMT-01: начать ветку комментария у объекта (`null` — в точке холста). */
   comment: (object: SceneObject | null, at: Point) => void;
+  /** RCT-04: изображение, которое ставит инструмент Reaction. */
+  reactionImage: string;
+  /** RCT-03: реакция, которую растят удержанием; `null` — её нет. */
+  showReaction: (draft: ReactionDraft | null) => void;
+  /** RCT-01: поставить реакцию центром в точке на объект. */
+  react: (target: SceneObject, center: Point, size: number) => void;
+  /** FLP-02: перевернуть флип-карточку. */
+  flip: (id: string) => void;
+  /** DICE-02: бросить кубик. */
+  roll: (id: string) => void;
 }
 
 function hit(target: EventTarget | null): {
@@ -119,6 +132,7 @@ function hit(target: EventTarget | null): {
   column: string | null;
   node: string | null;
   toggle: string | null;
+  flip: boolean;
 } {
   if (!(target instanceof Element)) {
     return {
@@ -129,9 +143,11 @@ function hit(target: EventTarget | null): {
       column: null,
       node: null,
       toggle: null,
+      flip: false,
     };
   }
   return {
+    flip: target.closest("[data-flip-toggle]") !== null,
     node: target.closest("[data-node]")?.getAttribute("data-node") ?? null,
     toggle:
       target.closest("[data-node-toggle]")?.getAttribute("data-node-toggle") ??
@@ -149,6 +165,22 @@ function hit(target: EventTarget | null): {
     label:
       target.closest("[data-label-id]")?.getAttribute("data-label-id") ?? null,
   };
+}
+
+/**
+ * RCT-01: объект для реакции под указателем; нажатие на реакцию ставит новую на её
+ * объект. Линия, группа и пустое место — `null`.
+ */
+function reactionTarget(
+  scene: readonly SceneObject[],
+  leafId: string | null,
+): SceneObject | null {
+  const leaf = scene.find((o) => o.id === leafId);
+  const target =
+    leaf?.reaction != null || leaf?.type === "reaction"
+      ? scene.find((o) => o.id === leaf.parent)
+      : leaf;
+  return target !== undefined && canReactTo(target) ? target : null;
 }
 
 /** Одна выделенная незаблокированная линия — её точки и подписи правят маркерами. */
@@ -300,7 +332,10 @@ function still(click?: () => void): Gesture {
  *   открывает название узла (MAP-02); узел выделенной карты перетаскивается на другой
  *   узел (MAP-02); кнопка у узла сворачивает и разворачивает его ветку (MAP-03);
  * - T6.10: инструмент Comment начинает ветку комментария у объекта под указателем или в
- *   точке холста (CMT-01).
+ *   точке холста (CMT-01);
+ * - T6.11: инструмент Reaction ставит реакцию на объект под указателем, удержание её
+ *   растит (RCT-01, RCT-03); кнопка в углу флип-карточки переворачивает её (FLP-02);
+ *   двойной щелчок по кубику бросает его (DICE-02).
  */
 export function useSceneGestures(controls: SceneControls): CanvasGestures {
   const latest = useRef(controls);
@@ -323,7 +358,10 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
       press: CanvasPress,
     ): Gesture => {
       const c = latest.current;
-      const targets = objects.filter((o) => !o.locked);
+      // RCT-01: реакция держится на своём объекте — её не тащат, она едет с объектом.
+      const targets = objects.filter(
+        (o) => !o.locked && o.reaction === null && o.type !== "reaction",
+      );
       if (targets.length === 0) return still();
       const gesture = moveGesture(c.objects, targets, press.board, {
         gridStep: c.gridStep,
@@ -440,6 +478,7 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           column,
           node,
           toggle,
+          flip,
         } = hit(press.target);
 
         const drawing = drawingWith(press);
@@ -467,6 +506,17 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           c.setTool("select");
           c.comment(c.scene.find((o) => o.id === leafId) ?? null, press.board);
           return still();
+        }
+        // RCT-01, RCT-03: реакция на объект под указателем (на реакции — на её объект).
+        if (tool.kind === "react") {
+          const target = reactionTarget(c.scene, leafId);
+          if (target === null) return still();
+          return reactionGesture(press.board, c.reactionImage, {
+            show: c.showReaction,
+            place: (center, size) => {
+              latest.current.react(target, center, size);
+            },
+          });
         }
 
         const selected = selectedObjects(c.selection);
@@ -566,6 +616,12 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
               },
             };
           }
+          // FLP-02: кнопка в углу флип-карточки переворачивает её.
+          if (flip) {
+            return still(() => {
+              latest.current.flip(leafId);
+            });
+          }
           // MAP-03: кнопка у узла сворачивает и разворачивает его ветку.
           if (toggle !== null) {
             return still(() => {
@@ -651,10 +707,16 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           column,
           node,
           toggle,
+          flip,
         } = hit(press.target);
         // MAP-03: касание кнопки у узла сворачивает и разворачивает ветку.
         if (leafId !== null && toggle !== null) {
           c.toggleNode(leafId, toggle);
+          return;
+        }
+        // FLP-02: касание кнопки флип-карточки переворачивает её.
+        if (leafId !== null && flip) {
+          c.flip(leafId);
           return;
         }
         if (leafId !== null) {
@@ -696,9 +758,10 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
           column,
           node,
           toggle,
+          flip,
         } = hit(press.target);
-        // MAP-03: двойной щелчок по кнопке ветки — два переключения, не правка.
-        if (toggle !== null) return;
+        // MAP-03, FLP-02: двойной щелчок по кнопке — два переключения, не правка.
+        if (toggle !== null || flip) return;
         // CON-06: двойной щелчок по точке изгиба удаляет её.
         const line = editableLine(selectedObjects(c.selection));
         if (line !== null && handle?.startsWith("line-point-")) {
@@ -727,6 +790,11 @@ export function useSceneGestures(controls: SceneControls): CanvasGestures {
         // MAP-02: двойной щелчок по узлу — правка названия.
         if (leaf?.mindmap != null && node !== null) {
           c.editNode(leaf.id, node);
+          return;
+        }
+        // DICE-02: двойной щелчок по кубику — бросок.
+        if (leaf?.dice != null) {
+          c.roll(leaf.id);
           return;
         }
 

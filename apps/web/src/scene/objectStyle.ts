@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { FlipSide } from "./flipData";
 import type { Frame } from "./geometry";
 import { FONT_STACKS } from "./objectTypes";
 import type { SceneObject } from "./sceneObjects";
@@ -25,7 +26,8 @@ export function objectStyle(object: SceneObject): CSSProperties {
     return { ...frameStyle(object), ...frameLook(object.style) };
   }
   const { fill, stroke, color, fontSize, background } = object.style;
-  const outlined = object.type === "shape";
+  // Заливку фигуры рисует контур SVG, кубика — его тело по числу граней (DICE-01).
+  const outlined = object.type === "shape" || object.type === "dice";
   return {
     ...frameStyle(object),
     background: outlined ? undefined : (str(fill) ?? str(background)),
@@ -86,4 +88,13 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+/** FLP-03: размер и форматирование текста стороны флип-карточки. */
+export function sideTextStyle(side: FlipSide): CSSProperties {
+  return {
+    color: side.color,
+    fontSize: side.fontSize,
+    ...textStyle({ fontStyle: side.fontStyle, align: side.align }),
+  };
 }
