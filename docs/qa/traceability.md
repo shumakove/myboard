@@ -153,9 +153,9 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | EMB-02 | T7.3 | — | не проверено |
 | EMB-03 | T7.3 | — | не проверено |
 | EMB-04 | T7.3 | — | не проверено |
-| NTE-01 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-01 *, desktop + mobile; в ветке qa/T6.12) | FAIL (BUG-027, major) |
-| NTE-02 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-02 *, desktop + mobile; в ветке qa/T6.12) | PASS (проверка 1; задача REJECTED) |
-| NTE-03 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-03 *, desktop + mobile; в ветке qa/T6.12) | PASS (проверка 1; задача REJECTED) |
+| NTE-01 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-01 *, desktop + mobile); acceptance/api/test_notes.py::test_nte01_* | PASS (проверка 2; BUG-027 исправлен) |
+| NTE-02 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-02 *, desktop + mobile) | PASS |
+| NTE-03 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-03 *, desktop + mobile) | PASS |
 | COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
