@@ -131,7 +131,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | RCT-02 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-02 *: имя участника по ссылке у владельца и наоборот) | PASS |
 | RCT-03 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-03 *: удержание мыши; MOB-01 удержание пальца) | PASS |
 | RCT-04 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-04 *: наборы Emotions/Votes/Stamps, Recent) | PASS |
-| FLP-01 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-01 FLP-03 *, FLP-01 ARCH … (Q-006)) | BLOCKED (Q-006 — хранение картинки стороны) |
+| FLP-01 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-01 FLP-03 *, FLP-01 ARCH … (Q-006)) | PASS (Q-006: картинка стороны в документе Yjs принята владельцем; перевод на media — T7.5) |
 | FLP-02 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-02 *: одна, угловая кнопка у участника, Flip all; MOB-01 касанием) | PASS |
 | FLP-03 | T6.11 | acceptance/e2e/reactions.spec.ts (FLP-01 FLP-03 *: размер и начертание по сторонам) | PASS |
 | DICE-01 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-01 *: грани 4…20, цвет, второй клиент) | PASS |
