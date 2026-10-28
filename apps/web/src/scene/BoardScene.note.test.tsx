@@ -134,6 +134,23 @@ describe("NTE-02: закреплённая заметка открыта у вс
     expect(isNoteOpenForAll(board.notes)).toBe(false);
   });
 
+  it("переключатель у уже начатой заметки и флаг, снятый другим участником, видны сразу", async () => {
+    const user = userEvent.setup();
+    const board = createBoardDocument();
+    ensureNoteText(board.notes).insert(0, "Draft");
+    renderScene(board);
+    await user.click(screen.getByRole("button", { name: "Note" }));
+    const toggle = within(notePanel()).getByRole("switch", {
+      name: "Open for everyone",
+    });
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    act(() => {
+      setNoteOpenForAll(board.notes, false);
+    });
+    expect(toggle).not.toBeChecked();
+  });
+
   it("вход на доску с закреплённой заметкой — панель открыта сразу", () => {
     const board = createBoardDocument();
     ensureNoteText(board.notes).insert(0, "Read me first");
