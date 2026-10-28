@@ -59,7 +59,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | CVS-17 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-17, desktop) | PASS |
 | CVS-18 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-18, desktop) | PASS |
 | CVS-19 | T5.3, T6.5 | acceptance/e2e/operations.spec.ts (CVS-19, desktop) | PASS (блокировка, Unlock all); ластик — проверить в T6.5 |
-| CVS-20 | T5.3, T5.6 | acceptance/e2e/operations.spec.ts (CVS-20, «CVS-20 BUG-008 …», desktop) | PASS (BUG-008 исправлен в c5e2d74, проверено в T5.6) |
+| CVS-20 | T5.3, T5.6 | acceptance/e2e/operations.spec.ts (CVS-20, «CVS-20 BUG-008 …», desktop) | PASS (BUG-008 исправлен в c5e2d74, проверено в T5.6); для изображений — FAIL BUG-028 (T7.1, images.spec.ts «CVS-20 IMG-01 …») |
 | CVS-21 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-21, desktop + mobile) | PASS |
 | CVS-22 | T5.3 | acceptance/e2e/operations.spec.ts (CVS-22, desktop) | PASS |
 | CVS-23 | T5.2 | acceptance/e2e/scene.spec.ts (CVS-23, desktop) | PASS (BUG-005 исправлен в f3dfd06, проверено) |
@@ -137,13 +137,13 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | DICE-01 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-01 *: грани 4…20, цвет, второй клиент) | PASS |
 | DICE-02 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-02 *: 480 бросков d4/d6/d20 в диапазоне, одновременные броски двух клиентов) | PASS |
 | DICE-03 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-03 *: сумма, пересчёт, Roll all, не-кубики) | PASS |
-| IMG-01 | T7.1 | — | не проверено |
-| IMG-02 | T7.1 | — | не проверено |
-| IMG-03 | T7.1 | — | не проверено |
-| IMG-04 | T7.1 | — | не проверено |
-| IMG-05 | T7.1 | — | не проверено |
-| IMG-06 | T7.1 | — | не проверено |
-| IMG-07 | T7.1 | — | не проверено |
+| IMG-01 | T7.1 | acceptance/api/test_media.py (test_img01_*, test_arch_media_*); acceptance/e2e/images.spec.ts (IMG-01 *, desktop + mobile) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-02 | T7.1 | acceptance/e2e/images.spec.ts (IMG-02 crop, shape mask and rounded corners…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-03 | T7.1 | acceptance/e2e/images.spec.ts (IMG-03 border colour and width; flip…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-04 | T7.1 | acceptance/e2e/images.spec.ts (IMG-04 replace image keeps crop…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-05 | T7.1 | acceptance/e2e/images.spec.ts (IMG-05 remove background…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-06 | T7.1 | acceptance/e2e/images.spec.ts (IMG-06 GIF is shown and plays…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
+| IMG-07 | T7.1 | acceptance/api/test_media.py (test_img07_*, test_img01_img07_*); acceptance/e2e/images.spec.ts (IMG-07 SVG…) | PASS (T7.1, проверка 1; задача REJECTED из-за BUG-028) |
 | FIL-01 | T7.2 | — | не проверено |
 | FIL-02 | T7.2 | — | не проверено |
 | FIL-03 | T7.2 | — | не проверено |
