@@ -24,6 +24,7 @@ import { reactionTitle } from "./reactionData";
 import { FlipCardView } from "./FlipCardView";
 import { DiceView } from "./DiceView";
 import { diceTitle } from "./diceData";
+import { ImageView } from "./ImageView";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -65,6 +66,7 @@ export interface RichTextHandlers {
  * с заголовками, карточка — текст и теги (T6.8, KBN-01…KBN-03). Интеллект-карта — узлы,
  * ветки и кнопки сворачивания (T6.9, MAP-01…MAP-03). Реакция — изображение с автором по
  * наведению, флип-карточка — две стороны с переворотом, кубик — грани и значение (T6.11).
+ * Изображение — видимая часть файла с маской, обводкой и отражением (T7.1, IMG-01…IMG-07).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -76,6 +78,7 @@ export function SceneLayer({
   tables = null,
   kanban = null,
   mindmap = null,
+  stillGifs = false,
 }: {
   objects: readonly SceneObject[];
   selected: ReadonlySet<string>;
@@ -86,6 +89,8 @@ export function SceneLayer({
   tables?: TableLayerState | null;
   kanban?: KanbanLayerState | null;
   mindmap?: MindmapLayerState | null;
+  /** IMG-06: на экране много объектов — GIF играют только по наведению. */
+  stillGifs?: boolean;
 }) {
   return (
     <>
@@ -101,6 +106,7 @@ export function SceneLayer({
           handles={tables?.handles === object.id}
           columns={kanban?.kanban === object.id ? kanban.state : null}
           nodes={mindmap?.mindmap === object.id ? mindmap.state : null}
+          stillGifs={stillGifs}
         />
       ))}
     </>
@@ -117,6 +123,7 @@ function SceneObjectView({
   handles,
   columns,
   nodes,
+  stillGifs,
 }: {
   object: SceneObject;
   selected: boolean;
@@ -127,6 +134,7 @@ function SceneObjectView({
   handles: boolean;
   columns: KanbanColumnsState | null;
   nodes: MindmapNodesState | null;
+  stillGifs: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const group = object.type === GROUP_TYPE;
@@ -188,6 +196,13 @@ function SceneObjectView({
         <ReactionView object={object} />
       ) : object.flip ? (
         <FlipCardView object={object} editing={editing} />
+      ) : object.image ? (
+        <ImageView
+          key={object.image.media}
+          object={object}
+          image={object.image}
+          still={stillGifs}
+        />
       ) : object.dice ? (
         <DiceView object={object} />
       ) : object.frameOptions ? (

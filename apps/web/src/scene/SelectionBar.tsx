@@ -5,6 +5,7 @@ import { KanbanControls, type KanbanActions } from "./KanbanControls";
 import { MindmapControls, type MindmapActions } from "./MindmapControls";
 import { FlipControls, type FlipActions } from "./FlipControls";
 import { DiceControls, type DiceActions } from "./DiceControls";
+import { ImageControls, type ImageActions } from "./ImageControls";
 import {
   MORE_TEXT_KEYS,
   typeName,
@@ -97,7 +98,9 @@ export interface AuthorToggle {
  *   Collapse/Expand, Delete node (MAP-02…MAP-04);
  * - T6.11: у флип-карточек — Flip (FLP-02), у одной — направление, картинка, цвет и текст
  *   показанной стороны (FLP-01, FLP-03); у кубиков — Roll, Faces и сумма значений
- *   (DICE-01…DICE-03).
+ *   (DICE-01…DICE-03);
+ * - T7.1: у изображений — Mask, Flip horizontal, Flip vertical (IMG-02, IMG-03), у одного —
+ *   Crop, Replace image, Remove background (IMG-02, IMG-04, IMG-05).
  */
 export function SelectionBar({
   selected,
@@ -121,6 +124,7 @@ export function SelectionBar({
   mindmap = null,
   flip = null,
   dice = null,
+  image = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -144,6 +148,7 @@ export function SelectionBar({
   mindmap?: MindmapActions | null;
   flip?: FlipActions | null;
   dice?: DiceActions | null;
+  image?: ImageActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -278,6 +283,7 @@ export function SelectionBar({
       {mindmap && <MindmapControls mindmap={mindmap} />}
       {flip && <FlipControls flip={flip} />}
       {dice && <DiceControls dice={dice} />}
+      {image && <ImageControls image={image} />}
 
       {frame?.keepRatio && (
         <Switch

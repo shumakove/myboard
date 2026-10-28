@@ -25,6 +25,7 @@ const LISTED_ONLY: readonly ToolId[] = [
   "flipcard",
   "dice",
   "reaction",
+  "image", // T7.1
 ];
 
 /** По умолчанию закреплены инструменты T5.4 и перо (T6.5) в порядке полного списка. */

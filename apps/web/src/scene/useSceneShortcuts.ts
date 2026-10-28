@@ -45,6 +45,8 @@ export interface ShortcutActions {
   history: UndoHistory;
   /** TBL-06, TBL-07: из буфера пришла внешняя таблица — спросить, как вставить. */
   onTable: (grid: Grid) => void;
+  /** IMG-01: из буфера пришли файлы изображений. */
+  onImages?: (files: readonly File[]) => void;
 }
 
 /**
@@ -60,11 +62,12 @@ export interface ShortcutActions {
  * - TXT-07: копия текста — ещё и HTML с форматированием для внешних редакторов;
  * - TXT-08: HTML внешнего документа — текстовый объект с базовым форматированием;
  * - TBL-06: копия таблицы — текст с табуляцией и HTML-таблица; внешняя таблица из буфера
- *   (TSV или HTML `<table>`) вставляется таблицей или стикерами по выбору (TBL-07).
+ *   (TSV или HTML `<table>`) вставляется таблицей или стикерами по выбору (TBL-07);
+ * - IMG-01: файл изображения из буфера загружается и встаёт изображением.
  */
 export function useSceneShortcuts(
   commands: SceneCommands,
-  { onEscape, onTool, history, onTable }: ShortcutActions,
+  { onEscape, onTool, history, onTable, onImages }: ShortcutActions,
 ): void {
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -141,6 +144,15 @@ export function useSceneShortcuts(
       if (isTypingTarget(event.target)) return;
       clearFallback();
       const data = event.clipboardData;
+      // IMG-01: картинка из буфера — изображение на доске, а не её текст или HTML.
+      const files = [...(data?.files ?? [])].filter((file) =>
+        file.type.startsWith("image/"),
+      );
+      if (files.length > 0 && onImages !== undefined) {
+        event.preventDefault();
+        onImages(files);
+        return;
+      }
       const clip = parseClip(data?.getData(CLIPBOARD_MIME));
       const raw = data?.getData("text/plain") ?? "";
       const text = raw.trim();
@@ -166,7 +178,7 @@ export function useSceneShortcuts(
       window.removeEventListener("cut", copyOrCut);
       window.removeEventListener("paste", paste);
     };
-  }, [commands, onEscape, onTool, history, onTable]);
+  }, [commands, onEscape, onTool, history, onTable, onImages]);
 
   useEffect(
     () => () => {

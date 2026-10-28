@@ -26,8 +26,12 @@ export function objectStyle(object: SceneObject): CSSProperties {
     return { ...frameStyle(object), ...frameLook(object.style) };
   }
   const { fill, stroke, color, fontSize, background } = object.style;
-  // Заливку фигуры рисует контур SVG, кубика — его тело по числу граней (DICE-01).
-  const outlined = object.type === "shape" || object.type === "dice";
+  // Заливку фигуры рисует контур SVG, кубика — его тело по числу граней (DICE-01),
+  // обводку изображения — контур его маски (IMG-03).
+  const outlined =
+    object.type === "shape" ||
+    object.type === "dice" ||
+    object.type === "image";
   return {
     ...frameStyle(object),
     background: outlined ? undefined : (str(fill) ?? str(background)),

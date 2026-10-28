@@ -25,16 +25,21 @@ export type ObjectType =
   | "mindmap"
   | "reaction"
   | "flipcard"
-  | "dice";
+  | "dice"
+  | "image";
 
 /**
  * Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01),
- * реакция — только на объект своим инструментом (RCT-01).
+ * реакция — только на объект своим инструментом (RCT-01), изображение — загрузкой файла
+ * (IMG-01).
  */
-export type PlaceableType = Exclude<ObjectType, "drawing" | "reaction">;
+export type PlaceableType = Exclude<
+  ObjectType,
+  "drawing" | "reaction" | "image"
+>;
 
 export function isPlaceable(type: ObjectType): type is PlaceableType {
-  return type !== "drawing" && type !== "reaction";
+  return type !== "drawing" && type !== "reaction" && type !== "image";
 }
 
 /**
@@ -307,6 +312,19 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     rotatable: false,
     editable: false,
     style: { fill: "#ffffff" },
+  },
+  // IMG-01…IMG-07: изображение — файл модуля `media` с обрезкой, маской и отражением
+  // (`imageData.ts`); IMG-02, IMG-03: скругление углов и обводка — оформление. Размер
+  // задаёт загруженный файл.
+  image: {
+    type: "image",
+    label: "Image",
+    plural: "images",
+    width: 320,
+    height: 240,
+    rotatable: true,
+    editable: false,
+    style: { stroke: "#1f2937", strokeWidth: 0, radius: 0 },
   },
 };
 

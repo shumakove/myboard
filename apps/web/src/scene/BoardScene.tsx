@@ -10,7 +10,13 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import { BoardCanvas, type CameraUpdate } from "../canvas/BoardCanvas";
-import { centerOn, focusOn, screenToBoard, type Size } from "../canvas/camera";
+import {
+  centerOn,
+  focusOn,
+  screenToBoard,
+  viewRect,
+  type Size,
+} from "../canvas/camera";
 import type { WheelMode } from "../canvas/wheel";
 import { useBoardComments } from "../comments/useBoardComments";
 import { moveToTrash, type BoardDocument } from "../realtime/boardDocument";
@@ -150,6 +156,8 @@ import { createDice } from "./dice";
 import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
+import { useImages } from "./useImages";
+import { manyOnScreen } from "./images";
 import { createReaction } from "./reactions";
 import { useReactionChoice } from "./reactionChoice";
 import { ReactionPalette } from "./ReactionPalette";
@@ -202,7 +210,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * комментарии: ветки у объекта или точки, переписка, «решено», непрочитанные, цвет и
  * фильтр по участникам (`useBoardComments`); T6.11 — RCT-01…RCT-04 реакции на объектах
  * (инструмент Reaction, наборы и недавние), FLP-01…FLP-03 флип-карточки и DICE-01…DICE-03
- * кубики (`useFlipAndDice`).
+ * кубики (`useFlipAndDice`); T7.1 — IMG-01…IMG-07 изображения: инструмент Image и вставка
+ * из буфера, маска, отражение, обрезка, замена, удаление фона, GIF (`useImages`).
  */
 export function BoardScene({
   board,
@@ -641,6 +650,26 @@ export function BoardScene({
   // T6.11: флип-карточки и кубики в выделении.
   const flipAndDice = useFlipAndDice({ objects, units, actor });
   const { choice: reactionChoice, used: reactionUsed } = reactions;
+  // T7.1: изображения — загрузка, вставка из буфера, панель выделения, обрезка.
+  const images = useImages({
+    objects,
+    boardId,
+    units,
+    actor,
+    zoom: camera.zoom,
+    select: setSelection,
+  });
+  const { pick: pickImage, insert: insertImages } = images;
+  /** IMG-01: инструмент Image не становится активным — он открывает выбор файла. */
+  const chooseTool = useCallback(
+    (id: ToolId) => {
+      if (id === "image") pickImage({ x: camera.x, y: camera.y });
+      else setTool(id);
+    },
+    [pickImage, camera.x, camera.y],
+  );
+  // IMG-06: при многих объектах на экране GIF играют только по наведению.
+  const stillGifs = manyOnScreen(visible, viewRect(camera, viewport.current));
 
   const sceneGestures = useSceneGestures({
     objects,
@@ -730,9 +759,15 @@ export function BoardScene({
       setSelection([]);
       setTool("select");
     }, []),
-    onTool: setTool,
+    onTool: chooseTool,
     history,
     onTable: setPasteGrid,
+    onImages: useCallback(
+      (files: readonly File[]) => {
+        insertImages(files, pastePoint());
+      },
+      [insertImages, pastePoint],
+    ),
   });
 
   // Выделенные ячейки живут, пока выделена одна их таблица: другое выделение их снимает.
@@ -1118,7 +1153,7 @@ export function BoardScene({
       <ToolPanel
         tool={tool}
         pinned={pinned}
-        onTool={setTool}
+        onTool={chooseTool}
         onPinned={updatePinned}
         onDrop={drop}
       >
@@ -1287,6 +1322,7 @@ export function BoardScene({
                 : null
             }
             mindmap={mindmap.layer}
+            stillGifs={stillGifs}
           />
           {mindmap.editor}
           {editableSingle && editedColumn && (
@@ -1402,6 +1438,7 @@ export function BoardScene({
           )}
           <SelectionOverlay selected={units} />
           <AreaOverlay draft={draft} />
+          {images.overlay}
           <GuidesOverlay guides={guides} />
           <ConnectOverlay hint={hint} />
           <InkOverlay ink={ink} />
@@ -1448,6 +1485,7 @@ export function BoardScene({
           mindmap={mindmap.actions}
           flip={flipAndDice.flip}
           dice={flipAndDice.dice}
+          image={images.actions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1521,6 +1559,7 @@ export function BoardScene({
             }}
           />
         )}
+        {images.ui}
         {linkMissing && (
           <FloatingPanel role="status" className="board-notice">
             The linked object is not on this board.
