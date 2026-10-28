@@ -60,6 +60,7 @@ export function BoardLive({
           userName={userName}
           focusObject={loaded ? objectId : null}
           boardLink={boardLink}
+          loaded={loaded}
         />
       )}
     </>
