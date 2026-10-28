@@ -41,7 +41,9 @@ _UPLOAD_BODY: dict[str, Any] = {
 
 _FILE_HEADERS = {
     # Файл в браузере — только данные: SVG не исполняет скрипты, даже открытый напрямую.
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    "Content-Security-Policy": (
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'none'"
+    ),
     "X-Content-Type-Options": "nosniff",
     # Право могут отозвать (SHR-06): браузер переспрашивает сервер, прежде чем взять копию.
     "Cache-Control": "private, no-cache",

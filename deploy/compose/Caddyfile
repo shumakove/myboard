@@ -11,7 +11,8 @@
 	header @not_embed {
 		defer
 		X-Frame-Options "DENY"
-		Content-Security-Policy "frame-ancestors 'none'"
+		# Своя политика ответа (файлы media, T7.1) остаётся: в ней уже есть frame-ancestors.
+		?Content-Security-Policy "frame-ancestors 'none'"
 	}
 
 	# HTTP API и WebSocket /api/ws — в процесс api.

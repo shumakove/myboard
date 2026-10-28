@@ -226,6 +226,8 @@ def test_img07_svg_is_uploaded_and_served_as_inert_image(alice: TestClient, boar
     policy = response.headers["content-security-policy"]
     assert "sandbox" in policy
     assert "default-src 'none'" in policy
+    # Во фрейме файл не показывается (раздел 12 архитектуры).
+    assert "frame-ancestors 'none'" in policy
 
 
 # --- Доступ: только сессия этой доски ---------------------------------------------------
