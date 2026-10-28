@@ -5,7 +5,7 @@
 import type { Browser, Locator, Page } from '@playwright/test';
 import * as Y from 'yjs';
 import { test, expect } from './fixtures';
-import { canvas, docSeenByLateClient, openGuest, openOwner, profileOpts, type Opts } from './camera';
+import { canvas, docSeenByLateClient, openGuest, openOwner, profileOpts, varuint, type Opts } from './camera';
 import { boxOf, centerOf, obj, objectIds, onCanvas, seed, selected, tool, tools, type Obj } from './scene';
 
 type Fx = { baseURL?: string; viewport: Opts['viewport']; hasTouch: boolean; isMobile: boolean; userAgent?: string; deviceScaleFactor?: number };
@@ -66,6 +66,37 @@ function dumpNotes(frag: Y.XmlFragment): string {
     frag.toArray().map((n) =>
       n instanceof Y.XmlText ? { attrs: n.getAttributes(), delta: n.toDelta() } : n instanceof Y.XmlElement ? { attrs: n.getAttributes(), xml: n.toString() } : String(n),
     ),
+  );
+}
+
+/** BUG-027: в корне `notes` ровно один текст заметки, и он содержит все слова. */
+async function expectOneNoteText(page: Page, boardId: string, words: string[]) {
+  await expect(async () => {
+    const frag = (await docSeenByLateClient(page, `board=${boardId}`)).getXmlFragment('notes');
+    const nodes = frag.toArray();
+    expect(nodes.length, `узлов в notes: ${dumpNotes(frag)}`).toBe(1);
+    expect(nodes[0]).toBeInstanceOf(Y.XmlText);
+    const text = (nodes[0] as Y.XmlText).toString();
+    for (const w of words) expect(text, `в тексте заметки нет ${w}: ${dumpNotes(frag)}`).toContain(w);
+  }).toPass({ timeout: 15_000 });
+}
+
+/** Записать обновление Yjs в документ доски по каналу страницы (sync update). */
+async function putUpdate(page: Page, query: string, update: Uint8Array) {
+  const bytes = [...varuint(0), ...varuint(2), ...varuint(update.length), ...update];
+  await page.evaluate(
+    async ({ query, bytes }) => {
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`);
+      ws.binaryType = 'arraybuffer';
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve();
+        ws.onerror = () => reject(new Error('канал не открылся'));
+      });
+      ws.send(new Uint8Array(bytes));
+      await new Promise((r) => setTimeout(r, 500));
+      ws.close();
+    },
+    { query, bytes },
   );
 }
 
@@ -268,6 +299,7 @@ async function concurrentWrite(browser: Browser, o: Opts, seedText: string) {
       await expect(panel(page), `${who} видит текст владельца`).toContainText('OWNERWORD', { timeout: 10_000 });
       await expect(panel(page), `${who} видит текст участника`).toContainText('GUESTWORD', { timeout: 10_000 });
     }
+    await expectOneNoteText(owner.page, owner.boardId, ['OWNERWORD', 'GUESTWORD']);
     await reload(owner.page);
     await openNote(owner.page);
     await expect(panel(owner.page)).toContainText('OWNERWORD');
@@ -307,8 +339,95 @@ test('NTE-01 COL-01 participant writing an empty note offline keeps the text aft
       await expect(panel(page), `${who} видит текст владельца`).toContainText('OWNERWORD', { timeout: 20_000 });
       await expect(panel(page), `${who} видит текст участника`).toContainText('GUESTWORD', { timeout: 20_000 });
     }
+    await expectOneNoteText(owner.page, owner.boardId, ['OWNERWORD', 'GUESTWORD']);
+    // правки после восстановления идут в тот же текст у обоих
+    await startEdit(guest.page);
+    await guest.page.keyboard.press('Control+End');
+    await guest.page.keyboard.type(' AFTERSYNC');
+    await stopEdit(guest.page);
+    await expect(panel(owner.page)).toContainText('AFTERSYNC', { timeout: 10_000 });
+    await expectOneNoteText(owner.page, owner.boardId, ['OWNERWORD', 'GUESTWORD', 'AFTERSYNC']);
+    await reload(guest.page);
+    await openNote(guest.page);
+    for (const w of ['OWNERWORD', 'GUESTWORD', 'AFTERSYNC']) await expect(panel(guest.page)).toContainText(w);
   } finally {
     await guest.close();
+    await owner.close();
+  }
+});
+
+test('NTE-01 COL-01 both clients writing an empty note offline keep both texts after reconnect', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = optsOf({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const guest = await openGuest(browser, o, owner.token, 'Note Guest');
+  try {
+    await owner.page.context().setOffline(true);
+    await guest.context.setOffline(true);
+    for (const [page, word] of [[owner.page, 'OWNERWORD'], [guest.page, 'GUESTWORD']] as const) {
+      await startEdit(page);
+      await page.keyboard.type(word);
+      await stopEdit(page);
+    }
+    await owner.page.context().setOffline(false);
+    await guest.context.setOffline(false);
+    for (const [who, page] of [['владелец', owner.page], ['участник', guest.page]] as const) {
+      await expect(panel(page), `${who} видит текст владельца`).toContainText('OWNERWORD', { timeout: 20_000 });
+      await expect(panel(page), `${who} видит текст участника`).toContainText('GUESTWORD', { timeout: 20_000 });
+    }
+    await expectOneNoteText(owner.page, owner.boardId, ['OWNERWORD', 'GUESTWORD']);
+  } finally {
+    await guest.close();
+    await owner.close();
+  }
+});
+
+test('NTE-01 COL-01 note written earlier as a node with a random id is shown, edited in place and keeps its text', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = optsOf({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  try {
+    // заметка прежнего формата: один Y.XmlText от обычного (случайного) клиента
+    const legacy = new Y.Doc();
+    expect(legacy.clientID).not.toBe(0);
+    legacy.getXmlFragment('notes').insert(0, [new Y.XmlText('Legacy note text')]);
+    await putUpdate(owner.page, `board=${owner.boardId}`, Y.encodeStateAsUpdate(legacy));
+    await reload(owner.page);
+    await openNote(owner.page);
+    await expect(panel(owner.page), 'прежняя заметка показана').toContainText('Legacy note text');
+    const guest = await openGuest(browser, o, owner.token, 'Note Guest');
+    try {
+      await openNote(guest.page);
+      await expect(panel(guest.page)).toContainText('Legacy note text');
+      // оба правят прежнюю заметку одновременно
+      const write = async (page: Page, word: string, key: string) => {
+        await press(editBtn(page), false);
+        await expect(editor(page)).toBeVisible();
+        await page.keyboard.press(key);
+        await page.keyboard.type(word);
+      };
+      await Promise.all([write(owner.page, ' OWNERPLUS', 'Control+End'), write(guest.page, 'GUESTPLUS ', 'Control+Home')]);
+      await owner.page.waitForTimeout(1500);
+      await stopEdit(owner.page);
+      await stopEdit(guest.page);
+      // закрепление прежней заметки — флаг на том же узле
+      await pin(owner.page).click();
+      await expect(pin(guest.page)).toBeChecked({ timeout: 10_000 });
+      for (const page of [owner.page, guest.page]) {
+        for (const w of ['Legacy note text', 'OWNERPLUS', 'GUESTPLUS']) await expect(panel(page)).toContainText(w, { timeout: 10_000 });
+      }
+      await expectOneNoteText(owner.page, owner.boardId, ['Legacy note text', 'OWNERPLUS', 'GUESTPLUS']);
+      const frag = (await docSeenByLateClient(owner.page, `board=${owner.boardId}`)).getXmlFragment('notes');
+      const node = frag.get(0) as Y.XmlText;
+      expect(node._item?.id.client, 'узел прежней заметки сохранён').toBe(legacy.clientID);
+      expect(node.getAttribute('openForAll')).toBe(true);
+      await reload(owner.page);
+      await expect(panel(owner.page), 'закреплённая прежняя заметка открыта при входе').toBeVisible();
+      for (const w of ['Legacy note text', 'OWNERPLUS', 'GUESTPLUS']) await expect(panel(owner.page)).toContainText(w);
+    } finally {
+      await guest.close();
+    }
+  } finally {
     await owner.close();
   }
 });
