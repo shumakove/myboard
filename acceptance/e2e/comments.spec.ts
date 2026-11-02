@@ -3,9 +3,10 @@
 // Наблюдение: DOM холста и панели, документ доски глазами позднего клиента по /api/ws, второй и третий клиент.
 // Код из apps/ не импортируется.
 import type { Browser, Page } from '@playwright/test';
+import * as Y from 'yjs';
 import { test, expect } from './fixtures';
 import { canvas, docSeenByLateClient, dragBy, openGuest, openOwner, profileOpts, Touch, type Opts, type Point } from './camera';
-import { boxOf, cameraBy, centerOf, obj, onCanvas, seed, tool, tools, type Obj } from './scene';
+import { boxOf, cameraBy, centerOf, obj, onCanvas, seed, tool, tools, writeDoc, type Obj } from './scene';
 
 type Fx = { baseURL?: string; viewport: Opts['viewport']; hasTouch: boolean; isMobile: boolean; userAgent?: string; deviceScaleFactor?: number };
 const desktopOnly = (isMobile: boolean) => test.skip(isMobile, 'мышь и клавиатура — профиль desktop');
@@ -641,23 +642,275 @@ test('ARCH CMT-01…04 comments live in the board document `comments` (anchor, m
   }
 });
 
-test('CMT-02 CMT-04 observation: a participant by link who enters the same name as the owner', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+// ---------- BUG-026: тёзки ----------
+
+async function ownerAndTwin(browser: Browser, f: Fx) {
+  const o = profileOpts(f);
+  const owner = await openOwner(browser, o);
+  await seed(owner.page, owner.boardId, { 'qa-s': STICKY, 'qa-ref': REF, 'qa-t': { ...STICKY, x: 300, text: 'QA second' } });
+  const twin = await openGuest(browser, o, owner.token, owner.name);
+  await expect(obj(twin.page, 'qa-s')).toBeVisible();
+  return { owner, twin, opts: o };
+}
+
+const onSticky = async (page: Page, id = 'qa-s') => centerOf(await boxOf(obj(page, id)));
+const peopleLabels = async (page: Page) => (await people(page).getByRole('button').allInnerTexts()).map((t) => t.trim());
+
+test('CMT-02 CMT-04 BUG-026 a participant by link who enters the same name as the owner: unread for the owner, a separate filter button', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const { owner, twin } = await ownerAndTwin(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  try {
+    const c = await startAt(twin.page, await onSticky(twin.page), 'From the namesake');
+    await closePanel(twin.page); // открытая ветка читает новые сообщения сразу (принятое поведение CMT-02)
+    await expect(marker(owner.page, c)).toHaveAttribute('data-unread', 'true');
+    await expect(commentsBtn(owner.page)).toHaveAccessibleName(/1 unread/);
+    await expect(marker(twin.page, c), 'своё сообщение у автора не отмечено').not.toHaveAttribute('data-unread', 'true');
+
+    await openThread(owner.page, c);
+    await expect(marker(owner.page, c)).not.toHaveAttribute('data-unread', 'true');
+    await sendReply(owner.page, 'From the owner');
+    await closePanel(twin.page);
+    await expect(marker(twin.page, c), 'ответ владельца непрочитан у тёзки').toHaveAttribute('data-unread', 'true');
+    await expect(marker(owner.page, c), 'свой ответ у владельца не отмечен').not.toHaveAttribute('data-unread', 'true');
+
+    // перезагрузка не делает свои сообщения чужими
+    await owner.page.reload();
+    await expect(marker(owner.page, c)).toBeVisible();
+    await owner.page.waitForTimeout(800);
+    await expect(marker(owner.page, c)).not.toHaveAttribute('data-unread', 'true');
+
+    // вторая вкладка того же человека: сообщения свои
+    const twinTab = await twin.context.newPage();
+    await twinTab.goto(`/b/${owner.token}`);
+    await expect(marker(twinTab, c)).toBeVisible();
+    await twinTab.close();
+  } finally {
+    await twin.close();
+    await owner.close();
+  }
+});
+
+test('CMT-04 BUG-026 namesakes filter separately on both sides; replies count; both chosen show all; off shows all; pins follow the filter', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const { owner, twin } = await ownerAndTwin(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  try {
+    const ofOwner = await startAt(owner.page, await onSticky(owner.page), 'Owner thread');
+    await closePanel(owner.page);
+    const ofTwin = await startAt(twin.page, await onSticky(twin.page, 'qa-t'), 'Twin thread');
+    await closePanel(twin.page);
+    const shared = await startAt(owner.page, await onCanvas(owner.page, 0.6, 0.5), 'Owner starts');
+    await closePanel(owner.page);
+    await expect(marker(twin.page, shared)).toBeVisible();
+    await openThread(twin.page, shared);
+    await sendReply(twin.page, 'Twin replies');
+    await closePanel(twin.page);
+
+    await openPanel(owner.page);
+    await expect(people(owner.page).getByRole('button')).toHaveCount(2);
+    const labels = await peopleLabels(owner.page);
+    expect(new Set(labels).size, `подписи тёзок различаются: ${labels.join(' | ')}`).toBe(2);
+    const you = `${owner.name} (you)`;
+    expect(labels).toContain(you);
+    const other = labels.find((l) => l !== you)!;
+
+    await people(owner.page).getByRole('button', { name: you, exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([ofOwner, shared].sort());
+    await expect.poll(() => ids(owner.page)).toEqual([ofOwner, shared].sort());
+    await people(owner.page).getByRole('button', { name: you, exact: true }).click();
+
+    await people(owner.page).getByRole('button', { name: other, exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([ofTwin, shared].sort());
+    await expect.poll(() => ids(owner.page)).toEqual([ofTwin, shared].sort());
+
+    await people(owner.page).getByRole('button', { name: you, exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([ofOwner, ofTwin, shared].sort());
+    await people(owner.page).getByRole('button', { name: you, exact: true }).click();
+    await people(owner.page).getByRole('button', { name: other, exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([ofOwner, ofTwin, shared].sort());
+
+    // У тёзки свой взгляд: «вы» — он сам, фильтр по себе — его ветки; на владельца не влияет.
+    await openPanel(twin.page);
+    await expect(people(twin.page).getByRole('button')).toHaveCount(2);
+    await people(twin.page).getByRole('button', { name: you, exact: true }).click();
+    await expect.poll(() => itemIds(twin.page)).toEqual([ofTwin, shared].sort());
+    await expect.poll(() => itemIds(owner.page)).toEqual([ofOwner, ofTwin, shared].sort());
+  } finally {
+    await twin.close();
+    await owner.close();
+  }
+});
+
+test('CMT-02 CMT-04 BUG-026 two participants by link with one name are two people', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  await seed(owner.page, owner.boardId, { 'qa-s': STICKY, 'qa-ref': REF, 'qa-t': { ...STICKY, x: 300, text: 'QA second' } });
+  const a = await openGuest(browser, o, owner.token, 'Same Guest');
+  const b = await openGuest(browser, o, owner.token, 'Same Guest');
+  try {
+    await expect(obj(a.page, 'qa-s')).toBeVisible();
+    await expect(obj(b.page, 'qa-s')).toBeVisible();
+    const ca = await startAt(a.page, await onSticky(a.page), 'From A');
+    await closePanel(a.page);
+    await expect(marker(b.page, ca)).toHaveAttribute('data-unread', 'true');
+    await expect(marker(a.page, ca)).not.toHaveAttribute('data-unread', 'true');
+    const cb = await startAt(b.page, await onSticky(b.page, 'qa-t'), 'From B');
+    await closePanel(b.page);
+    await expect(marker(a.page, cb)).toHaveAttribute('data-unread', 'true');
+
+    // У владельца — третьего человека — две различимые кнопки, ни одна не «(you)».
+    await openPanel(owner.page);
+    const labels = await peopleLabels(owner.page);
+    expect(labels.length).toBe(2);
+    expect(new Set(labels).size, labels.join(' | ')).toBe(2);
+    expect(labels.some((l) => l.includes('(you)'))).toBe(false);
+    await people(owner.page).getByRole('button', { name: labels[0], exact: true }).click();
+    const first = await itemIds(owner.page);
+    expect(first.length).toBe(1);
+    await people(owner.page).getByRole('button', { name: labels[0], exact: true }).click();
+    await people(owner.page).getByRole('button', { name: labels[1], exact: true }).click();
+    const second = await itemIds(owner.page);
+    expect(second.length).toBe(1);
+    expect([...first, ...second].sort()).toEqual([ca, cb].sort());
+  } finally {
+    await b.close();
+    await a.close();
+    await owner.close();
+  }
+});
+
+test('CMT-02 CMT-04 BUG-026 ARCH the document tells authors apart and holds no session value, email or password; session ids stay stable within a session', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const { owner, twin } = await ownerAndTwin(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  try {
+    const c = await startAt(owner.page, await onSticky(owner.page), 'Owner says');
+    await closePanel(owner.page);
+    await expect(marker(twin.page, c)).toBeVisible();
+    await openThread(twin.page, c);
+    await sendReply(twin.page, 'Twin says');
+    const th = await untilComments(owner.page, owner.boardId, (cm) => expect(cm[c]?.messages.length).toBe(2));
+    const raw = th[c].messages as unknown as { author: string; authorId?: string }[];
+    expect(raw[0].author).toBe(raw[1].author);
+    expect(raw[0].authorId, 'автор различается в документе').toBeTruthy();
+    expect(raw[1].authorId).toBeTruthy();
+    expect(raw[0].authorId).not.toBe(raw[1].authorId);
+
+    const ownerCookies = await owner.page.context().cookies();
+    const twinCookies = await twin.context.cookies();
+    const dump = JSON.stringify(th);
+    for (const cookie of [...ownerCookies, ...twinCookies]) {
+      expect(dump.includes(cookie.value), `значение cookie ${cookie.name} не в документе`).toBe(false);
+    }
+    const session = (await (await owner.page.request.get('/api/session')).json()) as { id: string; email: string };
+    expect(dump).not.toContain(session.email);
+    expect(session.id).toBe(raw[0].authorId);
+
+    const open = async () => ((await (await twin.context.request.get(`/api/share/${owner.token}`)).json()) as { participant: { id: string; name: string } }).participant;
+    const first = await open();
+    expect(first.id).toBe(raw[1].authorId);
+    expect((await open()).id, 'id участника стабилен в пределах сессии').toBe(first.id);
+    for (const cookie of twinCookies) expect(first.id).not.toBe(cookie.value);
+
+    // Без сессии отдаётся не чужой id, а отсутствие участника и прежний отказ на документ.
+    const anon = await browser.newContext({ baseURL });
+    try {
+      const shared = (await (await anon.request.get(`/api/share/${owner.token}`)).json()) as { participant: unknown };
+      expect(shared.participant).toBeNull();
+      const noSession = (await (await anon.request.get('/api/session')).json()) as { authenticated: boolean; id: unknown };
+      expect(noSession.authenticated).toBe(false);
+      expect(noSession.id).toBeNull();
+    } finally {
+      await anon.close();
+    }
+  } finally {
+    await twin.close();
+    await owner.close();
+  }
+});
+
+test('CMT-02 CMT-04 BUG-026 threads written before the fix (no authorId) are shown; filter and unread keep working', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const { owner, twin } = await ownerAndTwin(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const errors: string[] = [];
+  owner.page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    const legacy = 'qa-legacy-thread';
+    const legacyGuest = 'qa-legacy-guest';
+    await writeDoc(owner.page, owner.boardId, (doc) => {
+      const comments = doc.getMap('comments');
+      const put = (id: string, author: string, text: string, y: number) => {
+        const thread = new Y.Map<unknown>();
+        const messages = new Y.Array<unknown>();
+        messages.push([{ id: `${id}-m`, author, text, at: '2026-10-27T10:00:00.000Z' }]);
+        thread.set('anchor', { object: null, x: 240, y });
+        thread.set('color', '#ff0000');
+        thread.set('resolved', false);
+        thread.set('createdAt', '2026-10-27T10:00:00.000Z');
+        thread.set('createdBy', author);
+        thread.set('messages', messages);
+        comments.set(id, thread);
+      };
+      put(legacy, owner.name, 'Old own', 20);
+      put(legacyGuest, 'Old Guest', 'Old other', 60);
+    });
+    await expect(marker(owner.page, legacy)).toBeVisible();
+    await expect(marker(owner.page, legacyGuest)).toHaveAttribute('data-unread', 'true');
+    // Старое сообщение со своим именем сравнивается по имени — как до исправления.
+    await expect(marker(owner.page, legacy)).not.toHaveAttribute('data-unread', 'true');
+
+    const fresh = await startAt(twin.page, await onSticky(twin.page), 'New from twin');
+    await closePanel(twin.page);
+    await expect(marker(owner.page, fresh)).toHaveAttribute('data-unread', 'true');
+
+    await openPanel(owner.page);
+    const labels = await peopleLabels(owner.page);
+    expect(labels).toContain('Old Guest');
+    await people(owner.page).getByRole('button', { name: 'Old Guest', exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([legacyGuest]);
+    await people(owner.page).getByRole('button', { name: 'Old Guest', exact: true }).click();
+    await expect.poll(() => itemIds(owner.page)).toEqual([legacy, legacyGuest, fresh].sort());
+    await openThread(owner.page, legacyGuest);
+    await expect(messages(owner.page)).toHaveCount(1);
+    await expect(marker(owner.page, legacyGuest)).not.toHaveAttribute('data-unread', 'true');
+    expect(errors).toEqual([]);
+  } finally {
+    await twin.close();
+    await owner.close();
+  }
+});
+
+test('CMT-02 CMT-04 BUG-026 observation: a participant comes back in a new session under the same name', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   desktopOnly(isMobile);
   const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
   const owner = await openOwner(browser, o);
   await seed(owner.page, owner.boardId, { 'qa-s': STICKY, 'qa-ref': REF });
-  const twin = await openGuest(browser, o, owner.token, owner.name);
+  const guest = await openGuest(browser, o, owner.token, 'Back Guest');
+  const errors: string[] = [];
+  guest.page.on('pageerror', (e) => errors.push(e.message));
   try {
-    const c = await startAt(twin.page, centerOf(await boxOf(obj(twin.page, 'qa-s'))), 'From the namesake');
-    await expect(marker(owner.page, c)).toBeVisible();
-    await owner.page.waitForTimeout(1000);
-    const unread = await marker(owner.page, c).getAttribute('data-unread');
+    await expect(obj(guest.page, 'qa-s')).toBeVisible();
+    const c = await startAt(guest.page, await onSticky(guest.page), 'Before leaving');
+    await closePanel(guest.page);
+
+    // Браузер закрыт: cookie сессии нет, хранилище браузера осталось; вход под тем же именем.
+    await guest.context.clearCookies();
+    const joined = await guest.context.request.post(`/api/share/${owner.token}/join`, { data: { name: 'Back Guest' } });
+    expect(joined.status()).toBe(200);
+    await guest.page.goto(`/b/${owner.token}`);
+    await expect(marker(guest.page, c)).toBeVisible();
+    await guest.page.waitForTimeout(800);
+    const unread = await marker(guest.page, c).getAttribute('data-unread');
+    const c2 = await startAt(guest.page, await onCanvas(guest.page, 0.6, 0.5), 'After coming back');
+    await closePanel(guest.page);
+    await expect(marker(owner.page, c2)).toBeVisible();
     await openPanel(owner.page);
-    const people = await panel(owner.page).getByRole('group', { name: 'Filter by people' }).getByRole('button').count();
-    test.info().annotations.push({ type: 'наблюдение', description: `у владельца data-unread=${unread}; кнопок в Filter by people: ${people}` });
-    console.log(`наблюдение CMT-02/CMT-04 (тёзка): у владельца data-unread=${unread}; кнопок в Filter by people: ${people}`);
+    const labels = await peopleLabels(owner.page);
+    console.log(`наблюдение BUG-026 (повторный вход): старое своё сообщение data-unread=${unread}; кнопки у владельца: ${labels.join(' | ')}`);
+    test.info().annotations.push({ type: 'наблюдение', description: `data-unread=${unread}; ${labels.join(' | ')}` });
+    expect(unread, 'своё прежнее сообщение в том же браузере не становится непрочитанным').toBeNull();
+    expect(errors).toEqual([]);
   } finally {
-    await twin.close();
+    await guest.close();
     await owner.close();
   }
 });
