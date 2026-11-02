@@ -5,6 +5,7 @@ import { KanbanControls, type KanbanActions } from "./KanbanControls";
 import { MindmapControls, type MindmapActions } from "./MindmapControls";
 import { FlipControls, type FlipActions } from "./FlipControls";
 import { DiceControls, type DiceActions } from "./DiceControls";
+import { FileControls, type FileActions } from "./FileControls";
 import { ImageControls, type ImageActions } from "./ImageControls";
 import {
   MORE_TEXT_KEYS,
@@ -101,6 +102,7 @@ export interface AuthorToggle {
  *   (DICE-01…DICE-03);
  * - T7.1: у изображений — Mask, Flip horizontal, Flip vertical (IMG-02, IMG-03), у одного —
  *   Crop, Replace image, Remove background (IMG-02, IMG-04, IMG-05).
+ * - Файл (T7.2): имя и Download (FIL-01), Extract pages у PDF (FIL-02).
  */
 export function SelectionBar({
   selected,
@@ -125,6 +127,7 @@ export function SelectionBar({
   flip = null,
   dice = null,
   image = null,
+  file = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -149,6 +152,7 @@ export function SelectionBar({
   flip?: FlipActions | null;
   dice?: DiceActions | null;
   image?: ImageActions | null;
+  file?: FileActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -284,6 +288,7 @@ export function SelectionBar({
       {flip && <FlipControls flip={flip} />}
       {dice && <DiceControls dice={dice} />}
       {image && <ImageControls image={image} />}
+      {file && <FileControls file={file} />}
 
       {frame?.keepRatio && (
         <Switch

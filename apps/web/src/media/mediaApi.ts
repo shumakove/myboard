@@ -22,16 +22,18 @@ const MESSAGES: Record<number, string> = {
 };
 
 /**
- * IMG-01, IMG-07: файл на доску — `POST /api/boards/{id}/media`. Тело — сам файл,
- * `Content-Type` — его объявленный тип; адрес — того же происхождения, что и страница.
+ * IMG-01, IMG-07, FIL-01…FIL-04: файл на доску — `POST /api/boards/{id}/media`. Тело —
+ * сам файл, `Content-Type` — его объявленный тип; адрес — того же происхождения, что и
+ * страница. `kind` `file` — ярлык файла любого типа (FIL-01).
  */
 export async function uploadMedia(
   boardId: string,
   file: Blob,
   name: string,
   mime: string = file.type,
+  kind?: "file",
 ): Promise<Media> {
-  const query = new URLSearchParams({ name });
+  const query = new URLSearchParams({ name, ...(kind && { kind }) });
   let response: Response;
   try {
     response = await fetch(

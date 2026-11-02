@@ -1579,3 +1579,161 @@
   top: 50%;
   cursor: ew-resize;
 }
+
+/* T7.2: ярлык файла (FIL-01), PDF (FIL-02), видео и аудио (FIL-03, FIL-04). */
+.scene-object.scene-file,
+.scene-object.scene-pdf,
+.scene-object.scene-video,
+.scene-object.scene-audio {
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  white-space: normal;
+}
+
+.file-shortcut {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.file-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.file-text,
+.media-object,
+.media-player,
+.pdf-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.file-name,
+.media-name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.media-name {
+  flex: none;
+  padding: var(--space-1) var(--space-3) 0;
+}
+
+.file-size,
+.media-time,
+.pdf-count {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.media-player video.media-source {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: var(--color-inverse);
+  object-fit: contain;
+}
+
+.media-player:fullscreen {
+  background: var(--color-surface);
+}
+
+.media-controls {
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+}
+
+.media-row,
+.pdf-bar,
+.pdf-pages-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pdf-bar {
+  flex: none;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 var(--space-2);
+}
+
+.media-seek {
+  flex: 1;
+  min-width: 40px;
+  min-height: var(--control-size);
+}
+
+.media-volume {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: 13px;
+}
+
+.media-volume input {
+  flex: 1;
+  min-width: 40px;
+  min-height: var(--control-size);
+}
+
+.media-missing {
+  margin: auto;
+  padding: var(--space-3);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.pdf-page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--color-surface);
+}
+
+.pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.pdf-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--space-1);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.pdf-page-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-size);
+}
+
+.pdf-pages-actions {
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}

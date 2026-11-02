@@ -460,7 +460,7 @@ export interface paths {
         put?: never;
         /**
          * Upload Media
-         * @description IMG-01, IMG-07: изображение на доску; ответ — id и адрес файла.
+         * @description IMG-01, IMG-07, FIL-01…FIL-04: файл на доску; ответ — id и адрес файла.
          */
         post: operations["upload_media_api_boards__board_id__media_post"];
         delete?: never;
@@ -501,6 +501,8 @@ export interface paths {
         /**
          * Get Media
          * @description Файл доски — только владельцу и участнику по действующей ссылке этой доски.
+         *
+         *     FIL-01: `download` — имя ярлыка на доске; файл скачивается под ним, а не показывается.
          */
         get: operations["get_media_api_media__media_id__get"];
         put?: never;
@@ -1818,6 +1820,7 @@ export interface operations {
         parameters: {
             query?: {
                 name?: string;
+                kind?: "file" | null;
             };
             header?: never;
             path: {
@@ -1827,11 +1830,27 @@ export interface operations {
         };
         requestBody: {
             content: {
+                "application/octet-stream": string;
+                "application/pdf": string;
+                "audio/m4a": string;
+                "audio/mp3": string;
+                "audio/mp4": string;
+                "audio/mpeg": string;
+                "audio/vnd.wave": string;
+                "audio/wav": string;
+                "audio/wave": string;
+                "audio/webm": string;
+                "audio/x-m4a": string;
+                "audio/x-wav": string;
                 "image/gif": string;
                 "image/jpeg": string;
                 "image/png": string;
                 "image/svg+xml": string;
                 "image/webp": string;
+                "video/mp4": string;
+                "video/quicktime": string;
+                "video/webm": string;
+                "video/x-m4v": string;
             };
         };
         responses: {
@@ -1920,7 +1939,9 @@ export interface operations {
     };
     get_media_api_media__media_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                download?: string | null;
+            };
             header?: never;
             path: {
                 media_id: string;

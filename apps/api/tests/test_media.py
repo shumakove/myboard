@@ -1,4 +1,4 @@
-"""Модуль media: загрузка, выдача, копирование файлов доски (IMG-01, IMG-07, CVS-20; раздел 8).
+"""Модуль media: загрузка, выдача, копирование файлов доски (IMG-*, FIL-*, CVS-20; раздел 8).
 
 В тестах `MAX_UPLOAD_BYTES` = 1024 (conftest).
 """
@@ -483,3 +483,134 @@ def test_cvs20_source_file_missing_on_disk_is_skipped(
 
     assert _copy(alice, target, media["id"]).json() == {"copies": {}}
     assert _stored_files(settings) == []
+
+
+# --- FIL-01…FIL-04: файлы, PDF, видео и аудио ---------------------------------------
+
+
+def _upload_file(browser: TestClient, board_id: str, content: bytes = b"data") -> dict[str, Any]:
+    response = browser.post(
+        f"/api/boards/{board_id}/media",
+        params={"name": "draft.bin", "kind": "file"},
+        content=content,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+@pytest.mark.parametrize(
+    "mime",
+    [
+        "application/pdf",
+        "video/mp4",
+        "video/x-m4v",
+        "video/quicktime",
+        "video/webm",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/webm",
+    ],
+)
+def test_fil02_fil03_fil04_formats_uploaded_and_served(
+    alice: TestClient, board: str, mime: str
+) -> None:
+    response = alice.post(
+        f"/api/boards/{board}/media",
+        params={"name": "clip"},
+        content=b"media-bytes",
+        headers={"Content-Type": mime},
+    )
+    assert response.status_code == 201, response.text
+    served = alice.get(response.json()["url"])
+    assert served.status_code == 200
+    assert served.headers["content-type"].split(";")[0] == mime
+    assert served.content == b"media-bytes"
+
+
+def test_fil03_range_request_returns_part_of_the_file(alice: TestClient, board: str) -> None:
+    """Перемотка: браузер запрашивает файл с произвольного места."""
+    media = alice.post(
+        f"/api/boards/{board}/media",
+        content=b"0123456789",
+        headers={"Content-Type": "video/mp4"},
+    ).json()
+    response = alice.get(media["url"], headers={"Range": "bytes=4-7"})
+    assert response.status_code == 206
+    assert response.content == b"4567"
+    assert response.headers["content-range"] == "bytes 4-7/10"
+    assert alice.get(media["url"]).headers["accept-ranges"] == "bytes"
+
+
+def test_fil01_any_file_uploaded_as_opaque_data(alice: TestClient, board: str) -> None:
+    """Ярлык принимает файл любого типа: HTML браузер как страницу не показывает."""
+    response = alice.post(
+        f"/api/boards/{board}/media",
+        params={"name": "page.html", "kind": "file"},
+        content=b"<script>alert(1)</script>",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert (body["name"], body["mime"]) == ("page.html", "application/octet-stream")
+    served = alice.get(body["url"])
+    assert served.headers["content-type"] == "application/octet-stream"
+    assert served.headers["x-content-type-options"] == "nosniff"
+
+
+def test_fil01_active_type_rejected_even_as_file(alice: TestClient, board: str) -> None:
+    response = alice.post(
+        f"/api/boards/{board}/media",
+        params={"kind": "file"},
+        content=b"<html></html>",
+        headers={"Content-Type": "text/html"},
+    )
+    assert response.status_code == 415
+
+
+def test_fil01_generic_type_needs_file_kind(alice: TestClient, board: str) -> None:
+    """Без `kind=file` непрозрачные данные не загружаются: изображением они не станут."""
+    response = alice.post(
+        f"/api/boards/{board}/media",
+        content=b"data",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    assert response.status_code == 415
+
+
+def test_fil01_file_over_the_limit_rejected(alice: TestClient, board: str) -> None:
+    response = alice.post(
+        f"/api/boards/{board}/media",
+        params={"kind": "file"},
+        content=b"x" * 1025,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    assert response.status_code == 413
+
+
+def test_fil01_download_under_the_name_on_the_board(alice: TestClient, board: str) -> None:
+    media = _upload_file(alice, board)
+    response = alice.get(media["url"], params={"download": "../Отчёт итог.bin"})
+    assert response.status_code == 200
+    assert response.content == b"data"
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("attachment;")
+    assert "%D0%9E%D1%82%D1%87%D1%91%D1%82%20%D0%B8%D1%82%D0%BE%D0%B3.bin" in disposition
+    assert alice.get(media["url"]).headers["content-disposition"].startswith("inline;")
+
+
+def test_fil01_download_needs_board_session(alice: TestClient, bob: TestClient, board: str) -> None:
+    media = _upload_file(alice, board)
+    assert bob.get(media["url"], params={"download": "x.bin"}).status_code == 404
+
+
+def test_fil01_participant_uploads_and_downloads_file(
+    alice: TestClient, admin: TestClient, board: str
+) -> None:
+    with _guest(admin, alice, board) as guest:
+        media = _upload_file(guest, board)
+        assert guest.get(media["url"], params={"download": "x.bin"}).status_code == 200

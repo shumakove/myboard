@@ -1,16 +1,18 @@
-"""HTTP-маршруты модуля media (IMG-01, IMG-07; раздел 8 архитектуры).
+"""HTTP-маршруты модуля media (IMG-01, IMG-07, FIL-01…FIL-04; раздел 8 архитектуры).
 
 - `POST /api/boards/{board_id}/media?name=…` — тело запроса — сам файл, `Content-Type` —
-  его объявленный тип. Загружают владелец и участник по ссылке этой доски.
+  его объявленный тип. Загружают владелец и участник по ссылке этой доски. С `kind=file` —
+  ярлык файла любого типа (FIL-01): тип `application/octet-stream`.
 - `POST /api/boards/{board_id}/media/copies` — копии файлов других досок на эту доску (CVS-20).
-- `GET /api/media/{media_id}` — файл, только при сессии его доски.
+- `GET /api/media/{media_id}` — файл, только при сессии его доски; поддерживает `Range`
+  (перемотка, FIL-03, FIL-04). С `download=<имя>` — скачивание под этим именем (FIL-01).
 
 Без права на доску оба маршрута отвечают одинаковым 404: существует ли доска или файл,
 наружу не сообщается.
 """
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import anyio
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -35,7 +37,7 @@ _UPLOAD_BODY: dict[str, Any] = {
         "required": True,
         "content": {
             mime: {"schema": {"type": "string", "format": "binary"}}
-            for mime in sorted(service.ALLOWED_TYPES)
+            for mime in sorted(service.ALLOWED_TYPES | {service.GENERIC_TYPE})
         },
     }
 }
@@ -74,12 +76,13 @@ async def upload_media(
     request: Request,
     db: SessionDep,
     name: Annotated[str, Query(max_length=NAME_MAX_LENGTH * 4)] = "",
+    kind: Literal["file"] | None = None,
 ) -> MediaOut:
-    """IMG-01, IMG-07: изображение на доску; ответ — id и адрес файла."""
+    """IMG-01, IMG-07, FIL-01…FIL-04: файл на доску; ответ — id и адрес файла."""
     if not await can_use_board(db, board_id, request.cookies):
         raise _not_found()
     try:
-        mime = service.declared_type(request.headers.get("content-type"))
+        mime = service.declared_type(request.headers.get("content-type"), generic=kind == "file")
     except service.UnsupportedTypeError:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, UNSUPPORTED) from None
     settings = settings_of(request)
@@ -152,8 +155,16 @@ async def copy_media(
         404: {"description": NOT_FOUND},
     },
 )
-async def get_media(media_id: uuid.UUID, request: Request, db: SessionDep) -> FileResponse:
-    """Файл доски — только владельцу и участнику по действующей ссылке этой доски."""
+async def get_media(
+    media_id: uuid.UUID,
+    request: Request,
+    db: SessionDep,
+    download: Annotated[str | None, Query(max_length=NAME_MAX_LENGTH * 4)] = None,
+) -> FileResponse:
+    """Файл доски — только владельцу и участнику по действующей ссылке этой доски.
+
+    FIL-01: `download` — имя ярлыка на доске; файл скачивается под ним, а не показывается.
+    """
     media = await service.get(db, media_id)
     if media is None or not await can_use_board(db, media.board_id, request.cookies):
         raise _not_found()
@@ -163,7 +174,7 @@ async def get_media(media_id: uuid.UUID, request: Request, db: SessionDep) -> Fi
     return FileResponse(
         path,
         media_type=media.mime,
-        filename=media.original_name,
-        content_disposition_type="inline",
+        filename=media.original_name if download is None else service.clean_name(download),
+        content_disposition_type="inline" if download is None else "attachment",
         headers=_FILE_HEADERS,
     )

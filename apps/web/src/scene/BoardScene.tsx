@@ -156,6 +156,7 @@ import { createDice } from "./dice";
 import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
+import { useFiles } from "./useFiles";
 import { useImages } from "./useImages";
 import { useFileTask } from "../media/useFileTask";
 import { manyOnScreen } from "./images";
@@ -212,7 +213,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * фильтр по участникам (`useBoardComments`); T6.11 — RCT-01…RCT-04 реакции на объектах
  * (инструмент Reaction, наборы и недавние), FLP-01…FLP-03 флип-карточки и DICE-01…DICE-03
  * кубики (`useFlipAndDice`); T7.1 — IMG-01…IMG-07 изображения: инструмент Image и вставка
- * из буфера, маска, отражение, обрезка, замена, удаление фона, GIF (`useImages`).
+ * из буфера, маска, отражение, обрезка, замена, удаление фона, GIF (`useImages`);
+ * T7.2 — FIL-01…FIL-05 файлы: инструмент File, ярлык, PDF, видео и аудио (`useFiles`).
  */
 export function BoardScene({
   board,
@@ -666,13 +668,24 @@ export function BoardScene({
     busy: fileTask.busy,
   });
   const { pick: pickImage, insert: insertImages } = images;
-  /** IMG-01: инструмент Image не становится активным — он открывает выбор файла. */
+  // T7.2: файлы — загрузка и панель выделения.
+  const files = useFiles({
+    objects,
+    boardId,
+    units,
+    actor,
+    select: setSelection,
+    run: fileTask.run,
+  });
+  const { pick: pickFile } = files;
+  /** IMG-01, FIL-01: Image и File не становятся активными — открывают выбор файла. */
   const chooseTool = useCallback(
     (id: ToolId) => {
       if (id === "image") pickImage({ x: camera.x, y: camera.y });
+      else if (id === "file") pickFile({ x: camera.x, y: camera.y });
       else setTool(id);
     },
-    [pickImage, camera.x, camera.y],
+    [pickImage, pickFile, camera.x, camera.y],
   );
   // IMG-06: при многих объектах на экране GIF играют только по наведению.
   const stillGifs = manyOnScreen(visible, viewRect(camera, viewport.current));
@@ -1492,6 +1505,7 @@ export function BoardScene({
           flip={flipAndDice.flip}
           dice={flipAndDice.dice}
           image={images.actions}
+          file={files.actions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1566,6 +1580,7 @@ export function BoardScene({
           />
         )}
         {images.ui}
+        {files.ui}
         {fileTask.notice}
         {linkMissing && (
           <FloatingPanel role="status" className="board-notice">
