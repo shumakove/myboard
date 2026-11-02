@@ -469,6 +469,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/boards/{board_id}/media/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Media
+         * @description CVS-20: вставка на другую доску — файл становится файлом этой доски (BUG-028).
+         *
+         *     Файл без права на его доску неотличим от несуществующего: в ответе его просто нет.
+         */
+        post: operations["copy_media_api_boards__board_id__media_copies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/{media_id}": {
         parameters: {
             query?: never;
@@ -637,6 +659,24 @@ export interface components {
         JoinRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * MediaCopiesOut
+         * @description Исходный id → id файла на этой доске; недоступных файлов здесь нет.
+         */
+        MediaCopiesOut: {
+            /** Copies */
+            copies: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * MediaCopyIn
+         * @description Файлы других досок, которые нужны на этой доске (CVS-20).
+         */
+        MediaCopyIn: {
+            /** Media */
+            media: string[];
         };
         /**
          * MediaOut
@@ -1820,6 +1860,48 @@ export interface operations {
             };
             /** @description This file type is not supported */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_media_api_boards__board_id__media_copies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaCopyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaCopiesOut"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

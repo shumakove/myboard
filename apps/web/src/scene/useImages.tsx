@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import type * as Y from "yjs";
 import { uploadMedia, UploadError } from "../media/mediaApi";
+import type { RunFileTask } from "../media/useFileTask";
 import type { Point } from "../realtime/messages";
-import { Button, FloatingPanel } from "../ui";
 import type { ImageActions } from "./ImageControls";
 import { ImageCropOverlay } from "./ImageCropOverlay";
 import { IMAGE_TYPES, isImageType, mediaUrl } from "./imageData";
@@ -24,11 +24,9 @@ const UNSUPPORTED =
 /** Сдвиг каждого следующего изображения, если их вставили несколько сразу. */
 const CASCADE = 24;
 
-type Status = { kind: "busy" | "error"; text: string } | null;
-
 /**
  * T7.1: изображения на доске — загрузка из файла и из буфера (IMG-01, IMG-07), действия
- * панели выделения (IMG-02…IMG-05), обрезка на холсте (IMG-02), строка состояния загрузки.
+ * панели выделения (IMG-02…IMG-05), обрезка на холсте (IMG-02).
  */
 export function useImages({
   objects,
@@ -37,6 +35,8 @@ export function useImages({
   actor,
   zoom,
   select,
+  run,
+  busy,
 }: {
   objects: Y.Map<unknown>;
   boardId: string;
@@ -45,6 +45,9 @@ export function useImages({
   actor: string;
   zoom: number;
   select: (ids: string[]) => void;
+  run: RunFileTask;
+  /** Идёт долгое действие с файлом. */
+  busy: boolean;
 }): {
   /** Открыть выбор файла; изображения встанут с центром в `at`. */
   pick: (at: Point) => void;
@@ -53,10 +56,9 @@ export function useImages({
   actions: ImageActions | null;
   /** Слой обрезки поверх объектов доски. */
   overlay: ReactNode;
-  /** Скрытое поле выбора файла и строка состояния. */
+  /** Скрытое поле выбора файла. */
   ui: ReactNode;
 } {
-  const [status, setStatus] = useState<Status>(null);
   const [cropping, setCropping] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const target = useRef<Point>({ x: 0, y: 0 });
@@ -74,20 +76,6 @@ export function useImages({
     },
     [boardId],
   );
-
-  /** Долгое действие с файлом: строка «идёт», затем ошибка или ничего. */
-  const run = useCallback(async (text: string, work: () => Promise<void>) => {
-    setStatus({ kind: "busy", text });
-    try {
-      await work();
-      setStatus(null);
-    } catch (error) {
-      setStatus({
-        kind: "error",
-        text: error instanceof UploadError ? error.message : NOT_AN_IMAGE,
-      });
-    }
-  }, []);
 
   const insert = useCallback(
     (files: readonly File[], at: Point) => {
@@ -128,7 +116,6 @@ export function useImages({
   const [single] = images;
   /** Свежий объект документа: его могли изменить другие участники. */
   const fresh = (id: string) => readScene(objects).find((o) => o.id === id);
-  const busy = status?.kind === "busy";
   const croppingId =
     images.length === 1 && single?.id === cropping ? cropping : null;
 
@@ -207,40 +194,20 @@ export function useImages({
     ) : null;
 
   const ui = (
-    <>
-      <input
-        ref={input}
-        type="file"
-        accept={IMAGE_TYPES.join(",")}
-        multiple
-        hidden
-        aria-label="Upload image"
-        onChange={(event) => {
-          const field = event.currentTarget;
-          const files = [...(field.files ?? [])];
-          field.value = "";
-          insert(files, target.current);
-        }}
-      />
-      {status !== null && (
-        <FloatingPanel
-          role={status.kind === "error" ? "alert" : "status"}
-          className="board-notice"
-        >
-          {status.text}
-          {status.kind === "error" && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setStatus(null);
-              }}
-            >
-              Dismiss
-            </Button>
-          )}
-        </FloatingPanel>
-      )}
-    </>
+    <input
+      ref={input}
+      type="file"
+      accept={IMAGE_TYPES.join(",")}
+      multiple
+      hidden
+      aria-label="Upload image"
+      onChange={(event) => {
+        const field = event.currentTarget;
+        const files = [...(field.files ?? [])];
+        field.value = "";
+        insert(files, target.current);
+      }}
+    />
   );
 
   return { pick, insert, actions, overlay, ui };

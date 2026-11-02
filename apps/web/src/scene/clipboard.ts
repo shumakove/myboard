@@ -62,6 +62,8 @@ export interface Clip {
   objects: ClipObject[];
   /** Общая рамка корней на доске-источнике. */
   bounds: Rect;
+  /** Доска-источник: файлы её объектов на других досках копируются (CVS-20). */
+  board?: string;
 }
 
 /** Копия выделенных объектов вместе с вложенными; `null` — копировать нечего. */
@@ -200,14 +202,17 @@ export function parseClip(text: string | null | undefined): Clip | null {
     return null;
   }
   if (typeof data !== "object" || data === null) return null;
-  const { format, objects, bounds } = data as Record<string, unknown>;
+  const { format, objects, bounds, board } = data as Record<string, unknown>;
   if (format !== FORMAT || !Array.isArray(objects) || !isRect(bounds)) {
     return null;
   }
   const valid = objects
     .slice(0, MAX_OBJECTS)
     .filter((o): o is ClipObject => isClipObject(o));
-  return valid.length > 0 ? { format: FORMAT, objects: valid, bounds } : null;
+  if (valid.length === 0) return null;
+  const clip: Clip = { format: FORMAT, objects: valid, bounds };
+  if (typeof board === "string") clip.board = board;
+  return clip;
 }
 
 function isClipObject(value: unknown): boolean {
@@ -230,6 +235,36 @@ function isRect(value: unknown): value is Rect {
   if (typeof value !== "object" || value === null) return false;
   const { x, y, width, height } = value as Record<string, unknown>;
   return isNumber(x) && isNumber(y) && isNumber(width) && isNumber(height);
+}
+
+/**
+ * CVS-20: файлы объектов копии, которые надо скопировать на доску `boardId`, — файл отдаётся
+ * только сессии своей доски (раздел 8 архитектуры). У копии без отметки доски неизвестно,
+ * откуда файлы: своё сервер просто вернёт как есть.
+ */
+export function foreignMedia(clip: Clip, boardId: string): string[] {
+  if (clip.board === boardId) return [];
+  const media = clip.objects.map((object) => object.fields.media);
+  return [
+    ...new Set(media.filter((id): id is string => typeof id === "string")),
+  ];
+}
+
+/** Копия с заменой файлов на их копии; файл без копии остаётся как был. */
+export function withMedia(
+  clip: Clip,
+  copies: Readonly<Record<string, string>>,
+): Clip {
+  return {
+    ...clip,
+    objects: clip.objects.map((object) => {
+      const { media } = object.fields;
+      const copy = typeof media === "string" ? copies[media] : undefined;
+      return copy === undefined
+        ? object
+        : { ...object, fields: { ...object.fields, media: copy } };
+    }),
+  };
 }
 
 /** Куда вставить копию. */

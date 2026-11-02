@@ -3,10 +3,13 @@ import * as Y from "yjs";
 import {
   clipText,
   copyObjects,
+  foreignMedia,
   loadClip,
   parseClip,
   pasteObjects,
   saveClip,
+  withMedia,
+  type Clip,
 } from "./clipboard";
 import { groupObjects } from "./groups";
 import { setLocked } from "./lock";
@@ -216,5 +219,56 @@ describe("CVS-20: копирование и вставка объектов", ()
       tags: ["urgent"],
       style: { fill: "#f48fb1" },
     });
+  });
+});
+
+describe("CVS-20: файлы копии на другой доске", () => {
+  const object = (id: string, parent: string | null, media?: string) => ({
+    id,
+    parent,
+    fields: {
+      type: media === undefined ? "group" : "image",
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      ...(media === undefined ? {} : { media }),
+    },
+  });
+  const clip: Clip = {
+    format: "myboard/objects",
+    bounds: { x: 0, y: 0, width: 10, height: 10 },
+    board: "board-a",
+    objects: [
+      object("group", null),
+      object("one", "group", "file-1"),
+      object("two", "group", "file-1"),
+      object("three", null, "file-2"),
+    ],
+  };
+
+  it("на другой доске нужны файлы всех объектов, вложенных тоже, без повторов", () => {
+    expect(foreignMedia(clip, "board-b")).toEqual(["file-1", "file-2"]);
+  });
+
+  it("на своей доске копировать нечего", () => {
+    expect(foreignMedia(clip, "board-a")).toEqual([]);
+  });
+
+  it("у копии без отметки доски файлы проверяет сервер", () => {
+    const unmarked: Clip = { ...clip };
+    delete unmarked.board;
+    expect(foreignMedia(unmarked, "board-a")).toEqual(["file-1", "file-2"]);
+  });
+
+  it("отметка доски переживает буфер обмена", () => {
+    expect(parseClip(JSON.stringify(clip))?.board).toBe("board-a");
+  });
+
+  it("файл заменяется на копию, файл без копии остаётся как был", () => {
+    const media = withMedia(clip, { "file-1": "copy-1" }).objects.map(
+      (o) => o.fields.media,
+    );
+    expect(media).toEqual([undefined, "copy-1", "copy-1", "file-2"]);
   });
 });

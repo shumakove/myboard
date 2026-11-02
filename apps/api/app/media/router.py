@@ -2,6 +2,7 @@
 
 - `POST /api/boards/{board_id}/media?name=…` — тело запроса — сам файл, `Content-Type` —
   его объявленный тип. Загружают владелец и участник по ссылке этой доски.
+- `POST /api/boards/{board_id}/media/copies` — копии файлов других досок на эту доску (CVS-20).
 - `GET /api/media/{media_id}` — файл, только при сессии его доски.
 
 Без права на доску оба маршрута отвечают одинаковым 404: существует ли доска или файл,
@@ -18,9 +19,9 @@ from fastapi.responses import FileResponse
 from app.core.db import SessionDep
 from app.identity.http import settings_of
 from app.media import service
-from app.media.access import can_use_board
+from app.media.access import can_copy_from, can_use_board
 from app.media.models import NAME_MAX_LENGTH
-from app.media.schemas import MediaOut
+from app.media.schemas import MediaCopiesOut, MediaCopyIn, MediaOut
 
 router = APIRouter(tags=["media"])
 
@@ -105,6 +106,42 @@ async def upload_media(
         size=media.byte_size,
         url=f"/api/media/{media.id}",
     )
+
+
+@router.post("/boards/{board_id}/media/copies", responses={404: {"description": NOT_FOUND}})
+async def copy_media(
+    board_id: uuid.UUID, body: MediaCopyIn, request: Request, db: SessionDep
+) -> MediaCopiesOut:
+    """CVS-20: вставка на другую доску — файл становится файлом этой доски (BUG-028).
+
+    Файл без права на его доску неотличим от несуществующего: в ответе его просто нет.
+    """
+    if not await can_use_board(db, board_id, request.cookies):
+        raise _not_found()
+    settings = settings_of(request)
+    readable: dict[uuid.UUID, bool] = {}
+    copies: dict[uuid.UUID, uuid.UUID] = {}
+    for media_id in dict.fromkeys(body.media):
+        source = await service.get(db, media_id)
+        if source is None:
+            continue
+        if source.board_id == board_id:
+            copies[media_id] = media_id
+            continue
+        if source.board_id not in readable:
+            readable[source.board_id] = await can_copy_from(db, source.board_id, request.cookies)
+        if not readable[source.board_id]:
+            continue
+        copy = await service.copy_to_board(
+            db,
+            source,
+            media_root=settings.media_root,
+            max_bytes=settings.max_upload_bytes,
+            board_id=board_id,
+        )
+        if copy is not None:
+            copies[media_id] = copy.id
+    return MediaCopiesOut(copies=copies)
 
 
 @router.get(

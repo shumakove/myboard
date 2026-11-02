@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBoardDocument } from "../realtime/boardDocument";
+import { CLIPBOARD_MIME, loadClip, type Clip } from "./clipboard";
 import { createImage } from "./images";
 import { MANY_OBJECTS } from "./imageData";
 import { createObject, writeFields } from "./sceneObjects";
@@ -490,5 +491,143 @@ describe("IMG-06: GIF", () => {
     );
     fireEvent.pointerLeave(view);
     expect(view).toHaveAttribute("data-playing", "false");
+  });
+});
+
+describe("CVS-20: изображение, вставленное с другой доски (BUG-028)", () => {
+  const SOURCE = String(IDS[0]);
+  const COPY = String(IDS[1]);
+  const clipOf = (board: string): Clip => ({
+    format: "myboard/objects",
+    bounds: { x: 0, y: 0, width: 100, height: 50 },
+    board,
+    objects: [
+      {
+        id: "picture",
+        parent: null,
+        fields: {
+          type: "image",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          media: SOURCE,
+          mime: "image/png",
+          mask: "circle",
+        },
+      },
+    ],
+  });
+
+  function pasteClip(clip: Clip) {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) =>
+          type === CLIPBOARD_MIME ? JSON.stringify(clip) : "",
+      },
+    });
+    act(() => {
+      document.body.dispatchEvent(event);
+    });
+  }
+
+  function serveCopies(respond: () => Promise<Response>) {
+    const fetchMock =
+      vi.fn<(url: string, init: RequestInit) => Promise<Response>>(respond);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const copied = (copies: Record<string, string>) =>
+    Promise.resolve(new Response(JSON.stringify({ copies }), { status: 200 }));
+
+  it("объект появляется уже с файлом этой доски, остальные поля — как у оригинала", async () => {
+    let finish: (response: Response) => void = () => undefined;
+    const fetchMock = serveCopies(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const board = createBoardDocument();
+    renderScene(board);
+
+    pasteClip(clipOf("other-board"));
+
+    // Пока файл не скопирован, объекта с чужим файлом на доске нет.
+    expect(images(board)).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent("Copying images…");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "/api/boards/test-board/media/copies",
+    );
+    expect(fetchMock.mock.calls[0]?.[1].body).toBe(
+      JSON.stringify({ media: [SOURCE] }),
+    );
+
+    await act(async () => {
+      finish(await copied({ [SOURCE]: COPY }));
+    });
+
+    await waitFor(() => {
+      expect(images(board)).toHaveLength(1);
+    });
+    expect(images(board)[0]?.image).toMatchObject({
+      media: COPY,
+      mask: "circle",
+    });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("вставка на своей доске сразу и без копии файла", () => {
+    const fetchMock = serveCopies(() => copied({}));
+    const board = createBoardDocument();
+    renderScene(board);
+
+    pasteClip(clipOf("test-board"));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(images(board)[0]?.image?.media).toBe(SOURCE);
+  });
+
+  it("файл без доступа: объект вставлен, участнику сказано об этом", async () => {
+    serveCopies(() => copied({}));
+    const board = createBoardDocument();
+    renderScene(board);
+
+    pasteClip(clipOf("other-board"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Some images could not be copied to this board.",
+    );
+    expect(images(board)).toHaveLength(1);
+  });
+
+  it("сбой копирования: ничего не вставлено, вставку можно повторить", async () => {
+    serveCopies(() => Promise.reject(new TypeError("offline")));
+    const board = createBoardDocument();
+    renderScene(board);
+
+    pasteClip(clipOf("other-board"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The images could not be copied to this board. Try again.",
+    );
+    expect(images(board)).toHaveLength(0);
+  });
+
+  it("копия помнит свою доску", () => {
+    placedImage();
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { setData: () => undefined },
+    });
+    act(() => {
+      document.body.dispatchEvent(event);
+    });
+
+    expect(loadClip()?.board).toBe("test-board");
   });
 });

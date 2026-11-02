@@ -157,6 +157,7 @@ import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
 import { useImages } from "./useImages";
+import { useFileTask } from "../media/useFileTask";
 import { manyOnScreen } from "./images";
 import { createReaction } from "./reactions";
 import { useReactionChoice } from "./reactionChoice";
@@ -635,8 +636,11 @@ export function BoardScene({
   });
 
   const fitText = useTextFit(objects, stageRef, history, actor);
+  const fileTask = useFileTask();
   const commands = useSceneCommands({
     board,
+    boardId,
+    runFileTask: fileTask.run,
     scene,
     selection: selectedIds,
     select: setSelection,
@@ -658,6 +662,8 @@ export function BoardScene({
     actor,
     zoom: camera.zoom,
     select: setSelection,
+    run: fileTask.run,
+    busy: fileTask.busy,
   });
   const { pick: pickImage, insert: insertImages } = images;
   /** IMG-01: инструмент Image не становится активным — он открывает выбор файла. */
@@ -1560,6 +1566,7 @@ export function BoardScene({
           />
         )}
         {images.ui}
+        {fileTask.notice}
         {linkMissing && (
           <FloatingPanel role="status" className="board-notice">
             The linked object is not on this board.

@@ -1,4 +1,4 @@
-"""Загрузка и выдача файлов досок (IMG-01, IMG-07; раздел 8 архитектуры).
+"""Загрузка, выдача и копирование файлов досок (IMG-01, IMG-07, CVS-20; раздел 8 архитектуры).
 
 Файл лежит в `MEDIA_ROOT/{board_id}/{media_id}`; в базу пишутся ключ, исходное имя,
 MIME и размер. Сервер проверяет объявленный тип и отклоняет файл больше
@@ -19,6 +19,7 @@ from app.media.models import NAME_MAX_LENGTH, Media
 ALLOWED_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"})
 
 DEFAULT_NAME = "file"
+_COPY_CHUNK_BYTES = 64 * 1024
 
 
 class UnsupportedTypeError(Exception):
@@ -91,3 +92,32 @@ async def save(
 
 async def get(db: AsyncSession, media_id: uuid.UUID) -> Media | None:
     return await db.get(Media, media_id)
+
+
+async def _file_chunks(path: Path) -> AsyncIterator[bytes]:
+    async with await anyio.open_file(path, "rb") as source:
+        while chunk := await source.read(_COPY_CHUNK_BYTES):
+            yield chunk
+
+
+async def copy_to_board(
+    db: AsyncSession,
+    source: Media,
+    *,
+    media_root: str,
+    max_bytes: int,
+    board_id: uuid.UUID,
+) -> Media | None:
+    """CVS-20: новый файл этой доски с теми же байтами; файла нет или он больше лимита — `None`."""
+    try:
+        return await save(
+            db,
+            media_root=media_root,
+            max_bytes=max_bytes,
+            board_id=board_id,
+            name=source.original_name,
+            mime=source.mime,
+            chunks=_file_chunks(file_path(media_root, source)),
+        )
+    except (FileNotFoundError, TooLargeError):
+        return None

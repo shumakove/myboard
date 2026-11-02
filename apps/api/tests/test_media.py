@@ -1,4 +1,4 @@
-"""Модуль media: загрузка и выдача файлов доски (IMG-01, IMG-07; ARCHITECTURE.md, раздел 8).
+"""Модуль media: загрузка, выдача, копирование файлов доски (IMG-01, IMG-07, CVS-20; раздел 8).
 
 В тестах `MAX_UPLOAD_BYTES` = 1024 (conftest).
 """
@@ -304,3 +304,182 @@ def test_deleted_board_files_are_not_served(
         assert alice.get(media["url"]).status_code == 404
         assert guest.get(media["url"]).status_code == 404
         assert _upload(alice, board).status_code == 404
+
+
+# --- CVS-20: вставка на другую доску (BUG-028) -------------------------------------------
+
+
+def _second_board(owner: TestClient) -> str:
+    response = owner.post("/api/boards", json={"title": "Target"})
+    assert response.status_code == 201, response.text
+    board_id: str = response.json()["id"]
+    return board_id
+
+
+def _copy(browser: TestClient, board_id: str, *media_ids: str) -> Any:
+    return browser.post(f"/api/boards/{board_id}/media/copies", json={"media": list(media_ids)})
+
+
+def _copied(browser: TestClient, board_id: str, media_id: str) -> str:
+    response = _copy(browser, board_id, media_id)
+    assert response.status_code == 200, response.text
+    copy: str = response.json()["copies"][media_id]
+    return copy
+
+
+def _join(browser: TestClient, owner: TestClient, board_id: str) -> None:
+    token = _token(owner, board_id)
+    response = browser.post(f"/api/share/{token}/join", json={"name": "Guest"})
+    assert response.status_code == 200, response.text
+
+
+def test_cvs20_copy_is_a_file_of_the_target_board(
+    alice: TestClient, board: str, settings: Settings
+) -> None:
+    media = _uploaded(alice, board, name="photo.png")
+    target = _second_board(alice)
+
+    copy = _copied(alice, target, media["id"])
+
+    assert copy != media["id"]
+    assert (Path(settings.media_root) / target / copy).read_bytes() == PNG
+    response = alice.get(f"/api/media/{copy}")
+    assert response.content == PNG
+    assert response.headers["content-type"] == "image/png"
+    assert "photo.png" in response.headers["content-disposition"]
+
+
+def test_cvs20_participant_of_target_board_sees_copy_but_not_source(
+    admin: TestClient, alice: TestClient, board: str
+) -> None:
+    """BUG-028, вариант А: участник доски B видит вставленное на неё изображение."""
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    copy = _copied(alice, target, media["id"])
+
+    with _guest(admin, alice, target) as guest:
+        assert guest.get(f"/api/media/{copy}").content == PNG
+        # Исходный файл остаётся файлом доски A.
+        assert guest.get(media["url"]).status_code == 404
+
+
+def test_cvs20_copy_survives_deletion_of_source_board(alice: TestClient, board: str) -> None:
+    """BUG-028, вариант Б: копия не зависит от судьбы исходной доски."""
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    copy = _copied(alice, target, media["id"])
+
+    assert alice.delete(f"/api/boards/{board}").status_code == 204
+
+    assert alice.get(media["url"]).status_code == 404
+    assert alice.get(f"/api/media/{copy}").content == PNG
+
+
+def test_cvs20_owner_pastes_image_after_deleting_source_board(
+    alice: TestClient, board: str
+) -> None:
+    """Скопировал, удалил исходную доску и только потом вставил: файл всё ещё его."""
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    assert alice.delete(f"/api/boards/{board}").status_code == 204
+
+    copy = _copied(alice, target, media["id"])
+
+    assert alice.get(f"/api/media/{copy}").content == PNG
+    assert alice.get(media["url"]).status_code == 404
+
+
+def test_cvs20_file_of_same_board_is_not_copied(
+    alice: TestClient, board: str, settings: Settings
+) -> None:
+    media = _uploaded(alice, board)
+
+    assert _copied(alice, board, media["id"]) == media["id"]
+    assert len(_stored_files(settings)) == 1
+
+
+def test_cvs20_repeated_id_gives_one_copy(
+    alice: TestClient, board: str, settings: Settings
+) -> None:
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+
+    response = _copy(alice, target, media["id"], media["id"])
+
+    assert len(response.json()["copies"]) == 1
+    assert len(_stored_files(settings)) == 2
+
+
+def test_cvs20_foreign_file_is_not_copied_and_looks_like_unknown(
+    alice: TestClient, bob: TestClient, board: str, settings: Settings
+) -> None:
+    """Чужой файл не утекает на свою доску, и его не отличить от несуществующего."""
+    media = _uploaded(alice, board)
+    own_board = _second_board(bob)
+    unknown = "00000000-0000-0000-0000-000000000000"
+
+    foreign = _copy(bob, own_board, media["id"])
+
+    assert foreign.status_code == 200
+    assert foreign.json() == {"copies": {}}
+    assert _copy(bob, own_board, unknown).json() == foreign.json()
+    assert len(_stored_files(settings)) == 1
+
+
+def test_cvs20_participant_of_deleted_source_board_cannot_copy(
+    admin: TestClient, alice: TestClient, board: str
+) -> None:
+    """Исключение для корзины — только владельцу: участник с удалением теряет доступ."""
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    with _guest(admin, alice, board) as guest:
+        _join(guest, alice, target)
+        assert alice.delete(f"/api/boards/{board}").status_code == 204
+
+        assert _copy(guest, target, media["id"]).json() == {"copies": {}}
+
+
+def test_cvs20_old_cookie_after_reset_cannot_copy(
+    admin: TestClient, alice: TestClient, board: str
+) -> None:
+    """SHR-06: отозванная ссылка не даёт вынести файл на другую доску."""
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    with _guest(admin, alice, board) as guest:
+        _join(guest, alice, target)
+        assert alice.post(f"/api/boards/{board}/share/reset").status_code == 200
+
+        assert _copy(guest, target, media["id"]).json() == {"copies": {}}
+
+
+def test_cvs20_participant_with_both_sessions_copies(
+    admin: TestClient, alice: TestClient, board: str
+) -> None:
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    with _guest(admin, alice, board) as guest:
+        _join(guest, alice, target)
+
+        copy = _copied(guest, target, media["id"])
+
+        assert guest.get(f"/api/media/{copy}").content == PNG
+
+
+def test_cvs20_copy_needs_session_of_target_board(
+    alice: TestClient, bob: TestClient, stranger: TestClient, board: str
+) -> None:
+    media = _uploaded(alice, board)
+
+    assert _copy(stranger, board, media["id"]).status_code == 404
+    assert _copy(bob, board, media["id"]).status_code == 404
+
+
+def test_cvs20_source_file_missing_on_disk_is_skipped(
+    alice: TestClient, board: str, settings: Settings
+) -> None:
+    media = _uploaded(alice, board)
+    target = _second_board(alice)
+    (Path(settings.media_root) / board / media["id"]).unlink()
+
+    assert _copy(alice, target, media["id"]).json() == {"copies": {}}
+    assert _stored_files(settings) == []
