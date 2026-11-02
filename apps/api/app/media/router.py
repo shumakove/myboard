@@ -12,11 +12,13 @@
 """
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Annotated, Any, Literal
 
 import anyio
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
+from starlette.requests import ClientDisconnect
 
 from app.core.db import SessionDep
 from app.identity.http import settings_of
@@ -30,6 +32,10 @@ router = APIRouter(tags=["media"])
 NOT_FOUND = "Not found"
 UNSUPPORTED = "This file type is not supported"
 TOO_LARGE = "The file is too large"
+
+# Сколько байт сервер готов принять ради ответа 413 (BUG-029). Тело длиннее не читается:
+# соединение оборвётся, и браузер покажет ошибку сети вместо размера.
+REFUSED_BODY_MAX_BYTES = 4 * 1024**3
 
 # Тело запроса — двоичный файл: его схема OpenAPI описывается вручную.
 _UPLOAD_BODY: dict[str, Any] = {
@@ -61,6 +67,22 @@ def _too_large() -> HTTPException:
     return HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
 
 
+async def _discard(chunks: AsyncIterator[bytes]) -> None:
+    """BUG-029: дочитать тело отклонённой загрузки, ничего не сохраняя.
+
+    Браузер не увидит ответ, пока отправляет файл: соединение, закрытое раньше конца тела,
+    `fetch` считает ошибкой сети.
+    """
+    received = 0
+    try:
+        async for chunk in chunks:
+            received += len(chunk)
+            if received > REFUSED_BODY_MAX_BYTES:
+                return
+    except ClientDisconnect:
+        return
+
+
 @router.post(
     "/boards/{board_id}/media",
     status_code=status.HTTP_201_CREATED,
@@ -86,9 +108,12 @@ async def upload_media(
     except service.UnsupportedTypeError:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, UNSUPPORTED) from None
     settings = settings_of(request)
-    # Объявленная длина больше лимита — отказ, не читая тело.
+    chunks = request.stream()
+    # Объявленная длина больше лимита — на диск ничего не пишется.
     length = request.headers.get("content-length", "")
     if length.isdigit() and int(length) > settings.max_upload_bytes:
+        if int(length) <= REFUSED_BODY_MAX_BYTES:
+            await _discard(chunks)
         raise _too_large()
     try:
         media = await service.save(
@@ -98,9 +123,10 @@ async def upload_media(
             board_id=board_id,
             name=service.clean_name(name),
             mime=mime,
-            chunks=request.stream(),
+            chunks=chunks,
         )
     except service.TooLargeError:
+        await _discard(chunks)
         raise _too_large() from None
     return MediaOut(
         id=media.id,

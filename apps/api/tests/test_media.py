@@ -6,11 +6,13 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
+from app.media import router
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 ALICE = {"name": "Alice", "email": "alice@example.com", "password": "alice-pw"}
@@ -209,6 +211,154 @@ def test_streamed_file_over_limit_is_rejected_without_length(
 
     assert response.status_code == 413
     assert _stored_files(settings) == []
+
+
+# --- BUG-029: браузер должен получить ответ 413, а не обрыв соединения --------------------
+
+
+def _send_upload(
+    browser: TestClient,
+    path: str,
+    parts: list[bytes],
+    *,
+    declared: int | None,
+    mime: str = "image/png",
+) -> tuple[int, int]:
+    """Запрос на уровне ASGI: статус и сколько частей тела приложение прочло до ответа.
+
+    `TestClient` передаёт тело целиком, поэтому не показывает, читает ли приложение его до
+    ответа, а браузеру это важно: пока он отправляет файл, ответ до него не дойдёт.
+    """
+    url = urlsplit(path)
+    cookies = "; ".join(f"{key}={value}" for key, value in browser.cookies.items())
+    headers = [(b"content-type", mime.encode()), (b"cookie", cookies.encode())]
+    if declared is not None:
+        headers.append((b"content-length", str(declared).encode()))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": url.path,
+        "raw_path": url.path.encode(),
+        "query_string": url.query.encode(),
+        "root_path": "",
+        "headers": headers,
+        "client": ("192.168.1.30", 50000),
+        "server": ("192.168.1.20", 8080),
+    }
+    read = 0
+    read_at_response = -1
+    status_code = 0
+
+    async def receive() -> dict[str, Any]:
+        nonlocal read
+        if read == len(parts):
+            return {"type": "http.disconnect"}
+        read += 1
+        return {"type": "http.request", "body": parts[read - 1], "more_body": read < len(parts)}
+
+    async def send(message: dict[str, Any]) -> None:
+        nonlocal status_code, read_at_response
+        if message["type"] == "http.response.start":
+            status_code = message["status"]
+            read_at_response = read
+
+    async def call() -> None:
+        await browser.app(scope, receive, send)  # type: ignore[arg-type]
+
+    assert browser.portal is not None
+    browser.portal.call(call)
+    return status_code, read_at_response
+
+
+@pytest.mark.parametrize(
+    ("query", "mime"),
+    [("", "image/png"), ("&kind=file", "application/octet-stream")],
+    ids=["image", "file"],
+)
+def test_bug029_declared_over_limit_answers_after_reading_body(
+    alice: TestClient, board: str, settings: Settings, query: str, mime: str
+) -> None:
+    """IMG-01, FIL-01: объявленная длина больше лимита — 413 только после всего тела."""
+    parts = [b"x" * settings.max_upload_bytes] * 3
+
+    status_code, read = _send_upload(
+        alice,
+        f"/api/boards/{board}/media?name=big.png{query}",
+        parts,
+        declared=3 * settings.max_upload_bytes,
+        mime=mime,
+    )
+
+    assert status_code == 413
+    assert read == len(parts)
+    assert _stored_files(settings) == []
+
+
+def test_bug029_streamed_over_limit_answers_after_reading_body(
+    alice: TestClient, board: str, settings: Settings
+) -> None:
+    """Без `Content-Length` лимит превышен посреди чтения: остаток тела тоже дочитывается."""
+    parts = [b"x" * settings.max_upload_bytes] * 3
+
+    status_code, read = _send_upload(
+        alice, f"/api/boards/{board}/media?name=big.png", parts, declared=None
+    )
+
+    assert status_code == 413
+    assert read == len(parts)
+    assert _stored_files(settings) == []
+
+
+def test_bug029_body_beyond_read_limit_is_refused_without_reading(
+    alice: TestClient, board: str, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Сервер не обязан принимать тело любой длины ради отказа."""
+    monkeypatch.setattr(router, "REFUSED_BODY_MAX_BYTES", 2 * settings.max_upload_bytes)
+    parts = [b"x" * settings.max_upload_bytes] * 3
+
+    status_code, read = _send_upload(
+        alice,
+        f"/api/boards/{board}/media?name=big.png",
+        parts,
+        declared=3 * settings.max_upload_bytes,
+    )
+
+    assert status_code == 413
+    assert read == 0
+
+
+def test_bug029_streamed_body_beyond_read_limit_stops_reading(
+    alice: TestClient, board: str, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(router, "REFUSED_BODY_MAX_BYTES", 2 * settings.max_upload_bytes)
+    parts = [b"x" * settings.max_upload_bytes] * 6
+
+    status_code, read = _send_upload(
+        alice, f"/api/boards/{board}/media?name=big.png", parts, declared=None
+    )
+
+    assert status_code == 413
+    assert read < len(parts)
+
+
+def test_bug029_stranger_upload_is_refused_without_reading(
+    stranger: TestClient, board: str, settings: Settings
+) -> None:
+    """Без права на доску тело не читается: посторонний не занимает канал сервера."""
+    parts = [b"x" * settings.max_upload_bytes] * 3
+
+    status_code, read = _send_upload(
+        stranger,
+        f"/api/boards/{board}/media?name=big.png",
+        parts,
+        declared=3 * settings.max_upload_bytes,
+    )
+
+    assert status_code == 404
+    assert read == 0
 
 
 # --- IMG-07: SVG ------------------------------------------------------------------------
