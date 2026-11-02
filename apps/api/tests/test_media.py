@@ -3,7 +3,10 @@
 В тестах `MAX_UPLOAD_BYTES` = 1024 (conftest).
 """
 
+import socket
+import threading
 from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -12,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
-from app.media import router
+from app.media import link_preview, router
 
 ADMIN = {"email": "admin@example.com", "password": "admin-password"}
 ALICE = {"name": "Alice", "email": "alice@example.com", "password": "alice-pw"}
@@ -764,3 +767,260 @@ def test_fil01_participant_uploads_and_downloads_file(
     with _guest(admin, alice, board) as guest:
         media = _upload_file(guest, board)
         assert guest.get(media["url"], params={"download": "x.bin"}).status_code == 200
+
+
+# EMB-02: карточка ссылки — сервер читает страницу. Внешний сайт — настоящий HTTP-сервер
+# на 127.0.0.1: так проверяются и запрос, и отказ для внутренней сети.
+
+
+class _Site:
+    """Страницы сайта-образца и запросы, дошедшие до него."""
+
+    def __init__(self) -> None:
+        self.pages: dict[str, tuple[int, dict[str, str], bytes]] = {}
+        self.requests: list[tuple[str, dict[str, str]]] = []
+        self.port = 0
+
+    def page(self, path: str, body: bytes, mime: str = "text/html; charset=utf-8") -> None:
+        self.pages[path] = (200, {"Content-Type": mime}, body)
+
+    def redirect(self, path: str, target: str) -> None:
+        self.pages[path] = (302, {"Location": target}, b"")
+
+    def url(self, path: str) -> str:
+        return f"http://127.0.0.1:{self.port}{path}"
+
+
+@pytest.fixture
+def site() -> Iterator[_Site]:
+    state = _Site()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            state.requests.append((self.path, dict(self.headers.items())))
+            status, headers, body = state.pages.get(self.path, (404, {}, b""))
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    state.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield state
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def allow_local(client: TestClient, settings: Settings) -> None:
+    """Сайт-образец разрешён как хост внутренней сети (`LINK_PREVIEW_ALLOWED_HOSTS`)."""
+    client.app.state.settings = settings.model_copy(  # type: ignore[attr-defined]
+        update={"link_preview_allowed_hosts": " 127.0.0.1 ,other.test"}
+    )
+
+
+def _preview(browser: TestClient, board_id: str, url: str) -> dict[str, Any]:
+    response = browser.post(f"/api/boards/{board_id}/link-preview", json={"url": url})
+    assert response.status_code == 200, response.text
+    result: dict[str, Any] = response.json()
+    return result
+
+
+PAGE = (
+    b"<html><head><title>Plain title</title>"
+    b'<meta property="og:title" content="  Open &amp; Graph\n title ">'
+    b'<meta property="og:image" content="/cover.png"></head><body>x</body></html>'
+)
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_preview_returns_title_and_image_as_board_file(
+    alice: TestClient, board: str, site: _Site, stranger: TestClient
+) -> None:
+    site.page("/article", PAGE)
+    site.page("/cover.png", PNG, "image/png")
+
+    result = _preview(alice, board, site.url("/article"))
+
+    assert result["url"] == site.url("/article")
+    assert result["title"] == "Open & Graph title"
+    assert result["image"]["mime"] == "image/png"
+    # Изображение — файл этой доски: его получает только сессия доски.
+    assert alice.get(result["image"]["url"]).content == PNG
+    assert stranger.get(result["image"]["url"]).status_code == 404
+    # Сервер не передаёт сайту свои cookie и заголовки браузера.
+    assert all("cookie" not in {name.lower() for name in h} for _, h in site.requests)
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_participant_gets_preview_too(alice: TestClient, board: str, site: _Site) -> None:
+    site.page("/a", b"<title>Hello</title>")
+    with TestClient(alice.app) as guest:
+        token = _token(alice, board)
+        assert guest.post(f"/api/share/{token}/join", json={"name": "Kate"}).status_code == 200
+        assert _preview(guest, board, site.url("/a"))["title"] == "Hello"
+
+
+def test_emb02_preview_without_board_access_is_404(
+    alice: TestClient, board: str, bob: TestClient, stranger: TestClient, site: _Site
+) -> None:
+    for browser in (bob, stranger):
+        response = browser.post(f"/api/boards/{board}/link-preview", json={"url": site.url("/a")})
+        assert response.status_code == 404
+    assert site.requests == []
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", "file:///etc/passwd", "ftp://a.test/", "x"])
+def test_emb02_preview_accepts_only_http_addresses(alice: TestClient, board: str, url: str) -> None:
+    response = alice.post(f"/api/boards/{board}/link-preview", json={"url": url})
+    assert response.status_code == 422
+
+
+def test_emb02_preview_never_reaches_internal_network(
+    alice: TestClient, board: str, site: _Site
+) -> None:
+    """SSRF: адрес внутренней сети не запрашивается и не отличается от недоступной страницы."""
+    site.page("/secret", PAGE)
+    result = _preview(alice, board, site.url("/secret"))
+    assert result == {"url": site.url("/secret"), "title": None, "image": None}
+    assert site.requests == []
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "10.0.0.5",
+        "192.168.1.20",
+        "169.254.169.254",
+        "100.64.0.1",
+        "::1",
+        "::ffff:10.0.0.1",
+        "fe80::1",
+    ],
+)
+def test_emb02_internal_addresses_are_not_public(address: str) -> None:
+    assert not link_preview._is_public(address)
+
+
+def test_emb02_public_address_is_public() -> None:
+    assert link_preview._is_public("93.184.216.34")
+
+
+def _resolve_to_loopback(monkeypatch: pytest.MonkeyPatch, name: str) -> list[str]:
+    """DNS, в котором `name` указывает на 127.0.0.1; возвращает, сколько раз его спросили."""
+    real = socket.getaddrinfo
+    asked: list[str] = []
+
+    def fake(host: Any, *args: Any, **kwargs: Any) -> Any:
+        text = host.decode() if isinstance(host, bytes) else host
+        if text == name:
+            asked.append(text)
+            return real("127.0.0.1", *args, **kwargs)
+        return real(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake)
+    return asked
+
+
+def test_emb02_name_resolving_to_internal_address_is_refused(
+    alice: TestClient, board: str, site: _Site, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Публичное на вид имя, которое разрешается в адрес внутренней сети."""
+    site.page("/", PAGE)
+    asked = _resolve_to_loopback(monkeypatch, "public.example")
+    result = _preview(alice, board, f"http://public.example:{site.port}/")
+    assert result["title"] is None
+    assert asked == ["public.example"]
+    assert site.requests == []
+
+
+def test_emb02_connection_goes_to_checked_address(
+    alice: TestClient, board: str, site: _Site, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Имя запрашивается один раз, сайт видит его в `Host` (нет второго разрешения DNS)."""
+    alice.app.state.settings = settings.model_copy(  # type: ignore[attr-defined]
+        update={"link_preview_allowed_hosts": "rebind.example"}
+    )
+    site.page("/", b"<title>Pinned</title>")
+    asked = _resolve_to_loopback(monkeypatch, "rebind.example")
+    assert _preview(alice, board, f"http://rebind.example:{site.port}/")["title"] == "Pinned"
+    assert asked == ["rebind.example"]
+    assert site.requests[0][1]["Host"] == f"rebind.example:{site.port}"
+
+
+def test_emb02_redirect_to_internal_address_is_refused(
+    alice: TestClient, board: str, site: _Site, settings: Settings
+) -> None:
+    """Редирект проверяется заново: разрешённый хост не ведёт во внутреннюю сеть."""
+    alice.app.state.settings = settings.model_copy(  # type: ignore[attr-defined]
+        update={"link_preview_allowed_hosts": "localhost"}
+    )
+    site.page("/secret", b"<title>Secret</title>")
+    site.redirect("/go", site.url("/secret"))
+    assert _preview(alice, board, f"http://localhost:{site.port}/go")["title"] is None
+    assert [path for path, _ in site.requests] == ["/go"]
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_redirect_chain_is_limited(alice: TestClient, board: str, site: _Site) -> None:
+    site.redirect("/loop", "/loop")
+    assert _preview(alice, board, site.url("/loop"))["title"] is None
+    assert len(site.requests) == link_preview.MAX_REDIRECTS + 1
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_follows_redirect_and_keeps_requested_url(
+    alice: TestClient, board: str, site: _Site
+) -> None:
+    site.redirect("/old", "/new")
+    site.page("/new", b"<title>New</title>")
+    result = _preview(alice, board, site.url("/old"))
+    assert result == {"url": site.url("/old"), "title": "New", "image": None}
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_page_without_marks_or_not_html(alice: TestClient, board: str, site: _Site) -> None:
+    site.page("/empty", b"<html><body>nothing</body></html>")
+    site.page("/data", b"%PDF", "application/pdf")
+    assert _preview(alice, board, site.url("/empty"))["title"] is None
+    assert _preview(alice, board, site.url("/data"))["title"] is None
+    assert _preview(alice, board, site.url("/missing"))["title"] is None
+
+
+@pytest.mark.usefixtures("allow_local")
+@pytest.mark.parametrize(
+    ("image", "mime"),
+    [(b"<svg/>", "image/svg+xml"), (b"<html>", "text/html"), (b"\x00" * 2048, "image/png")],
+)
+def test_emb02_unusable_image_leaves_title_only(
+    alice: TestClient, board: str, site: _Site, image: bytes, mime: str
+) -> None:
+    """Не картинка, SVG или больше `MAX_UPLOAD_BYTES` (1024) — карточка без изображения."""
+    site.page("/p", b'<title>T</title><meta name="twitter:image" content="/i">')
+    site.page("/i", image, mime)
+    assert _preview(alice, board, site.url("/p")) == {
+        "url": site.url("/p"),
+        "title": "T",
+        "image": None,
+    }
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_emb02_image_address_with_other_scheme_is_ignored(
+    alice: TestClient, board: str, site: _Site
+) -> None:
+    site.page("/p", b'<title>T</title><meta property="og:image" content="file:///etc/passwd">')
+    assert _preview(alice, board, site.url("/p"))["image"] is None
+
+
+def test_emb02_allowed_hosts_setting_is_parsed(settings: Settings) -> None:
+    changed = settings.model_copy(update={"link_preview_allowed_hosts": " A.test, ,b.test "})
+    assert changed.link_preview_hosts == {"a.test", "b.test"}
+    assert settings.link_preview_hosts == frozenset()

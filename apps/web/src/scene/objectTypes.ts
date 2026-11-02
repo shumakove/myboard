@@ -30,16 +30,27 @@ export type ObjectType =
   | "file"
   | "pdf"
   | "video"
-  | "audio";
+  | "audio"
+  | "iframe"
+  | "linkcard";
 
 /**
  * Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01),
  * реакция — только на объект своим инструментом (RCT-01), изображение и файлы — загрузкой
- * файла (IMG-01, FIL-01…FIL-04).
+ * файла (IMG-01, FIL-01…FIL-04), встраивание и карточка ссылки — из своих диалогов
+ * (EMB-01, EMB-02).
  */
 export type PlaceableType = Exclude<
   ObjectType,
-  "drawing" | "reaction" | "image" | "file" | "pdf" | "video" | "audio"
+  | "drawing"
+  | "reaction"
+  | "image"
+  | "file"
+  | "pdf"
+  | "video"
+  | "audio"
+  | "iframe"
+  | "linkcard"
 >;
 
 const NOT_PLACEABLE: readonly ObjectType[] = [
@@ -50,6 +61,8 @@ const NOT_PLACEABLE: readonly ObjectType[] = [
   "pdf",
   "video",
   "audio",
+  "iframe",
+  "linkcard",
 ];
 
 export function isPlaceable(type: ObjectType): type is PlaceableType {
@@ -378,6 +391,27 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     plural: "audio files",
     width: 400,
     height: 96,
+    rotatable: true,
+    editable: false,
+    style: {},
+  },
+  // EMB-01: внешняя страница во фрейме; EMB-02: карточка ссылки (`embedData.ts`).
+  iframe: {
+    type: "iframe",
+    label: "Embed",
+    plural: "embeds",
+    width: 560,
+    height: 360,
+    rotatable: true,
+    editable: false,
+    style: {},
+  },
+  linkcard: {
+    type: "linkcard",
+    label: "Link card",
+    plural: "link cards",
+    width: 320,
+    height: 280,
     rotatable: true,
     editable: false,
     style: {},

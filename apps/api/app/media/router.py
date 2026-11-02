@@ -4,6 +4,8 @@
   его объявленный тип. Загружают владелец и участник по ссылке этой доски. С `kind=file` —
   ярлык файла любого типа (FIL-01): тип `application/octet-stream`.
 - `POST /api/boards/{board_id}/media/copies` — копии файлов других досок на эту доску (CVS-20).
+- `POST /api/boards/{board_id}/link-preview` — название и изображение страницы для карточки
+  ссылки (EMB-02); изображение становится файлом этой доски.
 - `GET /api/media/{media_id}` — файл, только при сессии его доски; поддерживает `Range`
   (перемотка, FIL-03, FIL-04). С `download=<имя>` — скачивание под этим именем (FIL-01).
 
@@ -22,16 +24,23 @@ from starlette.requests import ClientDisconnect
 
 from app.core.db import SessionDep
 from app.identity.http import settings_of
-from app.media import service
+from app.media import link_preview, service
 from app.media.access import can_copy_from, can_use_board
-from app.media.models import NAME_MAX_LENGTH
-from app.media.schemas import MediaCopiesOut, MediaCopyIn, MediaOut
+from app.media.models import NAME_MAX_LENGTH, Media
+from app.media.schemas import (
+    LinkPreviewIn,
+    LinkPreviewOut,
+    MediaCopiesOut,
+    MediaCopyIn,
+    MediaOut,
+)
 
 router = APIRouter(tags=["media"])
 
 NOT_FOUND = "Not found"
 UNSUPPORTED = "This file type is not supported"
 TOO_LARGE = "The file is too large"
+PREVIEW_IMAGE_NAME = "link-preview"
 
 # Сколько байт сервер готов принять ради ответа 413 (BUG-029). Тело длиннее не читается:
 # соединение оборвётся, и браузер покажет ошибку сети вместо размера.
@@ -65,6 +74,16 @@ def _not_found() -> HTTPException:
 
 def _too_large() -> HTTPException:
     return HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
+
+
+def _media_out(media: Media) -> MediaOut:
+    return MediaOut(
+        id=media.id,
+        name=media.original_name,
+        mime=media.mime,
+        size=media.byte_size,
+        url=f"/api/media/{media.id}",
+    )
 
 
 async def _discard(chunks: AsyncIterator[bytes]) -> None:
@@ -128,13 +147,7 @@ async def upload_media(
     except service.TooLargeError:
         await _discard(chunks)
         raise _too_large() from None
-    return MediaOut(
-        id=media.id,
-        name=media.original_name,
-        mime=media.mime,
-        size=media.byte_size,
-        url=f"/api/media/{media.id}",
-    )
+    return _media_out(media)
 
 
 @router.post("/boards/{board_id}/media/copies", responses={404: {"description": NOT_FOUND}})
@@ -171,6 +184,38 @@ async def copy_media(
         if copy is not None:
             copies[media_id] = copy.id
     return MediaCopiesOut(copies=copies)
+
+
+@router.post("/boards/{board_id}/link-preview", responses={404: {"description": NOT_FOUND}})
+async def preview_link(
+    board_id: uuid.UUID, body: LinkPreviewIn, request: Request, db: SessionDep
+) -> LinkPreviewOut:
+    """EMB-02: название и изображение страницы; страница недоступна или закрыта — `null`.
+
+    Ответ не различает недоступную и внутреннюю страницу: маршрут не сканирует сеть.
+    """
+    if not await can_use_board(db, board_id, request.cookies):
+        raise _not_found()
+    # Соединение с базой не держится, пока идёт внешний запрос.
+    await db.rollback()
+    settings = settings_of(request)
+    url = str(body.url)
+    preview = await link_preview.read_preview(
+        url, settings.link_preview_hosts, settings.max_upload_bytes
+    )
+    image = None
+    if preview.image is not None:
+        image = _media_out(
+            await service.save_bytes(
+                db,
+                media_root=settings.media_root,
+                board_id=board_id,
+                name=PREVIEW_IMAGE_NAME,
+                mime=preview.image.mime,
+                body=preview.image.body,
+            )
+        )
+    return LinkPreviewOut(url=url, title=preview.title, image=image)
 
 
 @router.get(

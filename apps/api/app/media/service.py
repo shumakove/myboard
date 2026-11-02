@@ -112,6 +112,25 @@ async def save(
     return media
 
 
+async def save_bytes(
+    db: AsyncSession, *, media_root: str, board_id: uuid.UUID, name: str, mime: str, body: bytes
+) -> Media:
+    """EMB-02: файл, уже прочитанный в память и проверенный на размер вызывающим."""
+
+    async def chunks() -> AsyncIterator[bytes]:
+        yield body
+
+    return await save(
+        db,
+        media_root=media_root,
+        max_bytes=len(body),
+        board_id=board_id,
+        name=name,
+        mime=mime,
+        chunks=chunks(),
+    )
+
+
 async def get(db: AsyncSession, media_id: uuid.UUID) -> Media | None:
     return await db.get(Media, media_id)
 

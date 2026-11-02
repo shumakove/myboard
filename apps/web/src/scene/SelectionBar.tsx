@@ -6,6 +6,7 @@ import { MindmapControls, type MindmapActions } from "./MindmapControls";
 import { FlipControls, type FlipActions } from "./FlipControls";
 import { DiceControls, type DiceActions } from "./DiceControls";
 import { FileControls, type FileActions } from "./FileControls";
+import { LinkControls, type LinkActions } from "./LinkControls";
 import { ImageControls, type ImageActions } from "./ImageControls";
 import {
   MORE_TEXT_KEYS,
@@ -128,6 +129,7 @@ export function SelectionBar({
   dice = null,
   image = null,
   file = null,
+  link = null,
 }: {
   selected: readonly SceneObject[];
   onFilter: (type: string) => void;
@@ -153,6 +155,7 @@ export function SelectionBar({
   dice?: DiceActions | null;
   image?: ImageActions | null;
   file?: FileActions | null;
+  link?: LinkActions | null;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
@@ -289,6 +292,7 @@ export function SelectionBar({
       {dice && <DiceControls dice={dice} />}
       {image && <ImageControls image={image} />}
       {file && <FileControls file={file} />}
+      {link && <LinkControls key={single?.id} link={link} />}
 
       {frame?.keepRatio && (
         <Switch

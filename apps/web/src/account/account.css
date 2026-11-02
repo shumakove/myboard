@@ -63,3 +63,16 @@
 .board-status[data-status="closed"]::before {
   background: var(--color-danger);
 }
+
+/* EMB-04: встроенная доска занимает весь фрейм. */
+.board-page-embed {
+  padding: var(--space-1);
+}
+
+.board-page-embed .board-status {
+  margin-bottom: var(--space-1);
+}
+
+.board-page-embed .board-canvas {
+  height: calc(100vh - 56px);
+}

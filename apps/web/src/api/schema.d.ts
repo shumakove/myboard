@@ -491,6 +491,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/boards/{board_id}/link-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Link
+         * @description EMB-02: название и изображение страницы; страница недоступна или закрыта — `null`.
+         *
+         *     Ответ не различает недоступную и внутреннюю страницу: маршрут не сканирует сеть.
+         */
+        post: operations["preview_link_api_boards__board_id__link_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/media/{media_id}": {
         parameters: {
             query?: never;
@@ -665,6 +687,28 @@ export interface components {
         JoinRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * LinkPreviewIn
+         * @description EMB-02: адрес страницы для карточки ссылки; только http и https.
+         */
+        LinkPreviewIn: {
+            /**
+             * Url
+             * Format: uri
+             */
+            url: string;
+        };
+        /**
+         * LinkPreviewOut
+         * @description EMB-02: что удалось прочитать со страницы; `image` — уже файл этой доски.
+         */
+        LinkPreviewOut: {
+            /** Url */
+            url: string;
+            /** Title */
+            title: string | null;
+            image: components["schemas"]["MediaOut"] | null;
         };
         /**
          * MediaCopiesOut
@@ -1928,6 +1972,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaCopiesOut"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_link_api_boards__board_id__link_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPreviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkPreviewOut"];
                 };
             };
             /** @description Not found */

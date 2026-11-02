@@ -27,6 +27,9 @@ const LISTED_ONLY: readonly ToolId[] = [
   "reaction",
   "image", // T7.1
   "file", // T7.2
+  // T7.3
+  "iframe",
+  "linkcard",
 ];
 
 /** По умолчанию закреплены инструменты T5.4 и перо (T6.5) в порядке полного списка. */
