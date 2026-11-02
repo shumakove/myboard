@@ -551,6 +551,305 @@ test('CVS-20 IMG-01 image copied to another board survives deletion of the sourc
   }
 });
 
+// ---------- CVS-20 × изображения: повторная проверка BUG-028 ----------
+
+/** Страница уходит на другую доску, щелчок по центру холста, Ctrl+V. */
+async function pasteOn(page: Page, path: string) {
+  await page.goto(path);
+  await expect(canvas(page)).toBeVisible();
+  const P = await onCanvas(page, 0.5, 0.5);
+  await page.mouse.click(P.x, P.y);
+  await page.keyboard.press('ControlOrMeta+V');
+}
+
+/** Выделить несколько объектов щелчками с Shift: Ctrl+A на холсте не выделяет объекты. */
+async function selectMany(page: Page, first: string, ...rest: string[]) {
+  await selectOnly(page, first);
+  for (const id of rest) {
+    const b = await boxOf(obj(page, id));
+    await page.keyboard.down('Shift');
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.keyboard.up('Shift');
+    await expect(obj(page, id)).toHaveAttribute('aria-selected', 'true');
+  }
+}
+
+const tokenOf = async (page: Page, board: string) => ((await (await page.request.get(`/api/boards/${board}/share`)).json()) as { token: string }).token;
+
+async function joinHere(page: Page, token: string, name: string) {
+  expect((await page.request.post(`/api/share/${token}/join`, { data: { name } })).status()).toBe(200);
+}
+
+test('CVS-20 SHR-04 image pasted from another board has its own file; a participant already on that board sees it live and after reload; source file stays closed to them', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const page = owner.page;
+  let guest: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const id = await uploadViaTool(page, { name: 'live.png', mimeType: 'image/png', buffer: await pngOf(page, 300, 200, '#1565c0') });
+    const source = mediaOf((await untilRaw(page, owner.boardId, (r) => expect(r[id]).toBeTruthy()))[id]);
+    await selectOnly(page, id);
+    await page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    guest = await openGuest(browser, o, await tokenOf(page, board2), 'QA Guest B');
+    await pasteOn(page, `/boards/${board2}`);
+
+    await expect(images(guest.page)).toHaveCount(1, { timeout: 15_000 });
+    const copy = (await ids(images(guest.page)))[0];
+    await expectLoaded(guest.page, copy);
+    const raw = await untilRaw(page, board2, (r) => expect(ofType(r, 'image')).toHaveLength(1));
+    const copied = mediaOf(ofType(raw, 'image')[0][1]);
+    expect(copied).not.toBe(source);
+    noDataUrls(raw);
+    expect((await guest.page.request.get(`/api/media/${source}`)).status()).toBe(404);
+    expect((await guest.page.request.get(`/api/media/${copied}`)).status()).toBe(200);
+    await guest.page.reload();
+    await expect(canvas(guest.page)).toBeVisible();
+    await expectLoaded(guest.page, copy);
+  } finally {
+    await owner.close();
+    if (guest) await guest.close();
+  }
+});
+
+test('CVS-20 cut and paste several images onto another board copies each file; undo and redo keep it working', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const page = owner.page;
+  let guest: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const one = await uploadViaTool(page, { name: 'one.png', mimeType: 'image/png', buffer: await pngOf(page, 120, 90, '#c62828') });
+    await page.keyboard.press('Escape');
+    const b = await boxOf(obj(page, one));
+    await dragBy(page, centerOf(b), { x: -260, y: 0 });
+    const two = await uploadViaTool(page, { name: 'two.png', mimeType: 'image/png', buffer: await pngOf(page, 120, 90, '#2e7d32') });
+    await expectLoaded(page, one);
+    await expectLoaded(page, two);
+    await selectMany(page, one, two);
+    await page.keyboard.press('ControlOrMeta+X');
+    await expect(images(page)).toHaveCount(0);
+    const board2 = await owner.newBoard();
+    await pasteOn(page, `/boards/${board2}`);
+    await expect(images(page)).toHaveCount(2, { timeout: 15_000 });
+    const [a, c] = await ids(images(page));
+    const raw = await untilRaw(page, board2, (r) => expect(ofType(r, 'image')).toHaveLength(2));
+    expect(mediaOf(raw[a])).not.toBe(mediaOf(raw[c]));
+
+    guest = await openGuest(browser, o, await tokenOf(page, board2), 'QA Guest B');
+    await expectLoaded(guest.page, a);
+    await expectLoaded(guest.page, c);
+
+    await page.keyboard.press('ControlOrMeta+Z');
+    await expect(images(page)).toHaveCount(0);
+    await expect(images(guest.page)).toHaveCount(0);
+    await page.keyboard.press('ControlOrMeta+Shift+Z');
+    await expect(images(page)).toHaveCount(2);
+    await expectLoaded(guest.page, a);
+    await expectLoaded(guest.page, c);
+  } finally {
+    await owner.close();
+    if (guest) await guest.close();
+  }
+});
+
+test('CVS-20 image inside a frame is copied with the frame onto another board', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const page = owner.page;
+  let guest: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const id = await uploadViaTool(page, { name: 'framed.png', mimeType: 'image/png', buffer: await pngOf(page, 100, 80, '#6a1b9a') });
+    await expectLoaded(page, id);
+    const image = (await rawObjects(page, owner.boardId))[id];
+    await seed(page, owner.boardId, {
+      fr1: { type: 'frame', x: -60, y: -40, width: 600, height: 400, z: 0, appearance: 'fill', fill: '#ffffff', title: 'F' } as Obj,
+      imgf: { ...image, parent: 'fr1', x: 250, y: 170 } as unknown as Obj,
+    });
+    await expect.poll(async () => (await rawObjects(page, owner.boardId)).imgf?.parent).toBe('fr1');
+    await page.keyboard.press('Escape');
+    const fb = await boxOf(obj(page, 'fr1'));
+    await page.mouse.click(fb.x + fb.width - 15, fb.y + fb.height - 15);
+    await expect(obj(page, 'fr1')).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    await pasteOn(page, `/boards/${board2}`);
+    const raw = await untilRaw(page, board2, (r) => expect(ofType(r, 'image')).toHaveLength(1));
+    const [copyId, copy] = ofType(raw, 'image')[0];
+    expect(mediaOf(copy)).not.toBe(mediaOf(image));
+    expect(ofType(raw, 'frame')).toHaveLength(1);
+    expect(copy.parent).toBe(ofType(raw, 'frame')[0][0]);
+
+    guest = await openGuest(browser, o, await tokenOf(page, board2), 'QA Guest B');
+    await expectLoaded(guest.page, copyId);
+  } finally {
+    await owner.close();
+    if (guest) await guest.close();
+  }
+});
+
+test('CVS-20 SHR-04 participant with sessions of both boards pastes an image; owner of the target and another participant see it', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const guest = await openGuest(browser, o, owner.token, 'QA Both');
+  let watcher: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const id = await uploadViaTool(owner.page, { name: 'both.png', mimeType: 'image/png', buffer: await pngOf(owner.page, 200, 100, '#ef6c00') });
+    await expect(obj(guest.page, id)).toBeAttached();
+    await selectOnly(guest.page, id);
+    await guest.page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    const token2 = await tokenOf(owner.page, board2);
+    await joinHere(guest.page, token2, 'QA Both');
+    await pasteOn(guest.page, `/b/${token2}`);
+    await expect(images(guest.page)).toHaveCount(1, { timeout: 15_000 });
+    const copy = (await ids(images(guest.page)))[0];
+    await expectLoaded(guest.page, copy);
+    await expect(guest.page.getByText('Some images could not be copied to this board.')).toHaveCount(0);
+
+    watcher = await openGuest(browser, o, token2, 'QA Watcher');
+    await expectLoaded(watcher.page, copy);
+    await owner.page.goto(`/boards/${board2}`);
+    await expect(canvas(owner.page)).toBeVisible();
+    await expectLoaded(owner.page, copy);
+  } finally {
+    await owner.close();
+    await guest.close();
+    if (watcher) await watcher.close();
+  }
+});
+
+test('CVS-20 SHR-06 participant whose source session was revoked gets a placeholder and a message, no file; other objects of the copy are kept', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const guest = await openGuest(browser, o, owner.token, 'QA Revoked');
+  try {
+    const id = await uploadViaTool(owner.page, { name: 'secret.png', mimeType: 'image/png', buffer: await pngOf(owner.page, 200, 100, '#37474f') });
+    await seed(owner.page, owner.boardId, { keep1: { type: 'sticky', x: 450, y: 100, width: 120, height: 120, z: 50, text: 'keep', fill: '#ffeb3b' } as Obj });
+    await expect(obj(guest.page, id)).toBeAttached();
+    await expect(obj(guest.page, 'keep1')).toBeAttached();
+    await selectMany(guest.page, id, 'keep1');
+    await guest.page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    const token2 = await tokenOf(owner.page, board2);
+    await joinHere(guest.page, token2, 'QA Revoked');
+    expect((await owner.page.request.post(`/api/boards/${owner.boardId}/share/reset`)).status()).toBeLessThan(300);
+    await pasteOn(guest.page, `/b/${token2}`);
+
+    await expect(guest.page.getByText('Some images could not be copied to this board.')).toBeVisible({ timeout: 15_000 });
+    await expect(images(guest.page)).toHaveCount(1);
+    await expect(guest.page.getByText('Image unavailable')).toHaveCount(1);
+    const raw = await untilRaw(owner.page, board2, (r) => expect(Object.keys(r).length).toBeGreaterThanOrEqual(2));
+    expect(ofType(raw, 'sticky')).toHaveLength(1);
+    expect((await guest.page.request.get(`/api/media/${mediaOf(ofType(raw, 'image')[0][1])}`)).status()).toBe(404);
+  } finally {
+    await owner.close();
+    await guest.close();
+  }
+});
+
+test('CVS-20 owner copies, deletes the source board, then pastes: the file is on the target board', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const page = owner.page;
+  let guest: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const id = await uploadViaTool(page, { name: 'late.png', mimeType: 'image/png', buffer: await pngOf(page, 160, 120, '#ad1457') });
+    await expectLoaded(page, id);
+    await selectOnly(page, id);
+    await page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    expect((await page.request.delete(`/api/boards/${owner.boardId}`)).status()).toBeLessThan(300);
+    await pasteOn(page, `/boards/${board2}`);
+    await expect(images(page)).toHaveCount(1, { timeout: 15_000 });
+    const copy = (await ids(images(page)))[0];
+    await expectLoaded(page, copy);
+    guest = await openGuest(browser, o, await tokenOf(page, board2), 'QA Guest B');
+    await expectLoaded(guest.page, copy);
+  } finally {
+    await owner.close();
+    if (guest) await guest.close();
+  }
+});
+
+test('CVS-20 Paste button of the tool panel also copies the file onto another board', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const page = owner.page;
+  let guest: Awaited<ReturnType<typeof openGuest>> | null = null;
+  try {
+    const id = await uploadViaTool(page, { name: 'button.png', mimeType: 'image/png', buffer: await pngOf(page, 160, 120, '#283593') });
+    await expectLoaded(page, id);
+    await selectOnly(page, id);
+    await page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    await page.goto(`/boards/${board2}`);
+    await expect(canvas(page)).toBeVisible();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
+    await tool(page, 'Paste').click();
+    await expect(images(page)).toHaveCount(1, { timeout: 15_000 });
+    const copy = (await ids(images(page)))[0];
+    guest = await openGuest(browser, o, await tokenOf(page, board2), 'QA Guest B');
+    await expectLoaded(guest.page, copy);
+  } finally {
+    await owner.close();
+    if (guest) await guest.close();
+  }
+});
+
+test('CVS-20 copy request failure inserts nothing, shows a message, and paste can be repeated', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const id = await uploadViaTool(page, { name: 'retry.png', mimeType: 'image/png', buffer: await pngOf(page, 160, 120, '#00838f') });
+    await expectLoaded(page, id);
+    await selectOnly(page, id);
+    await page.keyboard.press('ControlOrMeta+C');
+    const board2 = await owner.newBoard();
+    await page.route('**/media/copies', (route) => route.fulfill({ status: 500, body: '{}' }));
+    await pasteOn(page, `/boards/${board2}`);
+    await expect(page.getByText('The images could not be copied to this board. Try again.')).toBeVisible({ timeout: 15_000 });
+    await expect(images(page)).toHaveCount(0);
+    await page.unroute('**/media/copies');
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(images(page)).toHaveCount(1, { timeout: 15_000 });
+    await expectLoaded(page, (await ids(images(page)))[0]);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('CVS-20 paste and duplicate on the same board make no file copies and stay loaded', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const id = await uploadViaTool(page, { name: 'same.png', mimeType: 'image/png', buffer: await pngOf(page, 160, 120, '#558b2f') });
+    await expectLoaded(page, id);
+    const requests: string[] = [];
+    page.on('request', (r) => { if (r.url().includes('/media/copies')) requests.push(r.url()); });
+    await selectOnly(page, id);
+    await page.keyboard.press('ControlOrMeta+C');
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect(images(page)).toHaveCount(2, { timeout: 15_000 });
+    await page.keyboard.press('ControlOrMeta+D');
+    await expect(images(page)).toHaveCount(3, { timeout: 15_000 });
+    const raw = await untilRaw(page, owner.boardId, (r) => expect(ofType(r, 'image')).toHaveLength(3));
+    expect(new Set(ofType(raw, 'image').map(([, v]) => mediaOf(v))).size).toBe(1);
+    expect(requests).toEqual([]);
+    for (const x of await ids(images(page))) await expectLoaded(page, x);
+  } finally {
+    await owner.close();
+  }
+});
+
 // ---------- MOB-01 ----------
 
 test('IMG-01 MOB-01 image upload works by touch at phone width; participant sees it', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
