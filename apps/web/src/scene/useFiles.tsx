@@ -6,7 +6,12 @@ import { readPdf } from "../media/pdfDocument";
 import type { RunFileTask } from "../media/useFileTask";
 import type { Size } from "../canvas/camera";
 import type { Point } from "../realtime/messages";
-import { classifyFile, downloadUrl, GENERIC_TYPE } from "./attachmentData";
+import {
+  classifyFile,
+  downloadUrl,
+  GENERIC_TYPE,
+  type AttachmentType,
+} from "./attachmentData";
 import {
   audioFrame,
   createAttachment,
@@ -17,6 +22,7 @@ import {
   type UploadedAttachment,
 } from "./attachments";
 import type { FileActions } from "./FileControls";
+import { OBJECT_TYPES } from "./objectTypes";
 import { PdfExtractDialog } from "./PdfExtractDialog";
 import type { SceneObject } from "./sceneObjects";
 
@@ -35,6 +41,8 @@ export function useFiles({
   units,
   actor,
   room,
+  clear,
+  reveal,
   select,
   run,
 }: {
@@ -45,6 +53,10 @@ export function useFiles({
   actor: string;
   /** Сколько места в виде занять новому объекту (BUG-030). */
   room: () => Size;
+  /** Центр нового объекта, чтобы его кнопки не легли под миникарту (BUG-031). */
+  clear: (center: Point, size: Size) => Point;
+  /** Показать холст целиком: страница телефона могла быть прокручена (BUG-031). */
+  reveal: () => void;
   select: (ids: string[]) => void;
   run: RunFileTask;
 }): {
@@ -60,18 +72,22 @@ export function useFiles({
 
   const place = useCallback(
     async (file: File, at: Point): Promise<string> => {
+      const put = (
+        kind: AttachmentType,
+        source: UploadedAttachment,
+        size: Size = OBJECT_TYPES[kind],
+      ) =>
+        createAttachment(objects, kind, clear(at, size), source, actor, size);
+
       const { type, mime } = classifyFile(file);
       if (type === "pdf") {
         const info = await readPdf(file).catch(() => {
           throw new UploadError(0, BAD_PDF);
         });
         const media = await uploadMedia(boardId, file, file.name, mime);
-        return createAttachment(
-          objects,
+        return put(
           "pdf",
-          at,
           { ...uploaded(media), pages: info.pages },
-          actor,
           pdfFrame(info.page, room()),
         );
       }
@@ -80,33 +96,12 @@ export function useFiles({
         const media = await uploadMedia(boardId, file, file.name, mime);
         // FIL-04: в `.webm` может не быть кадра — тогда это аудио.
         return probe !== null && probe.width === 0
-          ? createAttachment(
-              objects,
-              "audio",
-              at,
-              uploaded(media),
-              actor,
-              audioFrame(room()),
-            )
-          : createAttachment(
-              objects,
-              "video",
-              at,
-              uploaded(media),
-              actor,
-              videoFrame(probe, room()),
-            );
+          ? put("audio", uploaded(media), audioFrame(room()))
+          : put("video", uploaded(media), videoFrame(probe, room()));
       }
       if (type === "audio") {
         const media = await uploadMedia(boardId, file, file.name, mime);
-        return createAttachment(
-          objects,
-          "audio",
-          at,
-          uploaded(media),
-          actor,
-          audioFrame(room()),
-        );
+        return put("audio", uploaded(media), audioFrame(room()));
       }
       const media = await uploadMedia(
         boardId,
@@ -115,9 +110,9 @@ export function useFiles({
         GENERIC_TYPE,
         "file",
       );
-      return createAttachment(objects, type, at, uploaded(media), actor);
+      return put(type, uploaded(media));
     },
-    [objects, boardId, actor, room],
+    [objects, boardId, actor, room, clear],
   );
 
   const insert = useCallback(
@@ -137,11 +132,14 @@ export function useFiles({
                 : new UploadError(0, "The upload failed. Try again.");
           }
         }
-        if (ids.length > 0) select(ids);
+        if (ids.length > 0) {
+          select(ids);
+          reveal();
+        }
         if (failure !== null) throw failure;
       });
     },
-    [run, place, select],
+    [run, place, select, reveal],
   );
 
   const pick = useCallback((at: Point) => {

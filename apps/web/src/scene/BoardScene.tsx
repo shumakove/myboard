@@ -156,7 +156,7 @@ import { createDice } from "./dice";
 import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
-import { roomInView } from "./attachments";
+import { centerClearOfMinimap, roomInView } from "./attachments";
 import { useFiles } from "./useFiles";
 import { useImages } from "./useImages";
 import { useFileTask } from "../media/useFileTask";
@@ -681,12 +681,22 @@ export function BoardScene({
     () => roomInView(viewport.current, camera.zoom),
     [camera.zoom],
   );
+  const fileCenter = useCallback(
+    (center: Point, size: Size) =>
+      centerClearOfMinimap(center, size, camera, viewport.current),
+    [camera],
+  );
+  const revealCanvas = useCallback(() => {
+    canvasRef.current?.scrollIntoView({ block: "nearest" });
+  }, []);
   const files = useFiles({
     objects,
     boardId,
     units,
     actor,
     room: fileRoom,
+    clear: fileCenter,
+    reveal: revealCanvas,
     select: setSelection,
     run: fileTask.run,
   });

@@ -6,14 +6,15 @@ import {
   extractPdfPages,
   PDF_BAR_HEIGHT,
   audioFrame,
+  centerClearOfMinimap,
   PDF_MIN_WIDTH,
   pdfFrame,
   roomInView,
-  VIDEO_BAR_WRAPPED_HEIGHT,
   renameAttachment,
   VIDEO_BAR_HEIGHT,
   videoFrame,
 } from "./attachments";
+import type { Size } from "./images";
 import { OBJECT_TYPES } from "./objectTypes";
 import { objectMap, readScene } from "./sceneObjects";
 
@@ -83,25 +84,31 @@ describe("рамки PDF и видео", () => {
   });
 });
 
-describe("BUG-030, MOB-06: новый объект помещается в вид телефона", () => {
+describe("BUG-030, BUG-031, MOB-06: новый объект помещается в вид телефона", () => {
   /** Pixel 7: область холста шириной во весь экран, миникарта в правом нижнем углу. */
   const PHONE = { width: 412, height: 590 };
-  const MINIMAP_TOP = PHONE.height - 8 - 112;
+  /** Верхний край миникарты: отступ 8 px и высота 110 px от низа области холста. */
+  const minimapTop = (viewport: Size) => viewport.height - 8 - 110;
+  const AT_ORIGIN = { x: 0, y: 0, zoom: 1 };
 
-  /** Верх и низ рамки, поставленной в центр вида. */
-  function verticalSpan(height: number, viewport = PHONE) {
-    return [
-      viewport.height / 2 - height / 2,
-      viewport.height / 2 + height / 2,
-    ] as const;
+  /** Верх и низ рамки на экране, поставленной в центр вида с учётом миникарты. */
+  function verticalSpan(frame: Size, viewport: Size = PHONE) {
+    const center = centerClearOfMinimap(
+      { x: 0, y: 0 },
+      frame,
+      AT_ORIGIN,
+      viewport,
+    );
+    const middle = viewport.height / 2 + center.y;
+    return [middle - frame.height / 2, middle + frame.height / 2] as const;
   }
 
   it("ширина и высота — без миникарты: низ рамки выше её верхнего края", () => {
     const room = roomInView(PHONE, 1);
     expect(room.width).toBeLessThan(PHONE.width);
-    const [top, bottom] = verticalSpan(room.height);
+    const [top, bottom] = verticalSpan(room);
     expect(top).toBeGreaterThanOrEqual(0);
-    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+    expect(bottom).toBeLessThanOrEqual(minimapTop(PHONE));
   });
 
   it("широкий вид: объект не достаёт до миникарты, её высота не вычитается", () => {
@@ -128,8 +135,8 @@ describe("BUG-030, MOB-06: новый объект помещается в ви�
 
   it("FIL-02: PDF — панель страниц над миникартой, ширина вмещает панель", () => {
     const frame = pdfFrame({ width: 600, height: 800 }, roomInView(PHONE, 1));
-    const [, bottom] = verticalSpan(frame.height);
-    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+    const [, bottom] = verticalSpan(frame);
+    expect(bottom).toBeLessThanOrEqual(minimapTop(PHONE));
     expect(frame.width).toBeGreaterThanOrEqual(PDF_MIN_WIDTH);
     expect(frame.width).toBeLessThanOrEqual(PHONE.width);
   });
@@ -141,8 +148,8 @@ describe("BUG-030, MOB-06: новый объект помещается в ви�
     );
     expect(frame.width).toBeLessThanOrEqual(PHONE.width);
     expect(frame.width).toBeGreaterThan(360);
-    const [, bottom] = verticalSpan(frame.height);
-    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+    const [, bottom] = verticalSpan(frame);
+    expect(bottom).toBeLessThanOrEqual(minimapTop(PHONE));
   });
 
   it("FIL-03: вертикальный ролик не выше вида, кадр вписан в рамку", () => {
@@ -152,21 +159,111 @@ describe("BUG-030, MOB-06: новый объект помещается в ви�
     expect(frame.width).toBeLessThanOrEqual(room.width);
   });
 
-  it("FIL-03: на узком телефоне панель плеера получает третью строку", () => {
-    const narrow = videoFrame(
-      { width: 1920, height: 1080 },
-      roomInView({ width: 320, height: 700 }, 1),
-    );
-    expect(narrow.width).toBeLessThanOrEqual(320);
-    const picture = (narrow.width * 1080) / 1920;
-    expect(narrow.height).toBeCloseTo(picture + VIDEO_BAR_WRAPPED_HEIGHT);
-  });
-
   it("FIL-04: аудио не шире вида", () => {
     expect(
       audioFrame(roomInView({ width: 360, height: 590 }, 1)).width,
     ).toBeLessThanOrEqual(360);
     expect(audioFrame().width).toBe(400);
+  });
+
+  // Области холста из замеров BUG-031: окна 360×640, 320×568, 839×412.
+  describe.each([
+    ["360×640", { width: 334, height: 388 }],
+    ["320×568", { width: 294, height: 316 }],
+    ["839×412", { width: 455, height: 318 }],
+  ])("BUG-031, окно %s", (_title, viewport) => {
+    const room = roomInView(viewport, 1);
+
+    it("FIL-02: PDF целиком над миникартой, страница различима", () => {
+      const frame = pdfFrame({ width: 600, height: 800 }, room);
+      const [top, bottom] = verticalSpan(frame, viewport);
+      expect(top).toBeGreaterThanOrEqual(0);
+      expect(bottom).toBeLessThanOrEqual(minimapTop(viewport));
+      expect(frame.height - PDF_BAR_HEIGHT).toBeGreaterThanOrEqual(80);
+    });
+
+    it("FIL-03: видео целиком над миникартой, кадр не пропадает", () => {
+      const frame = videoFrame({ width: 1920, height: 1080 }, room);
+      const [top, bottom] = verticalSpan(frame, viewport);
+      expect(top).toBeGreaterThanOrEqual(0);
+      expect(bottom).toBeLessThanOrEqual(minimapTop(viewport));
+      expect(frame.height - VIDEO_BAR_HEIGHT).toBeGreaterThanOrEqual(80);
+    });
+
+    it("FIL-04: аудио над миникартой", () => {
+      const [, bottom] = verticalSpan(audioFrame(room), viewport);
+      expect(bottom).toBeLessThanOrEqual(minimapTop(viewport));
+    });
+  });
+
+  it("BUG-031: там, где хватает места, верх объекта не под панелью выделения", () => {
+    const viewport = { width: 334, height: 388 };
+    const frame = pdfFrame(
+      { width: 600, height: 800 },
+      roomInView(viewport, 1),
+    );
+    expect(verticalSpan(frame, viewport)[0]).toBeGreaterThanOrEqual(60);
+  });
+
+  describe("BUG-031: centerClearOfMinimap", () => {
+    const LOW = { width: 294, height: 316 };
+    const FRAME = { width: 280, height: 186 };
+
+    it("объект, не задевающий миникарту, остаётся в центре вида", () => {
+      const center = { x: 40, y: -30 };
+      const small = { width: 200, height: 100 };
+      expect(centerClearOfMinimap(center, small, AT_ORIGIN, LOW)).toEqual(
+        center,
+      );
+    });
+
+    it("объект левее миникарты не поднимается, даже если ниже её верха", () => {
+      const center = { x: 0, y: 0 };
+      const desktop = { width: 1440, height: 400 };
+      const tall = { width: 480, height: 380 };
+      expect(centerClearOfMinimap(center, tall, AT_ORIGIN, desktop)).toEqual(
+        center,
+      );
+    });
+
+    it("сдвинутая камера: поднимается относительно вида, x не меняется", () => {
+      const camera = { x: 500, y: 700, zoom: 1 };
+      const center = centerClearOfMinimap(
+        { x: 500, y: 700 },
+        FRAME,
+        camera,
+        LOW,
+      );
+      expect(center.x).toBe(500);
+      const bottom = LOW.height / 2 + center.y - 700 + FRAME.height / 2;
+      expect(bottom).toBeCloseTo(LOW.height - 110 - 12);
+    });
+
+    it("масштаб: сдвиг считается в единицах доски", () => {
+      const camera = { x: 0, y: 0, zoom: 0.5 };
+      const big = { width: 560, height: 500 };
+      const center = centerClearOfMinimap({ x: 0, y: 0 }, big, camera, LOW);
+      const bottom = LOW.height / 2 + (center.y + big.height / 2) * 0.5;
+      expect(bottom).toBeCloseTo(LOW.height - 110 - 12);
+    });
+
+    it("следующий файл со сдвигом тоже остаётся над миникартой", () => {
+      const center = centerClearOfMinimap(
+        { x: 24, y: 24 },
+        FRAME,
+        AT_ORIGIN,
+        LOW,
+      );
+      const bottom = LOW.height / 2 + center.y + FRAME.height / 2;
+      expect(bottom).toBeLessThanOrEqual(minimapTop(LOW));
+    });
+
+    it("размер вида ещё неизвестен — центр не меняется", () => {
+      const center = { x: 1, y: 2 };
+      expect(
+        centerClearOfMinimap(center, FRAME, AT_ORIGIN, { width: 0, height: 0 }),
+      ).toEqual(center);
+    });
   });
 });
 

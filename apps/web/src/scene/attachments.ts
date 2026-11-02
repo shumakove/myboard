@@ -1,6 +1,6 @@
 import type * as Y from "yjs";
 import { MINIMAP_SIZE } from "../canvas/minimapFit";
-import type { Point } from "../realtime/messages";
+import type { CameraView, Point } from "../realtime/messages";
 import type { AttachmentType } from "./attachmentData";
 import { fitSize, type Size } from "./images";
 import { OBJECT_TYPES } from "./objectTypes";
@@ -18,19 +18,18 @@ import {
 export const PDF_BAR_HEIGHT = 56;
 /** Высота панели видеоплеера под кадром: две строки элементов управления (UI-04). */
 export const VIDEO_BAR_HEIGHT = 112;
-/** Панель плеера на узком объекте: ряд элементов переносится на третью строку. */
-export const VIDEO_BAR_WRAPPED_HEIGHT = 164;
 /** Наибольшая сторона страницы и кадра на доске; ширина кадра — не меньше панели плеера. */
 const VIEW_MAX_SIDE = 480;
 const VIDEO_MIN_WIDTH = 420;
-/** Уже этого панель плеера не помещается в две строки. */
-const VIDEO_TWO_ROWS_WIDTH = 350;
 /** Самая узкая панель плеера и аудио: уже элементы управления не помещаются. */
 const PLAYER_NARROWEST = 280;
 /** Самая узкая панель страниц PDF: две кнопки и номер страницы. */
 export const PDF_MIN_WIDTH = 300;
-/** Высота кадра и страницы не меньше этой, сколько бы места ни было в виде. */
-const PICTURE_MIN_HEIGHT = 120;
+/**
+ * Высота кадра и страницы не меньше этой, сколько бы места ни было в виде. Над миникартой
+ * самого низкого холста (min-height 320 px) остаётся 194 px: панель плеера и такой кадр входят.
+ */
+const PICTURE_MIN_HEIGHT = 80;
 /** Кадр по умолчанию, если браузер не прочитал размер ролика. */
 const DEFAULT_VIDEO: Size = { width: 640, height: 360 };
 /** Промежуток между извлечёнными страницами. */
@@ -50,27 +49,59 @@ export interface UploadedAttachment {
 
 /** Поле между новым объектом и краем вида, px. */
 const VIEW_EDGE = 8;
-/** Отступ миникарты от края вида с рамкой и зазор до объекта, px. */
-const MINIMAP_CLEARANCE = 18;
+/** Отступ миникарты от края вида и зазор до объекта, px. */
+const MINIMAP_CLEARANCE = 12;
+/** Верх вида под панелью выделения: одна строка 44 px с полями, px. */
+const SELECTION_BAR_CLEARANCE = 68;
 const NO_LIMIT: Size = { width: Infinity, height: Infinity };
 
 /**
- * BUG-030, MOB-06, UI-04: сколько единиц доски новый объект может занять в центре вида,
- * чтобы его кнопки сразу были на экране и не лежали под миникартой. Миникарта учитывается,
- * только если объект в центре вида может дотянуться до неё по горизонтали.
+ * BUG-030, BUG-031, MOB-06, UI-04: сколько единиц доски может занять новый объект, чтобы
+ * его кнопки сразу были на экране и не лежали под миникартой. Если объект в центре вида
+ * может дотянуться до миникарты по горизонтали, ему доступна высота между панелью
+ * выделения и миникартой; встать туда помогает `centerClearOfMinimap`. На самом низком
+ * холсте эта высота меньше объекта: минимум кадра важнее панели выделения.
  */
 export function roomInView(viewport: Size, zoom: number): Size {
   if (viewport.width === 0 || viewport.height === 0) return NO_LIMIT;
-  const minimapLeft = viewport.width - MINIMAP_SIZE.width - MINIMAP_CLEARANCE;
   const reachesMinimap =
-    viewport.width / 2 + (VIEW_MAX_SIDE * zoom) / 2 > minimapLeft;
-  const edge = reachesMinimap
-    ? MINIMAP_SIZE.height + MINIMAP_CLEARANCE
-    : VIEW_EDGE;
+    viewport.width / 2 + (VIEW_MAX_SIDE * zoom) / 2 > minimapLeft(viewport);
   return {
     width: (viewport.width - 2 * VIEW_EDGE) / zoom,
-    height: (viewport.height - 2 * edge) / zoom,
+    height:
+      (reachesMinimap
+        ? minimapTop(viewport) - SELECTION_BAR_CLEARANCE
+        : viewport.height - 2 * VIEW_EDGE) / zoom,
   };
+}
+
+/**
+ * BUG-031: центр нового объекта. Объект стоит там, где просили, а если при этом заходит на
+ * миникарту — поднимается ровно настолько, чтобы низ с кнопками оказался над ней.
+ */
+export function centerClearOfMinimap(
+  center: Point,
+  size: Size,
+  camera: CameraView,
+  viewport: Size,
+): Point {
+  if (viewport.width === 0 || viewport.height === 0) return center;
+  const { zoom } = camera;
+  const right =
+    viewport.width / 2 + (center.x - camera.x + size.width / 2) * zoom;
+  const bottom =
+    viewport.height / 2 + (center.y - camera.y + size.height / 2) * zoom;
+  const overlap = bottom - minimapTop(viewport);
+  if (right <= minimapLeft(viewport) || overlap <= 0) return center;
+  return { x: center.x, y: center.y - overlap / zoom };
+}
+
+function minimapLeft(viewport: Size): number {
+  return viewport.width - MINIMAP_SIZE.width - MINIMAP_CLEARANCE;
+}
+
+function minimapTop(viewport: Size): number {
+  return viewport.height - MINIMAP_SIZE.height - MINIMAP_CLEARANCE;
 }
 
 /** Рамка объекта PDF: страница и панель страниц под ней, не больше `room`. */
@@ -99,13 +130,11 @@ export function videoFrame(natural: Size | null, room: Size = NO_LIMIT): Size {
     PLAYER_NARROWEST,
     Math.min(room.width, Math.max(VIDEO_MIN_WIDTH, source.width * scale)),
   );
-  const bar =
-    width < VIDEO_TWO_ROWS_WIDTH ? VIDEO_BAR_WRAPPED_HEIGHT : VIDEO_BAR_HEIGHT;
   const picture = Math.min(
     (width * source.height) / source.width,
-    Math.max(PICTURE_MIN_HEIGHT, room.height - bar),
+    Math.max(PICTURE_MIN_HEIGHT, room.height - VIDEO_BAR_HEIGHT),
   );
-  return { width, height: picture + bar };
+  return { width, height: picture + VIDEO_BAR_HEIGHT };
 }
 
 /** Рамка аудио: панель плеера не шире `room`. */

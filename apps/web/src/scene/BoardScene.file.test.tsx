@@ -286,33 +286,58 @@ describe("FIL-02: PDF постранично", () => {
   });
 });
 
-describe("BUG-030, MOB-06: новый объект на телефоне", () => {
-  function phoneCanvas() {
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(388);
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(590);
+describe("BUG-030, BUG-031, MOB-06: новый объект на телефоне", () => {
+  function canvasOf(width: number, height: number) {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(
+      width,
+    );
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(
+      height,
+    );
   }
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    ["a.mp4", "video/mp4", "video"],
-    ["a.pdf", "application/pdf", "pdf"],
-    ["a.mp3", "audio/mpeg", "audio"],
-  ])("%s встаёт в ширину вида", async (name, type, kind) => {
-    phoneCanvas();
+  describe.each([
+    ["высокий холст", 388, 590],
+    ["окно 360×640", 334, 388],
+    ["окно 320×568", 294, 316],
+    ["окно 839×412", 455, 318],
+  ])("%s", (_title, width, height) => {
+    it.each([
+      ["a.mp4", "video/mp4", "video"],
+      ["a.pdf", "application/pdf", "pdf"],
+      ["a.mp3", "audio/mpeg", "audio"],
+    ])("%s встаёт в вид над миникартой", async (name, type, kind) => {
+      canvasOf(width, height);
+      const board = createBoardDocument();
+      renderScene(board);
+      upload(name, type);
+      await waitFor(() => {
+        expect(scene(board)).toHaveLength(1);
+      });
+      const [placedObject] = scene(board);
+      expect(placedObject?.type).toBe(kind);
+      // Камера в начале координат: центр вида — точка (0, 0) доски.
+      const top = height / 2 + (placedObject?.y ?? NaN);
+      const bottom = top + (placedObject?.height ?? NaN);
+      expect(top).toBeGreaterThanOrEqual(0);
+      expect(bottom).toBeLessThanOrEqual(height - 8 - 110);
+    });
+  });
+
+  it("прокрученная страница возвращает холст в окно", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
     const board = createBoardDocument();
     renderScene(board);
-    upload(name, type);
+    expect(scroll).not.toHaveBeenCalled();
+    upload("a.mp4", "video/mp4");
     await waitFor(() => {
-      expect(scene(board)).toHaveLength(1);
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
     });
-    const [object] = scene(board);
-    expect(object?.type).toBe(kind);
-    expect(object?.width).toBeLessThanOrEqual(388);
-    // Панель объекта — выше миникарты: 590 / 2 + высота / 2 ≤ 590 − 8 − 112.
-    expect(object?.height).toBeLessThanOrEqual(590 - 2 * 120);
+    expect(scroll.mock.contexts[0]).toBe(screen.getByTestId("board-canvas"));
   });
 });
 
