@@ -137,17 +137,17 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | DICE-01 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-01 *: грани 4…20, цвет, второй клиент) | PASS |
 | DICE-02 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-02 *: 480 бросков d4/d6/d20 в диапазоне, одновременные броски двух клиентов) | PASS |
 | DICE-03 | T6.11 | acceptance/e2e/reactions.spec.ts (DICE-03 *: сумма, пересчёт, Roll all, не-кубики) | PASS |
-| IMG-01 | T7.1 | acceptance/api/test_media.py (test_img01_*, test_arch_media_*); acceptance/e2e/images.spec.ts (IMG-01 *, desktop + mobile) | PASS (T7.1, проверка 2) |
+| IMG-01 | T7.1 | acceptance/api/test_media.py (test_img01_*, test_arch_media_*); acceptance/e2e/images.spec.ts (IMG-01 *, desktop + mobile) | PASS (T7.1, проверка 2; BUG-029 — T7.2, проверка 2, на dev/T7.2) |
 | IMG-02 | T7.1 | acceptance/e2e/images.spec.ts (IMG-02 crop, shape mask and rounded corners…) | PASS (T7.1, проверка 2) |
 | IMG-03 | T7.1 | acceptance/e2e/images.spec.ts (IMG-03 border colour and width; flip…) | PASS (T7.1, проверка 2) |
 | IMG-04 | T7.1 | acceptance/e2e/images.spec.ts (IMG-04 replace image keeps crop…) | PASS (T7.1, проверка 2) |
 | IMG-05 | T7.1 | acceptance/e2e/images.spec.ts (IMG-05 remove background…) | PASS (T7.1, проверка 2) |
 | IMG-06 | T7.1 | acceptance/e2e/images.spec.ts (IMG-06 GIF is shown and plays…) | PASS (T7.1, проверка 2) |
 | IMG-07 | T7.1 | acceptance/api/test_media.py (test_img07_*, test_img01_img07_*); acceptance/e2e/images.spec.ts (IMG-07 SVG…) | PASS (T7.1, проверка 2) |
-| FIL-01 | T7.2 | acceptance/api/test_files.py (test_fil01_*); acceptance/e2e/files.spec.ts (FIL-01 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 1; открыт BUG-029, minor) |
-| FIL-02 | T7.2 | acceptance/e2e/files.spec.ts (FIL-02 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 1; открыт BUG-030, minor) |
-| FIL-03 | T7.2 | acceptance/api/test_files.py (test_fil03_*); acceptance/e2e/files.spec.ts (FIL-03 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 1; открыт BUG-030, minor) |
-| FIL-04 | T7.2 | acceptance/api/test_files.py (test_fil02_fil03_fil04_*); acceptance/e2e/files.spec.ts (FIL-04 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 1) |
+| FIL-01 | T7.2 | acceptance/api/test_files.py (test_fil01_*); acceptance/e2e/files.spec.ts (FIL-01 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 2; BUG-029 исправлен в d3c196e, проверено на dev/T7.2) |
+| FIL-02 | T7.2 | acceptance/e2e/files.spec.ts (FIL-02 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 2; BUG-030 исправлен в b0c687b, проверено на dev/T7.2; открыт BUG-031, minor) |
+| FIL-03 | T7.2 | acceptance/api/test_files.py (test_fil03_*); acceptance/e2e/files.spec.ts (FIL-03 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 2; BUG-030 исправлен в b0c687b, проверено на dev/T7.2; открыт BUG-031, minor) |
+| FIL-04 | T7.2 | acceptance/api/test_files.py (test_fil02_fil03_fil04_*); acceptance/e2e/files.spec.ts (FIL-04 *, desktop + mobile; ветка qa/T7.2) | PASS (T7.2, проверка 2) |
 | FIL-05 | T7.2 | acceptance/e2e/files.spec.ts (FIL-05 *, два клиента; ветка qa/T7.2) | BLOCKED (T7.2, Q-007: GIF при малом числе объектов) |
 | EMB-01 | T7.3 | — | не проверено |
 | EMB-02 | T7.3 | — | не проверено |
