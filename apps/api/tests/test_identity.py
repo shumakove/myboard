@@ -3,6 +3,7 @@
 import hashlib
 import uuid
 from typing import Any
+from unittest import mock
 
 import pytest
 from argon2 import PasswordHasher
@@ -416,7 +417,8 @@ def test_adm07_uniqueness_enforced_by_database(admin: TestClient, settings: Sett
 
 USER_EMAIL = "alice@example.com"
 USER_PASSWORD = "alice-pw"
-SIGNED_OUT = {"authenticated": False, "name": None, "email": None}
+ANY_UUID = mock.ANY
+SIGNED_OUT = {"authenticated": False, "id": None, "name": None, "email": None}
 
 
 def _user_login(client: TestClient, email: str = USER_EMAIL, password: str = USER_PASSWORD) -> Any:
@@ -452,6 +454,7 @@ def test_acc01_user_signs_in_with_credentials_from_admin(
     assert response.status_code == 204
     assert _account_session(client) == {
         "authenticated": True,
+        "id": ANY_UUID,
         "name": "Alice",
         "email": USER_EMAIL,
     }
@@ -693,3 +696,21 @@ def test_acc01_login_contract_in_openapi(client: TestClient) -> None:
     paths = client.get("/api/openapi.json").json()["paths"]
 
     assert {"/api/login", "/api/logout", "/api/session"} <= paths.keys()
+
+
+def test_bug026_account_session_has_user_id(client: TestClient) -> None:
+    """CMT-02: id пользователя в сессии один и тот же на всех его устройствах."""
+    assert (
+        client.post(
+            "/api/admin/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+        ).status_code
+        == 204
+    )
+    created = client.post(
+        "/api/admin/users",
+        json={"name": "Sam", "email": "sam@example.com", "password": "sam-password"},
+    ).json()
+    for _ in range(2):
+        with TestClient(client.app) as device:
+            device.post("/api/login", json={"email": "sam@example.com", "password": "sam-password"})
+            assert device.get("/api/session").json()["id"] == created["id"]

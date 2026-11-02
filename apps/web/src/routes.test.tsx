@@ -27,6 +27,7 @@ describe("маршруты интерфейса (ARCHITECTURE.md, раздел 4
           return Promise.resolve(
             Response.json({
               authenticated: true,
+              id: "4d1f6a52-3c1e-4b7a-9d55-0a1b2c3d4e5f",
               name: "Alice",
               email: "alice@example.com",
             }),

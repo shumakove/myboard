@@ -5,7 +5,7 @@ import { getSession, type AccountSession } from "./accountApi";
 export type AccountSessionState =
   | { status: "loading" }
   | { status: "signedOut" }
-  | { status: "signedIn"; name: string; email: string };
+  | { status: "signedIn"; id: string; name: string; email: string };
 
 /**
  * ACC-05: как часто видимая вкладка сверяет сессию с сервером.
@@ -16,8 +16,13 @@ export const SESSION_CHECK_INTERVAL_MS = 2000;
 const SIGNED_OUT: AccountSessionState = { status: "signedOut" };
 
 function toState(session: AccountSession): AccountSessionState {
-  return session.authenticated && session.name && session.email
-    ? { status: "signedIn", name: session.name, email: session.email }
+  return session.authenticated && session.id && session.name && session.email
+    ? {
+        status: "signedIn",
+        id: session.id,
+        name: session.name,
+        email: session.email,
+      }
     : SIGNED_OUT;
 }
 

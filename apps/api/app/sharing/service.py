@@ -75,13 +75,18 @@ async def participant(db: AsyncSession, board: Board, cookie: str | None) -> Ses
     return await find_board_session(db, cookie, board.id)
 
 
-async def join(db: AsyncSession, board: Board, name: str, cookie: str | None) -> str:
+async def join(
+    db: AsyncSession, board: Board, name: str, cookie: str | None
+) -> tuple[str, uuid.UUID]:
     """SHR-02, SHR-03: сессия участника с именем; учётная запись не создаётся.
 
-    Повторный вход заменяет прежнюю сессию этого браузера на доске.
+    Повторный вход заменяет прежнюю сессию этого браузера на доске. Возвращает значение
+    cookie и id участника.
     """
     if await participant(db, board, cookie) is not None:
         await delete_session(db, cookie)
-    return await create_session(
-        db, SubjectType.GUEST, uuid.uuid4(), board_id=board.id, display_name=name
+    guest_id = uuid.uuid4()
+    token = await create_session(
+        db, SubjectType.GUEST, guest_id, board_id=board.id, display_name=name
     )
+    return token, guest_id

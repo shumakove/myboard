@@ -58,7 +58,7 @@ export function installFakeSharingServer(
     return {
       id: board.id,
       title: board.title,
-      participant: name ? { name } : null,
+      participant: name ? { id: `guest-${token}`, name } : null,
     };
   }
 
