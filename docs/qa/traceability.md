@@ -9,8 +9,8 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | ADM-01 | T1.1 | acceptance/api/test_admin.py::test_adm01_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-02 | T1.1 | acceptance/api/test_admin.py::test_adm02_*, acceptance/e2e/admin.spec.ts | PASS |
 | ADM-03 | T1.1 | acceptance/api/test_admin.py::test_adm03_*, acceptance/e2e/admin.spec.ts | PASS |
-| ADM-04 | T1.1, T1.2, T1.3 | acceptance/api/test_admin.py::test_adm04_*, acceptance/api/test_login.py::test_adm04_*, acceptance/api/test_session_revoke.py::test_adm04_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/e2e/session-revoke.spec.ts | PASS (в т.ч. отзыв сессий при смене пароля, T1.3) |
-| ADM-05 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm05_*, acceptance/api/test_login.py::test_adm05_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/api/test_boards.py::test_adm05_*, acceptance/e2e/boards.spec.ts (ADM-05) | PASS (сохранность досок проверена в T2.1) |
+| ADM-04 | T1.1, T1.2, T1.3 | acceptance/api/test_admin.py::test_adm04_*, acceptance/api/test_login.py::test_adm04_*, acceptance/api/test_session_revoke.py::test_adm04_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/e2e/session-revoke.spec.ts, acceptance/e2e/admin-phone.spec.ts (BUG-021, mobile) | PASS (в т.ч. отзыв сессий при смене пароля, T1.3) |
+| ADM-05 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm05_*, acceptance/api/test_login.py::test_adm05_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts, acceptance/api/test_boards.py::test_adm05_*, acceptance/e2e/boards.spec.ts (ADM-05), acceptance/e2e/admin-phone.spec.ts (BUG-021, mobile) | PASS (сохранность досок проверена в T2.1) |
 | ADM-06 | T1.1, T1.2 | acceptance/api/test_admin.py::test_adm06_*, acceptance/api/test_login.py::test_adm06_*, acceptance/e2e/admin.spec.ts, acceptance/e2e/login.spec.ts | PASS |
 | ADM-07 | T1.1 | acceptance/api/test_admin.py::test_adm07_*, acceptance/e2e/admin.spec.ts | PASS |
 | ACC-01 | T1.2 | acceptance/api/test_login.py::test_acc01_*, acceptance/e2e/login.spec.ts | PASS |
@@ -124,9 +124,9 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | MAP-03 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-03 *, второй клиент, перезагрузка) | PASS |
 | MAP-04 | T6.9 | acceptance/e2e/mindmap.spec.ts (MAP-04 *, оба ответа и Cancel, участник по ссылке) | PASS |
 | CMT-01 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-01 *: объект и точка, сдвиг/масштаб, участник по ссылке, удаление и Ctrl+Z; MOB-01 на телефоне) | PASS |
-| CMT-02 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-02 *: переписка, Resolve/Reopen, непрочитанные у трёх клиентов) | PASS (BUG-026 minor) |
+| CMT-02 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-02 *: переписка, Resolve/Reopen, непрочитанные у трёх клиентов) | PASS (BUG-026 исправлен в 1b696ff, проверено) |
 | CMT-03 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-03 *, второй клиент, перезагрузка) | PASS |
-| CMT-04 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-04 *, фильтр по имени участника по ссылке) | PASS (BUG-026 minor) |
+| CMT-04 | T6.10 | acceptance/e2e/comments.spec.ts (CMT-04 *, фильтр по имени участника по ссылке) | PASS (BUG-026 исправлен в 1b696ff, проверено) |
 | RCT-01 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-01 *: едет с объектом у себя/второго клиента/после перезагрузки, участник по ссылке, удаление объекта) | PASS |
 | RCT-02 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-02 *: имя участника по ссылке у владельца и наоборот) | PASS |
 | RCT-03 | T6.11 | acceptance/e2e/reactions.spec.ts (RCT-03 *: удержание мыши; MOB-01 удержание пальца) | PASS |
@@ -174,7 +174,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | UI-01 | T5.6, T5.4 | acceptance/e2e/ui.spec.ts (UI-01 *, desktop + mobile; с T5.4 — строго R = G = B) | PASS |
 | UI-02 | T5.6 | acceptance/e2e/ui.spec.ts (UI-01 UI-02 *, UI-02 *, desktop + mobile) | PASS |
 | UI-03 | T5.6, T5.4, T5.5 | acceptance/e2e/ui.spec.ts (UI-03 *, desktop + mobile), acceptance/e2e/undo-tools.spec.ts (UI-03 dialog Escape), acceptance/e2e/search.spec.ts (UI-01 UI-03 search panel…, UI-03 BUG-010), text.spec.ts (UI-01 UI-03 text formatting bar…, TXT-04 BUG-012/BUG-017) | PASS (BUG-009 исправлен в T5.4; BUG-010 исправлен в T6.1, проверено) |
-| UI-04 | T5.6, T5.4, T6.1, T6.3, T6.5 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile; BUG-015), acceptance/e2e/drawing.spec.ts (UI-04 BUG-023, mobile, test.fail) | PASS (T6.1: BUG-015 исправлен; T6.3: BUG-019 исправлен; открыты minor: BUG-021 — список администратора при сотнях учёток на телефоне, BUG-023 — пресеты пера 40–42×44 px) |
+| UI-04 | T5.6, T5.4, T6.1, T6.3, T6.5 | acceptance/e2e/ui.spec.ts (UI-04 *, mobile; с T5.4 — диалог All tools), acceptance/e2e/text.spec.ts (UI-04 *, mobile; BUG-015), acceptance/e2e/drawing.spec.ts (UI-04 BUG-023, mobile, test.fail), acceptance/e2e/admin-phone.spec.ts (BUG-021, mobile) | PASS (T6.1: BUG-015 исправлен; T6.3: BUG-019 исправлен; открыты minor: BUG-021 — список администратора при сотнях учёток на телефоне, BUG-023 — пресеты пера 40–42×44 px) |
 
 ## Наблюдаемые решения архитектуры (без ID требования)
 
