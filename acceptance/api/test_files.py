@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import re
+import socket
+from collections.abc import Iterator
 from urllib.parse import unquote
 
 import httpx
@@ -293,3 +295,76 @@ def test_fil03_fil04_other_formats_are_not_playable_types(board_user: Client, bo
         f"/api/boards/{board['id']}/media", params={"name": "clip"}, content=b"x", headers={"Content-Type": mime}
     )
     assert resp.status_code == 415, (resp.status_code, resp.text)
+
+
+# ---------- Перепроверка BUG-029: отказ по размеру виден клиенту ----------
+
+
+def _stream(total: int, chunk: int = 1024 * 1024) -> Iterator[bytes]:
+    sent = 0
+    while sent < total:
+        part = min(chunk, total - sent)
+        yield b"\x00" * part
+        sent += part
+
+
+def test_fil01_bug029_chunked_over_limit_is_413_and_nothing_stored(board_user: Client, board: dict[str, str]) -> None:
+    """Без Content-Length сервер считает байты сам."""
+    resp = board_user.http.post(
+        f"/api/boards/{board['id']}/media",
+        params={"name": "chunked.bin", "kind": "file"},
+        content=_stream(max_upload_bytes() + 1),
+        headers={"Content-Type": OCTET},
+        timeout=180.0,
+    )
+    assert resp.status_code == 413, (resp.status_code, resp.text[:200])
+    assert "id" not in resp.json()
+
+
+def test_fil01_bug029_chunked_exact_limit_is_accepted(board_user: Client, board: dict[str, str]) -> None:
+    limit = max_upload_bytes()
+    resp = board_user.http.post(
+        f"/api/boards/{board['id']}/media",
+        params={"name": "chunked.bin", "kind": "file"},
+        content=_stream(limit),
+        headers={"Content-Type": OCTET},
+        timeout=180.0,
+    )
+    assert resp.status_code == 201, (resp.status_code, resp.text[:200])
+    assert len(fetch(board_user, resp.json()["id"]).content) == limit
+
+
+def test_fil01_bug029_far_over_limit_is_413(board_user: Client, board: dict[str, str]) -> None:
+    resp = _file(board_user, board["id"], b"\x00" * (3 * max_upload_bytes()))
+    assert resp.status_code == 413, (resp.status_code, resp.text[:200])
+
+
+def test_fil01_bug029_over_limit_from_strangers_is_a_refusal_not_a_size_answer(
+    admin: Client, board: dict[str, str], client: Client, clean_stack: str
+) -> None:
+    """Отказ в доступе идёт раньше размера: посторонний не узнаёт о доске и не занимает сервер."""
+    other = _other_user(admin, clean_stack)
+    body = b"\x00" * (max_upload_bytes() + 1)
+    for who, one in {"без сессии": client, "другой пользователь": other, "администратор": admin}.items():
+        resp = _file(one, board["id"], body)
+        assert resp.status_code in REFUSED, (who, resp.status_code, resp.text[:200])
+        assert refusal(resp) == refusal(_file(one, MISSING, b"x")), who
+
+
+def test_fil01_bug029_declared_huge_length_does_not_hang(board_user: Client, board: dict[str, str]) -> None:
+    """Объявлено 5 ГиБ, отправлено 1 МиБ: сервер не ждёт остальное. httpx такой запрос не отправит."""
+    url = httpx.URL(str(board_user.http.base_url))
+    cookies = "; ".join(f"{name}={value}" for name, value in board_user.http.cookies.items())
+    head = (
+        f"POST /api/boards/{board['id']}/media?name=huge.bin&kind=file HTTP/1.1\r\n"
+        f"Host: {url.netloc.decode()}\r\nCookie: {cookies}\r\nContent-Type: {OCTET}\r\n"
+        f"Content-Length: {5 * 1024**3}\r\nConnection: close\r\n\r\n"
+    )
+    with socket.create_connection((url.host, url.port or 80), timeout=30.0) as raw:
+        raw.sendall(head.encode() + b"\x00" * (1024 * 1024))
+        try:
+            answer = raw.recv(256)
+        except TimeoutError:
+            pytest.fail("сервер ждёт объявленные 5 ГиБ дольше 30 с")
+    assert answer.startswith(b"HTTP/1.1 413"), answer[:80]
+    assert board_user.http.get("/api/session").status_code == 200

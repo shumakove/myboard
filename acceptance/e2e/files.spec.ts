@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser, Download, Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { canvas, docSeenByLateClient, dragBy, openGuest, openOwner, profileOpts, type Opts } from './camera';
+import { canvas, docSeenByLateClient, dragBy, openGuest, openOwner, profileOpts, Touch, type Opts } from './camera';
 import { allObjects, boxOf, obj, onCanvas, seed, selectionBar, tool, type Obj } from './scene';
 
 type Fx = { baseURL?: string; viewport: Opts['viewport']; hasTouch: boolean; isMobile: boolean; userAgent?: string; deviceScaleFactor?: number };
@@ -351,7 +351,6 @@ test('FIL-01 file over the limit is refused: an error is shown and no label appe
 
 test('FIL-01 BUG-029 over-limit message names the size, not the connection', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, info) => {
   desktopOnly(isMobile);
-  test.fail(true, 'BUG-029 (minor): открыт, убрать пометку после исправления');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   try {
     await overLimit(owner.page, info.outputPath('too-big.bin'));
@@ -746,7 +745,6 @@ test('FIL-02 MOB-01 phone: PDF turns pages by tap once the view shows the button
 
 test('FIL-02 MOB-01 BUG-030 phone: a new PDF has its page buttons free right after upload', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
-  test.fail(true, 'BUG-030 (minor): открыт, убрать пометку после исправления');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   const page = owner.page;
   try {
@@ -961,7 +959,6 @@ test('FIL-03 MOB-01 phone: video starts by tap; all controls can be reached afte
 
 test('FIL-03 MOB-01 BUG-030 phone: a new video fits the screen width with its controls', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
   mobileOnly(isMobile);
-  test.fail(true, 'BUG-030 (minor): открыт, убрать пометку после исправления');
   const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
   const page = owner.page;
   try {
@@ -1255,6 +1252,426 @@ test('ARCH FIL-01…04 objects refer to the file by id; the client uses /api/med
     expect(urls.filter((u) => /localhost|127\.0\.0\.1/.test(u))).toEqual([]);
     expect(urls.filter((u) => /^https?:/.test(u) && new URL(u).origin !== origin), 'файлы и воркер PDF — только своего происхождения').toEqual([]);
     await expect(allObjects(page)).toHaveCount(4);
+  } finally {
+    await owner.close();
+  }
+});
+
+// ---------- Перепроверка BUG-029: текст ошибки при файле больше лимита ----------
+
+const TOO_LARGE = 'The file is too large to upload.';
+const NO_CONNECTION = 'The upload failed. Check the connection.';
+
+test('FIL-01 BUG-029 participant by link: over-limit message names the size; no object in the document', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, info) => {
+  desktopOnly(isMobile);
+  const o = profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor });
+  const owner = await openOwner(browser, o);
+  const guest = await openGuest(browser, o, owner.token, 'QA Guest');
+  try {
+    await overLimit(guest.page, info.outputPath('too-big.bin'));
+    await expect(guest.page.getByText(TOO_LARGE)).toBeVisible({ timeout: 30_000 });
+    await expect(guest.page.getByText(NO_CONNECTION)).toHaveCount(0);
+    expect(Object.values(await rawObjects(owner.page, owner.boardId)).filter((x) => x.type === 'file')).toHaveLength(0);
+  } finally {
+    await guest.close();
+    await owner.close();
+  }
+});
+
+test('FIL-01 BUG-029 a file far over the limit (150 MB): the size message, and the server keeps answering', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, info) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    const path = info.outputPath('far-too-big.bin');
+    writeFileSync(path, Buffer.alloc(150 * 1024 * 1024));
+    await owner.page.getByLabel('Upload file', { exact: true }).setInputFiles(path);
+    await expect(owner.page.getByText(TOO_LARGE)).toBeVisible({ timeout: 90_000 });
+    await expect(owner.page.getByText(NO_CONNECTION)).toHaveCount(0);
+    expect((await owner.page.request.get('/api/session')).status()).toBe(200);
+    expect(await ofKind(owner.page, 'file').count()).toBe(0);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('FIL-01 BUG-029 boundary: a file of exactly the limit becomes a shortcut, no error', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, info) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    const path = info.outputPath('exact.bin');
+    writeFileSync(path, Buffer.alloc(52428800));
+    await owner.page.getByLabel('Upload file', { exact: true }).setInputFiles(path);
+    await expect(ofKind(owner.page, 'file')).toHaveCount(1, { timeout: 60_000 });
+    await expect(owner.page.getByText(TOO_LARGE)).toHaveCount(0);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('FIL-01 BUG-029 negative: a real break in the connection still says so, not the size', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    await owner.page.route('**/api/boards/*/media**', (r) => r.abort('connectionreset'));
+    await owner.page.getByLabel('Upload file', { exact: true }).setInputFiles({ name: 'small.bin', mimeType: 'application/octet-stream', buffer: Buffer.from('payload') });
+    await expect(owner.page.getByText(NO_CONNECTION)).toBeVisible({ timeout: 15_000 });
+    await expect(owner.page.getByText(TOO_LARGE)).toHaveCount(0);
+  } finally {
+    await owner.close();
+  }
+});
+
+/** Настоящий PNG с хвостом нулей: браузер его показывает, размер — больше лимита. */
+function hugePng(): Buffer {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  return Buffer.concat([png, Buffer.alloc(52428800 + 1 - png.length)]);
+}
+
+test('IMG-01 BUG-029 image over the limit through Upload image: the size message, no object', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, info) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  try {
+    const path = info.outputPath('huge.png');
+    writeFileSync(path, hugePng());
+    await owner.page.getByLabel('Upload image', { exact: true }).setInputFiles(path);
+    await expect(owner.page.getByText(TOO_LARGE)).toBeVisible({ timeout: 60_000 });
+    await expect(owner.page.getByText(NO_CONNECTION)).toHaveCount(0);
+    await expect(ofKind(owner.page, 'image')).toHaveCount(0);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('IMG-01 BUG-029 image over the limit pasted from the clipboard: the size message, no object', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const p = await onCanvas(page, 0.5, 0.5);
+    await page.mouse.move(p.x, p.y);
+    await page.evaluate((size) => {
+      const png = Uint8Array.from(
+        atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg=='),
+        (c) => c.charCodeAt(0),
+      );
+      const bytes = new Uint8Array(size);
+      bytes.set(png);
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], 'clip.png', { type: 'image/png' }));
+      window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, 52428800 + 1);
+    await expect(page.getByText(TOO_LARGE)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(NO_CONNECTION)).toHaveCount(0);
+    await expect(ofKind(page, 'image')).toHaveCount(0);
+  } finally {
+    await owner.close();
+  }
+});
+
+// ---------- Перепроверка BUG-030: новый объект на телефоне ----------
+
+const MIN_TARGET = 43.5;
+
+/** Элемент целиком на экране, не перекрыт (миникартой, панелью, краем) и не меньше 44×44. */
+async function expectFree(page: Page, name: string, target: Locator) {
+  const vp = page.viewportSize()!;
+  await expect(target, name).toBeVisible();
+  const r = await target.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    const points = [
+      [b.x + b.width / 2, b.y + b.height / 2],
+      [b.x + 2, b.y + 2],
+      [b.x + b.width - 2, b.y + b.height - 2],
+    ];
+    const blockers = points
+      .map(([x, y], i) => [i, document.elementFromPoint(x, y)] as const)
+      .filter(([, top]) => !top || !(top === el || el.contains(top) || top.contains(el)))
+      .map(([i, top]) => `${i === 0 ? 'центр' : 'угол'}:${top ? top.getAttribute('class') ?? top.tagName : 'null'}`)
+      // Маркер размера выделенного объекта заходит на угол кнопки у любого объекта и на компьютере тоже.
+      .filter((b) => !(b.startsWith('угол:') && b.includes('selection-handle')));
+    return { x: b.x, y: b.y, w: b.width, h: b.height, blockers };
+  });
+  const where = `${name}: ${JSON.stringify(r)} в окне ${vp.width}x${vp.height}`;
+  expect(r.x, where).toBeGreaterThanOrEqual(0);
+  expect(r.y, where).toBeGreaterThanOrEqual(0);
+  expect(r.x + r.w, where).toBeLessThanOrEqual(vp.width + 0.5);
+  expect(r.y + r.h, where).toBeLessThanOrEqual(vp.height + 0.5);
+  expect(r.blockers, where).toEqual([]);
+  expect(r.w, where).toBeGreaterThanOrEqual(MIN_TARGET);
+  expect(r.h, where).toBeGreaterThanOrEqual(MIN_TARGET);
+}
+
+const expectVideoFree = async (page: Page, id: string) => {
+  await expectFree(page, 'Play', control(page, id, 'Play'));
+  await expectFree(page, 'Seek', slider(page, id, 'Seek'));
+  await expectFree(page, 'Volume', slider(page, id, 'Volume'));
+  await expectFree(page, 'Speed', speed(page, id));
+  await expectFree(page, 'Full screen', control(page, id, 'Full screen'));
+};
+const expectPdfFree = async (page: Page, id: string) => {
+  await expectFree(page, 'Previous page', control(page, id, 'Previous page'));
+  await expectFree(page, 'Next page', control(page, id, 'Next page'));
+  await expect(obj(page, id)).toContainText('Page 1 of 3');
+  const label = obj(page, id).getByText('Page 1 of 3');
+  const b = await boxOf(label);
+  const vp = page.viewportSize()!;
+  expect(b.x).toBeGreaterThanOrEqual(0);
+  expect(b.x + b.width).toBeLessThanOrEqual(vp.width + 0.5);
+  expect(b.y + b.height).toBeLessThanOrEqual(vp.height + 0.5);
+  const overlapped = await label.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return !top || !(top === el || el.contains(top));
+  });
+  expect(overlapped, 'надпись страницы не закрыта').toBe(false);
+};
+
+const PHONES: [string, { width: number; height: number }][] = [
+  ['Pixel 7 portrait', { width: 412, height: 839 }],
+  ['360 px', { width: 360, height: 640 }],
+  ['320 px', { width: 320, height: 568 }],
+  ['landscape', { width: 839, height: 412 }],
+];
+
+const openPhone = (browser: Browser, f: Fx, size: { width: number; height: number }) => openOwner(browser, profileOpts({ ...f, viewport: size }));
+
+/** Какие сочетания пока не выполняются: BUG-031. Остальные должны быть зелёными. */
+const KNOWN_BUG_031 = new Set(['pdf 360 px', 'pdf 320 px', 'pdf landscape', 'video 360 px', 'video 320 px', 'video landscape']);
+
+for (const [title, size] of PHONES) {
+  test(`FIL-02 MOB-06 UI-04 BUG-030 ${title}: a new PDF has its page buttons on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    test.fail(KNOWN_BUG_031.has(`pdf ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const pdf = await uploadViaTool(page, pdf3(), 'pdf');
+      await expectPageColor(page, pdf, 'red');
+      await expectPdfFree(page, pdf);
+      await control(page, pdf, 'Next page').tap({ timeout: 5_000 });
+      await expectPageColor(page, pdf, 'green');
+      const shown = await boxOf(obj(page, pdf).locator('canvas').first());
+      expect(shown.height, 'страница остаётся различимой').toBeGreaterThanOrEqual(80);
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-02 MOB-06 BUG-031 ${title}: PDF pages still turn by tap after zooming the view out`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const pdf = await uploadViaTool(page, pdf3(), 'pdf');
+      await expectPageColor(page, pdf, 'red');
+      const next = control(page, pdf, 'Next page');
+      await zoomOutUntilReachable(page, next);
+      await next.tap({ timeout: 5_000 });
+      await expectPageColor(page, pdf, 'green');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-03 MOB-06 BUG-031 ${title}: video controls can still be tapped after zooming the view out`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const video = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const play = control(page, video, 'Play');
+      await zoomOutUntilReachable(page, play);
+      await play.tap({ timeout: 5_000 });
+      await expect(player(page, video)).toHaveAttribute('data-playing', 'true');
+      // Маркер размера выделенного объекта не уменьшается с масштабом и закрывает кнопку в углу: снять выделение.
+      await page.keyboard.press('Escape');
+      const full = control(page, video, 'Full screen');
+      await zoomOutUntilReachable(page, full);
+      await full.tap({ timeout: 5_000 });
+      await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-03 MOB-06 UI-04 BUG-030 ${title}: a new video has every control on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    test.fail(KNOWN_BUG_031.has(`video ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const video = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      await expectVideoFree(page, video);
+      await startPlaying(page, video, true);
+      await control(page, video, 'Pause').tap({ timeout: 5_000 });
+      await expect(player(page, video)).toHaveAttribute('data-playing', 'false');
+      const frame = await boxOf(obj(page, video).locator('video').first());
+      expect(frame.height, 'кадр остаётся различимым').toBeGreaterThanOrEqual(80);
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-04 MOB-06 UI-04 BUG-030 ${title}: a new audio has its controls on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    test.fail(KNOWN_BUG_031.has(`audio ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const audio = await uploadViaTool(page, fixture('tone.mp3', 'audio/mpeg'), 'audio');
+      await expectFree(page, 'Play', control(page, audio, 'Play'));
+      await expectFree(page, 'Seek', slider(page, audio, 'Seek'));
+      await startPlaying(page, audio, true);
+    } finally {
+      await owner.close();
+    }
+  });
+}
+
+/** Настоящий путь пользователя: All tools → File, объект встаёт в центре текущего вида. */
+async function uploadViaTool(page: Page, file: FilePayload, kind: string): Promise<string> {
+  const before = new Set(await idsOf(ofKind(page, kind)));
+  const chooser = page.waitForEvent('filechooser', { timeout: 10_000 });
+  await tool(page, 'All tools').click();
+  await page.getByRole('dialog', { name: 'All tools' }).getByRole('button', { name: 'File', exact: true }).click();
+  await (await chooser).setFiles(file);
+  let found = '';
+  await expect
+    .poll(
+      async () => {
+        found = (await idsOf(ofKind(page, kind))).find((x) => !before.has(x)) ?? '';
+        return found;
+      },
+      { timeout: 25_000 },
+    )
+    .not.toBe('');
+  return found;
+}
+
+/** Убрать объект, чтобы следующий встал на его место в центре вида. */
+async function selectAndDelete(page: Page, id: string) {
+  await selectObj(page, id, true);
+  await barBtn(page, 'Delete').tap();
+  await expect(obj(page, id)).toHaveCount(0);
+}
+
+test('FIL-02 FIL-03 MOB-06 BUG-030 phone: wide PDF page and a second object right after the first stay usable', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const wide = Buffer.from(pdfOf(PAGE_COLORS).toString('latin1').replaceAll('/MediaBox [0 0 300 400]', '/MediaBox [0 0 900 300]'), 'latin1');
+    const pdf = await uploadViaTool(page, { name: 'wide.pdf', mimeType: 'application/pdf', buffer: wide }, 'pdf');
+    await expect(obj(page, pdf)).toContainText('Page 1 of 3');
+    await expectPdfFree(page, pdf);
+    const second = await uploadViaTool(page, fixture('sample.webm', 'video/webm'), 'video');
+    await expectVideoFree(page, second);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('FIL-03 MOB-06 BUG-030 phone: a new video after the view was moved is still on screen with free controls', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const touch = await Touch.of(page);
+    const a = await onCanvas(page, 0.5, 0.3);
+    const b = { x: a.x + 80, y: a.y };
+    await touch.gesture([a, b], [{ x: a.x - 120, y: a.y + 180 }, { x: b.x - 120, y: b.y + 180 }]);
+    const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+    await expectVideoFree(page, id);
+  } finally {
+    await owner.close();
+  }
+});
+
+test('FIL-02 FIL-03 BUG-030 observation phone: at a zoom below and above 100 % a new video', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const bar = page.getByRole('toolbar', { name: 'View' }).getByRole('button');
+    const report = async (label: string) => {
+      const id = await upload(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const o = await boxOf(obj(page, id));
+      const play = await boxOf(control(page, id, 'Play'));
+      const full = await boxOf(control(page, id, 'Full screen'));
+      const line = `${label}: объект x=${Math.round(o.x)} w=${Math.round(o.width)}; Play x=${Math.round(play.x)} ${Math.round(play.width)}x${Math.round(play.height)}; Full screen x=${Math.round(full.x)} ${Math.round(full.width)}x${Math.round(full.height)}; окно ${page.viewportSize()!.width}`;
+      console.log(`наблюдение BUG-030 ${line}`);
+      test.info().annotations.push({ type: 'наблюдение BUG-030', description: line });
+      return id;
+    };
+    await selectAndDelete(page, await report('100 %'));
+    await bar.first().tap();
+    await bar.first().tap();
+    await page.waitForTimeout(300);
+    await selectAndDelete(page, await report('ниже 100 %'));
+    const labels = await bar.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
+    const plus = labels.findIndex((l) => /zoom in/i.test(l));
+    for (let i = 0; i < 5; i++) await bar.nth(plus).tap();
+    await page.waitForTimeout(300);
+    await report('выше 100 %');
+  } finally {
+    await owner.close();
+  }
+});
+
+test('FIL-02 FIL-03 BUG-030 phone and desktop: an object placed on the phone is usable for the other client; both see one size', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const desk = await openGuest(browser, { baseURL, viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false } as Opts, owner.token, 'QA Desk');
+  try {
+    const video = await uploadViaTool(owner.page, fixture('sample.mp4', 'video/mp4'), 'video');
+    const raw = await untilRaw(owner.page, owner.boardId, (o) => expect(o[video]).toBeTruthy());
+    await expect(obj(desk.page, video)).toBeVisible();
+    await expect(obj(desk.page, video).getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    const inside = await obj(desk.page, video).evaluate((box) => {
+      const b = box.getBoundingClientRect();
+      return [...box.querySelectorAll('button, select, input')].every((c) => {
+        const r = c.getBoundingClientRect();
+        return r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1;
+      });
+    });
+    expect(inside, 'все элементы плеера внутри рамки у второго клиента').toBe(true);
+    await obj(desk.page, video).getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(player(desk.page, video)).toHaveAttribute('data-playing', 'true');
+    await obj(desk.page, video).getByRole('button', { name: 'Pause', exact: true }).click();
+    const pdf = await uploadViaTool(owner.page, pdf3(), 'pdf');
+    await expect(obj(desk.page, pdf)).toBeVisible();
+    await obj(desk.page, pdf).getByRole('button', { name: 'Next page', exact: true }).click();
+    await expectPageColor(desk.page, pdf, 'green');
+    expect(Number(raw[video].width), 'в документе один размер').toBeLessThanOrEqual(412);
+  } finally {
+    await desk.close();
+    await owner.close();
+  }
+});
+
+test('FIL-02 FIL-03 FIL-04 BUG-030 desktop: sizes of new objects did not change', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  desktopOnly(isMobile);
+  const owner = await openOwner(browser, profileOpts({ baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+  const page = owner.page;
+  try {
+    const pdf = await upload(page, pdf3(), 'pdf');
+    const video = await upload(page, fixture('sample.mp4', 'video/mp4'), 'video');
+    const audio = await upload(page, fixture('tone.mp3', 'audio/mpeg'), 'audio');
+    const raw = await untilRaw(page, owner.boardId, (o) => expect(o[audio]).toBeTruthy());
+    // Страница 300×400 меньше предела 480 и не растягивается, панель страниц — 56.
+    expect(raw[pdf].width).toBe(300);
+    expect(raw[pdf].height).toBe(456);
+    const natural = await obj(page, video).locator('video').first().evaluate((v) => new Promise<[number, number]>((res) => {
+      const el = v as HTMLVideoElement;
+      if (el.videoWidth) res([el.videoWidth, el.videoHeight]);
+      else el.onloadedmetadata = () => res([el.videoWidth, el.videoHeight]);
+    }));
+    expect(Number(raw[video].width)).toBeGreaterThanOrEqual(420);
+    expect(Number(raw[video].height)).toBeCloseTo((Number(raw[video].width) * natural[1]) / natural[0] + 112, 0);
+    console.log(`наблюдение BUG-030 desktop: audio ${raw[audio].width}x${raw[audio].height}; video ${raw[video].width}x${raw[video].height}`);
   } finally {
     await owner.close();
   }
