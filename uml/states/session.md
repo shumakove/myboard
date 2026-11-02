@@ -44,7 +44,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   [*] --> Active: POST /api/share/{token}/join {name} → 200 (SHR-02, SHR-03)<br/>create_session(GUEST, uuid4, board_id, display_name)#58;<br/>INSERT sessions, Set-Cookie myboard_board_{board_id.hex} (без Max-Age)
-  Active --> Active: GET /api/share/{token}<br/>find_board_session(cookie, board_id) → participant {name}
+  Active --> Active: GET /api/share/{token}<br/>find_board_session(cookie, board_id) → participant {id, name}
   Active --> Active: WS /api/ws?token={token} (T4.1)<br/>authorize → _participant#58; board_by_token, find_board_session,<br/>перепроверка раз в 5 с
   Active --> Replaced: POST /api/share/{token}/join {name} тем же браузером<br/>delete_session(cookie), затем новая сессия с новым именем
   Replaced --> [*]
@@ -59,7 +59,7 @@ stateDiagram-v2
 - Гостевая сессия не является сессией пользователя досок (`find_subject(…, USER)` её не находит): `/api/boards*`, `/api/folders*` → `401`, `/` и `/boards/:id` уводят на `/login`. Учётная запись не создаётся.
 - Строка `Orphaned` остаётся в базе до сброса ссылки доски — отдельной очистки нет. Открытая вкладка участника узнаёт о сбросе сразу: канал `/api/ws` закрывается кодом `4403`, страница перепроверяет ссылку и показывает Board unavailable (T4.1).
 
-Актуально на: T4.1, 28e1b09. Требования: SHR-02, SHR-03, SHR-04, SHR-05, SHR-06.
+Актуально на: T4.1, 28e1b09 (`participant.id` — BUG-026, a3a65dd). Требования: SHR-02, SHR-03, SHR-04, SHR-05, SHR-06; CMT-02, CMT-04 (`participant.id`).
 
 ## Вкладка пользователя досок
 
@@ -68,7 +68,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   [*] --> loading: RequireAccount смонтирован<br/>check()#58; GET /api/session
-  loading --> signedIn: authenticated#58; true, name, email
+  loading --> signedIn: authenticated#58; true, id, name, email
   loading --> signedOut: authenticated#58; false<br/>или сбой сети без первого ответа
   signedIn --> signedIn: check() → authenticated#58; true<br/>(имя и почта обновлены, ADM-04)
   signedIn --> signedIn: check() — сбой сети<br/>(состояние не меняется)
@@ -87,4 +87,4 @@ stateDiagram-v2
 - Сигнал `401` даёт `api/client.ts`: middleware `onResponse` рассылает запрос подписчикам `onUnauthorized`; `401` входа (`/api/login`) и панели (`/api/admin/*`) вкладку пользователя не выбивают.
 - `LoginPage` вызывает `useAccountSession()` без `watch`: одна проверка при открытии, без опроса. `/t/:token`, `/b/:token`, `/b/:token/embed`, страницы панели — без `RequireAccount`.
 
-Актуально на: T1.4, 6f59eaf. Требования: ACC-03, ACC-05, ADM-04, ADM-05.
+Актуально на: T1.4, 6f59eaf (`id` в `signedIn` — BUG-026, a3a65dd). Требования: ACC-03, ACC-05, ADM-04, ADM-05; CMT-02, CMT-04 (`id`).
