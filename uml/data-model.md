@@ -1,6 +1,6 @@
 # Модель данных PostgreSQL
 
-Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2), `0005_sharing_link` (T3.1), `0006_realtime_board_updates` (T4.1), `0007_history_snapshots_events` (T4.3); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models`, `app.library.models`, `app.realtime.models` и `app.history.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
+Фактические таблицы в `main`. Миграции Alembic только вперёд: `0001` (пустая), `0002_identity` (T1.1), `0003_library_boards` (T2.1), `0004_library_folders` (T2.2), `0005_sharing_link` (T3.1), `0006_realtime_board_updates` (T4.1), `0007_history_snapshots_events` (T4.3), `0008_media` (T7.1); вход пользователя досок (T1.2) новых таблиц не добавил. Модели SQLAlchemy — `app.identity.models`, `app.library.models`, `app.realtime.models`, `app.history.models` и `app.media.models`, базовый класс `app.core.db.Base` с соглашением об именах ограничений (`pk_%(table)s`, `uq_%(table)s_%(column)s`, `ix_%(column_label)s`, `fk_%(table)s_%(column)s_%(referred_table)s`).
 
 ```mermaid
 erDiagram
@@ -72,6 +72,15 @@ erDiagram
     jsonb payload "objects_deleted: {object_ids: [...]}"
     timestamptz created_at "server_default now(); ix_board_events_board_id_created_at (board_id, created_at)"
   }
+  media {
+    uuid id PK "pk_media; имя файла на диске"
+    uuid board_id FK "fk_media_board_id_boards, ix_media_board_id"
+    varchar_80 storage_key "board_id/media_id относительно MEDIA_ROOT"
+    varchar_255 original_name "clean_name, без пути и управляющих символов"
+    varchar_127 mime "объявленный тип из ALLOWED_TYPES (IMG-01, IMG-07)"
+    bigint byte_size "сколько байт записано"
+    timestamptz created_at "server_default now()"
+  }
   admins ||--o{ sessions : "subject_type = admin"
   users ||--o{ sessions : "subject_type = user"
   boards |o--o{ sessions : "board_id, subject_type = guest"
@@ -85,6 +94,7 @@ erDiagram
   boards ||--o{ board_updates : "board_id"
   boards ||--o{ board_snapshots : "board_id"
   boards ||--o{ board_events : "board_id"
+  boards ||--o{ media : "board_id"
 ```
 
 - Связь `sessions → admins/users` полиморфная (`subject_type` + `subject_id`), внешнего ключа в базе нет.
@@ -110,6 +120,9 @@ erDiagram
 - Лента действий (T4.3, `history.events`): строка `board_events` на каждое принятое обновление, добавившее ключи в корень `trash` документа (`event_type = objects_deleted`, `payload = {"object_ids": [...]}`); `actor_name` — имя соединения из сессии (`Peer.name`), а не поле `deletedBy` документа. Повторная загрузка доски из снимка/журнала записей не порождает. Других типов событий пока нет (T8.2).
 - Присутствие (`awareness`) ни в `board_updates`, ни в `board_snapshots` не попадает.
 - Внешние ключи `board_updates`, `board_snapshots`, `board_events` → `boards.id` без каскада.
-- Столбцов обложки и ссылки-шаблона в `boards`, таблицы медиафайлов пока нет — появятся в задачах T7.*, T9.1 и далее.
+- Файлы досок (T7.1, модуль `media`): строка `media` на каждый файл, содержимое — на диске `MEDIA_ROOT/{board_id}/{media_id}` (`storage_key`). Файл пишется во временный `{media_id}.part` и переименовывается только после проверки `MAX_UPLOAD_BYTES`; строка вставляется после этого, поэтому отклонённый файл не оставляет ни файла, ни строки. Копия на другую доску (CVS-20, BUG-028, `copy_to_board`) — новая строка и новый файл с теми же байтами, `original_name` и `mime`; пропавший с диска или ставший больше лимита файл не копируется. Право на файл строки не хранят: оно считается по `board_id` из живых сессий (`can_use_board`, `can_copy_from`), поэтому сброс ссылки (удаление гостевых сессий) сразу закрывает файлы старой cookie, а строка `media` остаётся. Сценарии — [sequences/media-upload.md](sequences/media-upload.md).
+- Внешний ключ `media.board_id → boards.id` без каскада. Удаление доски ставит только `deleted_at`: файлы и строки остаются (окончательного удаления пока нет), а выдаются только по праву на неудалённую доску.
+- Документ Yjs ссылается на файл полем `media` объекта `type: image` ([board-document.md](board-document.md)); внешнего ключа между документом и таблицей нет, замена изображения и удаление фона прежний файл не удаляют.
+- Столбцов обложки и ссылки-шаблона в `boards` пока нет — появятся в задачах T7.4, T9.1.
 
-Актуально на: T6.2, ce46d3f (запись пачкой и строки `keep` при сжатии — BUG-018; таблицы — T4.3, 7477309). Требования: COL-01, COL-07 и COL-08 (основа: снимки и лента), ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06.
+Актуально на: T7.1, 5aec139 (таблица `media`, миграция `0008_media`; T6.2, ce46d3f — запись пачкой и строки `keep` при сжатии — BUG-018; таблицы — T4.3, 7477309). Требования: COL-01, COL-07 и COL-08 (основа: снимки и лента), ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06, IMG-01, IMG-07 и CVS-20 (строка `media`).

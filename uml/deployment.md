@@ -59,13 +59,13 @@ flowchart LR
 flowchart TB
   req[Запрос к caddy] --> m{"path_regexp ^/b/[^/]+/embed/?$"}
   m -->|да| pass[Ответ без запрета фрейма]
-  m -->|нет| deny["header defer:<br/>X-Frame-Options: DENY<br/>Content-Security-Policy: frame-ancestors 'none'"]
+  m -->|нет| deny["header defer:<br/>X-Frame-Options: DENY<br/>?Content-Security-Policy: frame-ancestors 'none'<br/>только если у ответа нет своей политики"]
   pass --> route{"path /api или /api/*"}
   deny --> route
   route -->|да| api[reverse_proxy api:8000]
   route -->|нет| web[reverse_proxy web:80]
 ```
 
-Заголовки ставятся на все ответы (статика и API), кроме `/b/{token}/embed` и `/b/{token}/embed/`.
+Заголовки ставятся на все ответы (статика и API), кроме `/b/{token}/embed` и `/b/{token}/embed/`. Свою политику `Content-Security-Policy` Caddy не затирает (T7.1): её ставит `GET /api/media/{id}`, и в ней тоже есть `frame-ancestors 'none'`.
 
-Актуально на: T0.3, 03e00fa; переменная `SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).
+Актуально на: T0.3, 03e00fa; переменная `SNAPSHOT_INTERVAL_SECONDS` — T4.3, 7477309; `?Content-Security-Policy` в Caddyfile — T7.1, 5aec139. Требования: EMB-04 (часть: фрейм только для `/b/{token}/embed`); ARCHITECTURE.md, разделы 11–12 (сервисы, тома, обязательные переменные, профиль LAN).
