@@ -46,6 +46,28 @@ describe("IMG-01, IMG-07: загрузка файла доски", () => {
     expect(init.headers).toEqual({ "Content-Type": "image/png" });
   });
 
+  it("FIL-01: ярлык файла — kind=file и непрозрачный тип", async () => {
+    const fetchMock = respond(201, MEDIA);
+    const file = new File(["abc"], "a b.zip", { type: "application/zip" });
+
+    await uploadMedia(
+      "board-1",
+      file,
+      "a b.zip",
+      "application/octet-stream",
+      "file",
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("/api/boards/board-1/media?name=a+b.zip&kind=file");
+    expect(init.headers).toEqual({
+      "Content-Type": "application/octet-stream",
+    });
+  });
+
   it("SVG уходит со своим типом", async () => {
     const fetchMock = respond(201, { ...MEDIA, mime: "image/svg+xml" });
     const svg = new Blob(["<svg/>"], { type: "image/svg+xml" });

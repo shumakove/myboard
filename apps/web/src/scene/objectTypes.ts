@@ -26,20 +26,34 @@ export type ObjectType =
   | "reaction"
   | "flipcard"
   | "dice"
-  | "image";
+  | "image"
+  | "file"
+  | "pdf"
+  | "video"
+  | "audio";
 
 /**
  * Типы, которые ставят щелчком или из меню; рисунок появляется только штрихом (DRW-01),
- * реакция — только на объект своим инструментом (RCT-01), изображение — загрузкой файла
- * (IMG-01).
+ * реакция — только на объект своим инструментом (RCT-01), изображение и файлы — загрузкой
+ * файла (IMG-01, FIL-01…FIL-04).
  */
 export type PlaceableType = Exclude<
   ObjectType,
-  "drawing" | "reaction" | "image"
+  "drawing" | "reaction" | "image" | "file" | "pdf" | "video" | "audio"
 >;
 
+const NOT_PLACEABLE: readonly ObjectType[] = [
+  "drawing",
+  "reaction",
+  "image",
+  "file",
+  "pdf",
+  "video",
+  "audio",
+];
+
 export function isPlaceable(type: ObjectType): type is PlaceableType {
-  return type !== "drawing" && type !== "reaction" && type !== "image";
+  return !NOT_PLACEABLE.includes(type);
 }
 
 /**
@@ -325,6 +339,48 @@ export const OBJECT_TYPES: Record<ObjectType, ObjectTypeSpec> = {
     rotatable: true,
     editable: false,
     style: { stroke: "#1f2937", strokeWidth: 0, radius: 0 },
+  },
+  // FIL-01: ярлык файла; FIL-02: PDF; FIL-03, FIL-04: видео и аудио — файлы модуля `media`
+  // (`attachmentData.ts`). Размер PDF и видео задаёт загруженный файл.
+  file: {
+    type: "file",
+    label: "File",
+    plural: "files",
+    width: 260,
+    height: 72,
+    rotatable: true,
+    editable: false,
+    style: {},
+  },
+  pdf: {
+    type: "pdf",
+    label: "PDF",
+    plural: "PDFs",
+    width: 340,
+    height: 480,
+    rotatable: true,
+    editable: false,
+    style: {},
+  },
+  video: {
+    type: "video",
+    label: "Video",
+    plural: "videos",
+    width: 480,
+    height: 382,
+    rotatable: true,
+    editable: false,
+    style: {},
+  },
+  audio: {
+    type: "audio",
+    label: "Audio",
+    plural: "audio files",
+    width: 400,
+    height: 96,
+    rotatable: true,
+    editable: false,
+    style: {},
   },
 };
 

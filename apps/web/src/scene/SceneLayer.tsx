@@ -25,6 +25,7 @@ import { FlipCardView } from "./FlipCardView";
 import { DiceView } from "./DiceView";
 import { diceTitle } from "./diceData";
 import { ImageView } from "./ImageView";
+import { AttachmentView } from "./AttachmentView";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -67,6 +68,7 @@ export interface RichTextHandlers {
  * ветки и кнопки сворачивания (T6.9, MAP-01…MAP-03). Реакция — изображение с автором по
  * наведению, флип-карточка — две стороны с переворотом, кубик — грани и значение (T6.11).
  * Изображение — видимая часть файла с маской, обводкой и отражением (T7.1, IMG-01…IMG-07).
+ * Ярлык файла, PDF, видео и аудио — свой вид файла с плеером у каждого участника (T7.2).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -202,6 +204,12 @@ function SceneObjectView({
           object={object}
           image={object.image}
           still={stillGifs}
+        />
+      ) : object.attachment ? (
+        <AttachmentView
+          key={object.attachment.media}
+          type={object.type}
+          file={object.attachment}
         />
       ) : object.dice ? (
         <DiceView object={object} />

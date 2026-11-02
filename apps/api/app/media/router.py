@@ -1,20 +1,24 @@
-"""HTTP-маршруты модуля media (IMG-01, IMG-07; раздел 8 архитектуры).
+"""HTTP-маршруты модуля media (IMG-01, IMG-07, FIL-01…FIL-04; раздел 8 архитектуры).
 
 - `POST /api/boards/{board_id}/media?name=…` — тело запроса — сам файл, `Content-Type` —
-  его объявленный тип. Загружают владелец и участник по ссылке этой доски.
+  его объявленный тип. Загружают владелец и участник по ссылке этой доски. С `kind=file` —
+  ярлык файла любого типа (FIL-01): тип `application/octet-stream`.
 - `POST /api/boards/{board_id}/media/copies` — копии файлов других досок на эту доску (CVS-20).
-- `GET /api/media/{media_id}` — файл, только при сессии его доски.
+- `GET /api/media/{media_id}` — файл, только при сессии его доски; поддерживает `Range`
+  (перемотка, FIL-03, FIL-04). С `download=<имя>` — скачивание под этим именем (FIL-01).
 
 Без права на доску оба маршрута отвечают одинаковым 404: существует ли доска или файл,
 наружу не сообщается.
 """
 
 import uuid
-from typing import Annotated, Any
+from collections.abc import AsyncIterator
+from typing import Annotated, Any, Literal
 
 import anyio
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
+from starlette.requests import ClientDisconnect
 
 from app.core.db import SessionDep
 from app.identity.http import settings_of
@@ -29,13 +33,17 @@ NOT_FOUND = "Not found"
 UNSUPPORTED = "This file type is not supported"
 TOO_LARGE = "The file is too large"
 
+# Сколько байт сервер готов принять ради ответа 413 (BUG-029). Тело длиннее не читается:
+# соединение оборвётся, и браузер покажет ошибку сети вместо размера.
+REFUSED_BODY_MAX_BYTES = 4 * 1024**3
+
 # Тело запроса — двоичный файл: его схема OpenAPI описывается вручную.
 _UPLOAD_BODY: dict[str, Any] = {
     "requestBody": {
         "required": True,
         "content": {
             mime: {"schema": {"type": "string", "format": "binary"}}
-            for mime in sorted(service.ALLOWED_TYPES)
+            for mime in sorted(service.ALLOWED_TYPES | {service.GENERIC_TYPE})
         },
     }
 }
@@ -59,6 +67,22 @@ def _too_large() -> HTTPException:
     return HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
 
 
+async def _discard(chunks: AsyncIterator[bytes]) -> None:
+    """BUG-029: дочитать тело отклонённой загрузки, ничего не сохраняя.
+
+    Браузер не увидит ответ, пока отправляет файл: соединение, закрытое раньше конца тела,
+    `fetch` считает ошибкой сети.
+    """
+    received = 0
+    try:
+        async for chunk in chunks:
+            received += len(chunk)
+            if received > REFUSED_BODY_MAX_BYTES:
+                return
+    except ClientDisconnect:
+        return
+
+
 @router.post(
     "/boards/{board_id}/media",
     status_code=status.HTTP_201_CREATED,
@@ -74,18 +98,22 @@ async def upload_media(
     request: Request,
     db: SessionDep,
     name: Annotated[str, Query(max_length=NAME_MAX_LENGTH * 4)] = "",
+    kind: Literal["file"] | None = None,
 ) -> MediaOut:
-    """IMG-01, IMG-07: изображение на доску; ответ — id и адрес файла."""
+    """IMG-01, IMG-07, FIL-01…FIL-04: файл на доску; ответ — id и адрес файла."""
     if not await can_use_board(db, board_id, request.cookies):
         raise _not_found()
     try:
-        mime = service.declared_type(request.headers.get("content-type"))
+        mime = service.declared_type(request.headers.get("content-type"), generic=kind == "file")
     except service.UnsupportedTypeError:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, UNSUPPORTED) from None
     settings = settings_of(request)
-    # Объявленная длина больше лимита — отказ, не читая тело.
+    chunks = request.stream()
+    # Объявленная длина больше лимита — на диск ничего не пишется.
     length = request.headers.get("content-length", "")
     if length.isdigit() and int(length) > settings.max_upload_bytes:
+        if int(length) <= REFUSED_BODY_MAX_BYTES:
+            await _discard(chunks)
         raise _too_large()
     try:
         media = await service.save(
@@ -95,9 +123,10 @@ async def upload_media(
             board_id=board_id,
             name=service.clean_name(name),
             mime=mime,
-            chunks=request.stream(),
+            chunks=chunks,
         )
     except service.TooLargeError:
+        await _discard(chunks)
         raise _too_large() from None
     return MediaOut(
         id=media.id,
@@ -152,8 +181,16 @@ async def copy_media(
         404: {"description": NOT_FOUND},
     },
 )
-async def get_media(media_id: uuid.UUID, request: Request, db: SessionDep) -> FileResponse:
-    """Файл доски — только владельцу и участнику по действующей ссылке этой доски."""
+async def get_media(
+    media_id: uuid.UUID,
+    request: Request,
+    db: SessionDep,
+    download: Annotated[str | None, Query(max_length=NAME_MAX_LENGTH * 4)] = None,
+) -> FileResponse:
+    """Файл доски — только владельцу и участнику по действующей ссылке этой доски.
+
+    FIL-01: `download` — имя ярлыка на доске; файл скачивается под ним, а не показывается.
+    """
     media = await service.get(db, media_id)
     if media is None or not await can_use_board(db, media.board_id, request.cookies):
         raise _not_found()
@@ -163,7 +200,7 @@ async def get_media(media_id: uuid.UUID, request: Request, db: SessionDep) -> Fi
     return FileResponse(
         path,
         media_type=media.mime,
-        filename=media.original_name,
-        content_disposition_type="inline",
+        filename=media.original_name if download is None else service.clean_name(download),
+        content_disposition_type="inline" if download is None else "attachment",
         headers=_FILE_HEADERS,
     )

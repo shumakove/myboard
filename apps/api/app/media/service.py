@@ -1,4 +1,4 @@
-"""Загрузка, выдача и копирование файлов досок (IMG-01, IMG-07, CVS-20; раздел 8 архитектуры).
+"""Загрузка, выдача и копирование файлов досок (IMG-*, FIL-*, CVS-20; раздел 8 архитектуры).
 
 Файл лежит в `MEDIA_ROOT/{board_id}/{media_id}`; в базу пишутся ключ, исходное имя,
 MIME и размер. Сервер проверяет объявленный тип и отклоняет файл больше
@@ -15,8 +15,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.media.models import NAME_MAX_LENGTH, Media
 
 # IMG-01, IMG-06, IMG-07: изображения, которые показывает браузер, включая GIF и SVG.
-# Файлы, PDF, видео и аудио добавляет T7.2 (FIL-*).
-ALLOWED_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"})
+_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
+# FIL-02: PDF; FIL-03: mp4, m4v, mov, webm; FIL-04: mp3, m4a, wav, webm — с вариантами
+# типа, которые браузеры и системы объявляют для этих расширений.
+_PDF_TYPES = {"application/pdf"}
+_VIDEO_TYPES = {"video/mp4", "video/x-m4v", "video/quicktime", "video/webm"}
+_AUDIO_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/mp4",
+    "audio/m4a",
+    "audio/x-m4a",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/vnd.wave",
+    "audio/webm",
+}
+ALLOWED_TYPES = frozenset(_IMAGE_TYPES | _PDF_TYPES | _VIDEO_TYPES | _AUDIO_TYPES)
+
+# FIL-01: файл любого типа хранится как непрозрачные данные — браузер его не показывает.
+GENERIC_TYPE = "application/octet-stream"
 
 DEFAULT_NAME = "file"
 _COPY_CHUNK_BYTES = 64 * 1024
@@ -30,10 +49,13 @@ class TooLargeError(Exception):
     """Файл больше `MAX_UPLOAD_BYTES`."""
 
 
-def declared_type(content_type: str | None) -> str:
-    """MIME из заголовка `Content-Type` без параметров; чужой тип — `UnsupportedTypeError`."""
+def declared_type(content_type: str | None, *, generic: bool = False) -> str:
+    """MIME из заголовка `Content-Type` без параметров; чужой тип — `UnsupportedTypeError`.
+
+    `generic` — загрузка ярлыка файла (FIL-01): принимается только `GENERIC_TYPE`.
+    """
     mime = (content_type or "").split(";", 1)[0].strip().lower()
-    if mime not in ALLOWED_TYPES:
+    if mime not in ({GENERIC_TYPE} if generic else ALLOWED_TYPES):
         raise UnsupportedTypeError(mime)
     return mime
 

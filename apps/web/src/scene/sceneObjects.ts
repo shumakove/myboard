@@ -34,6 +34,11 @@ import {
 import { MINDMAP_TYPE, readMindmap, type MindmapShape } from "./mindmapData";
 import { DICE_TYPE, readDice, type DiceShape } from "./diceData";
 import { FLIP_TYPE, readFlip, type FlipShape } from "./flipData";
+import {
+  isAttachmentType,
+  readAttachment,
+  type AttachmentShape,
+} from "./attachmentData";
 import { IMAGE_TYPE, readImage, type ImageShape } from "./imageData";
 import {
   REACTION_TYPE,
@@ -125,6 +130,8 @@ export interface SceneObject extends Frame {
   dice: DiceShape | null;
   /** Изображение (T7.1): файл, обрезка, маска, отражение (IMG-01…IMG-07); иначе `null`. */
   image: ImageShape | null;
+  /** Файл, PDF, видео или аудио (T7.2, FIL-01…FIL-04); у остальных типов `null`. */
+  attachment: AttachmentShape | null;
   /**
    * TBL-05: ячейка таблицы-родителя («строка:столбец»), в которой лежит объект; KBN-02: id
    * столбца канбана-родителя, в котором лежит карточка. `x`, `y` объекта в документе —
@@ -261,6 +268,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       flip,
       dice,
       image,
+      attachment,
     } = object;
     // CVS-08: линию находят по тексту её подписей, таблицу — по тексту ячеек, канбан —
     // по названиям столбцов, интеллект-карту — по названиям узлов, флип-карточку — по
@@ -306,6 +314,7 @@ export function readScene(objects: Y.Map<unknown>): SceneObject[] {
       flip,
       dice,
       image,
+      attachment,
       cell,
     });
   };
@@ -453,6 +462,7 @@ function readObject(id: string, value: unknown): RawObject | null {
     flip: type === FLIP_TYPE ? readFlip(record) : null,
     dice: type === DICE_TYPE ? readDice(record) : null,
     image: type === IMAGE_TYPE ? readImage(record) : null,
+    attachment: isAttachmentType(type) ? readAttachment(record) : null,
     cell: typeof record.cell === "string" ? record.cell : null,
   };
 }
