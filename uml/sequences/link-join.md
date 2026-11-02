@@ -66,7 +66,7 @@ sequenceDiagram
     S->>SS: find_board_session(cookie, board.id)
     SS->>DB: SELECT sessions WHERE id = sha256(cookie)<br/>AND subject_type = guest AND board_id = …
     alt сессия этой доски есть
-      R-->>A: 200 SharedBoard {id, title, participant: {name}}
+      R-->>A: 200 SharedBoard {id, title, participant: {id, name}}
       P-->>G: You joined as {name}. (имя не спрашивается повторно)
     else сессии нет
       R-->>A: 200 SharedBoard {id, title, participant: null}
@@ -86,7 +86,7 @@ sequenceDiagram
         end
         S->>SS: create_session(db, GUEST, uuid4(), board_id, display_name = name)
         SS->>DB: INSERT sessions (id = sha256(token), subject_type = guest, board_id, display_name)
-        R-->>A: 200 SharedBoard {id, title, participant: {name}},<br/>Set-Cookie myboard_board_{board.id.hex} (HttpOnly, SameSite=Lax, Path=/, Secure при https://, без Max-Age)
+        R-->>A: 200 SharedBoard {id, title, participant: {id, name}},<br/>Set-Cookie myboard_board_{board.id.hex} (HttpOnly, SameSite=Lax, Path=/, Secure при https://, без Max-Age)
         P-->>G: You joined as {name}. (SHR-02)
       end
     end
@@ -144,4 +144,6 @@ sequenceDiagram
 - Ссылка на объект (SHR-07) — та же ссылка на доску с `?object={id}`: доступ даёт только токен, после сброса ссылки старая ссылка на объект получает тот же отказ. Переход выполняется один раз на id (`BoardScene`, `linkedRef`); вид запоминается как обычно (CVS-05). Сервер параметр `object` не читает.
 - После входа страница показывает имя участника и открывает `BoardLive` по токену (канал — [sync.md](sync.md), присутствие — [presence.md](presence.md)). `SharedBoard.id` (uuid доски, T5.1) — ключ запомненного вида камеры участника в `localStorage` (CVS-05); доступа он не даёт: канал и файлы участник открывает только по токену и cookie доски.
 
-Актуально на: T5.5, 044e3c2 (ссылка на объект; вход — T5.1, 34125f1). Требования: SHR-01, SHR-02, SHR-03, SHR-05, SHR-07; CVS-05 (поле `id`).
+- `participant.id` — `sessions.subject_id` гостевой сессии, не значение cookie (BUG-026): страница передаёт его в `BoardLive` как `userId`, и комментарии участника не путаются с комментариями тёзки. Повторный `join` создаёт новую сессию и новый `id`.
+
+Актуально на: BUG-026, a3a65dd (`participant.id`; T5.5, 044e3c2 — ссылка на объект; вход — T5.1, 34125f1). Требования: SHR-01, SHR-02, SHR-03, SHR-05, SHR-07; CVS-05 (поле `id`); CMT-02, CMT-04 (`participant.id`).

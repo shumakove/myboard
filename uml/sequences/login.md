@@ -96,10 +96,10 @@ sequenceDiagram
   P->>R: GET /api/session (useAccountSession)
   R->>SS: find_subject(cookie myboard_session, USER)
   alt сессия есть и учётка не отключена
-    R-->>P: 200 {authenticated: true, name, email}
+    R-->>P: 200 {authenticated: true, id, name, email}
     P->>P: Redirect / (ACC-03)
   else
-    R-->>P: 200 {authenticated: false, name: null, email: null}
+    R-->>P: 200 {authenticated: false, id: null, name: null, email: null}
   end
   U->>P: Email, Password, Sign in
   P->>C: signIn(email, password)
@@ -145,7 +145,7 @@ sequenceDiagram
     R-->>B: 200 {authenticated: false}
     B->>B: Redirect /login
   else
-    R-->>B: 200 {authenticated: true, name, email}, Set-Cookie myboard_session с новым Max-Age
+    R-->>B: 200 {authenticated: true, id, name, email}, Set-Cookie myboard_session с новым Max-Age
     Note over B: Boards, имя, Sign out
   end
   B->>R: POST /api/logout (Sign out)
@@ -159,4 +159,6 @@ sequenceDiagram
 - Лимит входа пользователя досок считается отдельно от лимита входа в панель.
 - Выход в одном браузере отзывает только его сессию; скопированная ранее cookie после выхода не действует.
 
-Актуально на: T1.2, f65eab9. Требования: ADM-01, ACC-01, ACC-02, ACC-03.
+- `id` в `AccountSession` — `users.id` (BUG-026): `BoardPage` передаёт его в `BoardLive` как `userId`, и комментарии владельца не путаются с комментариями тёзки.
+
+Актуально на: T1.2, f65eab9 (поле `id` — BUG-026, a3a65dd). Требования: ADM-01, ACC-01, ACC-02, ACC-03; CMT-02, CMT-04 (поле `id`).

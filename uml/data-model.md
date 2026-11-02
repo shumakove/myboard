@@ -21,7 +21,7 @@ erDiagram
   sessions {
     varchar_64 id PK "SHA-256 (hex) значения cookie"
     varchar_16 subject_type "admin (myboard_admin), user (myboard_session) или guest (myboard_board_{board_id.hex})"
-    uuid subject_id "ix_sessions_subject_id; у guest — случайный uuid4"
+    uuid subject_id "ix_sessions_subject_id; у guest — случайный uuid4, он же participant.id (BUG-026)"
     timestamptz expires_at "nullable, пока не заполняется"
     uuid board_id FK "nullable, fk_sessions_board_id_boards, ix_sessions_board_id; только у guest (SHR-02)"
     varchar_200 display_name "nullable; имя участника по ссылке (SHR-03)"
@@ -77,7 +77,7 @@ erDiagram
     uuid board_id FK "fk_media_board_id_boards, ix_media_board_id"
     varchar_80 storage_key "board_id/media_id относительно MEDIA_ROOT"
     varchar_255 original_name "clean_name, без пути и управляющих символов"
-    varchar_127 mime "объявленный тип из ALLOWED_TYPES (IMG-01, IMG-07)"
+    varchar_127 mime "объявленный тип из ALLOWED_TYPES или application/octet-stream у ярлыка (IMG-01, IMG-07, FIL-01…FIL-04)"
     bigint byte_size "сколько байт записано"
     timestamptz created_at "server_default now()"
   }
@@ -120,9 +120,9 @@ erDiagram
 - Лента действий (T4.3, `history.events`): строка `board_events` на каждое принятое обновление, добавившее ключи в корень `trash` документа (`event_type = objects_deleted`, `payload = {"object_ids": [...]}`); `actor_name` — имя соединения из сессии (`Peer.name`), а не поле `deletedBy` документа. Повторная загрузка доски из снимка/журнала записей не порождает. Других типов событий пока нет (T8.2).
 - Присутствие (`awareness`) ни в `board_updates`, ни в `board_snapshots` не попадает.
 - Внешние ключи `board_updates`, `board_snapshots`, `board_events` → `boards.id` без каскада.
-- Файлы досок (T7.1, модуль `media`): строка `media` на каждый файл, содержимое — на диске `MEDIA_ROOT/{board_id}/{media_id}` (`storage_key`). Файл пишется во временный `{media_id}.part` и переименовывается только после проверки `MAX_UPLOAD_BYTES`; строка вставляется после этого, поэтому отклонённый файл не оставляет ни файла, ни строки. Копия на другую доску (CVS-20, BUG-028, `copy_to_board`) — новая строка и новый файл с теми же байтами, `original_name` и `mime`; пропавший с диска или ставший больше лимита файл не копируется. Право на файл строки не хранят: оно считается по `board_id` из живых сессий (`can_use_board`, `can_copy_from`), поэтому сброс ссылки (удаление гостевых сессий) сразу закрывает файлы старой cookie, а строка `media` остаётся. Сценарии — [sequences/media-upload.md](sequences/media-upload.md).
+- Файлы досок (T7.1, модуль `media`): строка `media` на каждый файл, содержимое — на диске `MEDIA_ROOT/{board_id}/{media_id}` (`storage_key`). Файл пишется во временный `{media_id}.part` и переименовывается только после проверки `MAX_UPLOAD_BYTES`; строка вставляется после этого, поэтому отклонённый файл не оставляет ни файла, ни строки (его тело дочитывается без записи, BUG-029). Новых таблиц и столбцов T7.2 не добавил: PDF, видео и аудио — строки со своим `mime`, файл для ярлыка (FIL-01) — `application/octet-stream`; имя на доске и страницы лежат в документе, `original_name` при переименовании ярлыка не меняется. Копия на другую доску (CVS-20, BUG-028, `copy_to_board`) — новая строка и новый файл с теми же байтами, `original_name` и `mime`; пропавший с диска или ставший больше лимита файл не копируется. Право на файл строки не хранят: оно считается по `board_id` из живых сессий (`can_use_board`, `can_copy_from`), поэтому сброс ссылки (удаление гостевых сессий) сразу закрывает файлы старой cookie, а строка `media` остаётся. Сценарии — [sequences/media-upload.md](sequences/media-upload.md).
 - Внешний ключ `media.board_id → boards.id` без каскада. Удаление доски ставит только `deleted_at`: файлы и строки остаются (окончательного удаления пока нет), а выдаются только по праву на неудалённую доску.
-- Документ Yjs ссылается на файл полем `media` объекта `type: image` ([board-document.md](board-document.md)); внешнего ключа между документом и таблицей нет, замена изображения и удаление фона прежний файл не удаляют.
+- Документ Yjs ссылается на файл полем `media` объектов `image`, `file`, `pdf`, `video`, `audio` ([board-document.md](board-document.md)); внешнего ключа между документом и таблицей нет, замена изображения и удаление фона прежний файл не удаляют, а страницы, извлечённые из PDF, ссылаются на файл исходного PDF.
 - Столбцов обложки и ссылки-шаблона в `boards` пока нет — появятся в задачах T7.4, T9.1.
 
-Актуально на: T7.1, 5aec139 (таблица `media`, миграция `0008_media`; T6.2, ce46d3f — запись пачкой и строки `keep` при сжатии — BUG-018; таблицы — T4.3, 7477309). Требования: COL-01, COL-07 и COL-08 (основа: снимки и лента), ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06, IMG-01, IMG-07 и CVS-20 (строка `media`).
+Актуально на: T7.2, 254185c (значения `media.mime`, дочитывание отклонённого тела; BUG-026, a3a65dd — `sessions.subject_id` как `participant.id`; T7.1, 5aec139 — таблица `media`, миграция `0008_media`; T6.2, ce46d3f — запись пачкой и строки `keep` при сжатии — BUG-018; таблицы — T4.3, 7477309). Требования: COL-01, COL-07 и COL-08 (основа: снимки и лента), ADM-01, ADM-02, ADM-03, ADM-04, ADM-05, ADM-06, ADM-07, ACC-01, ACC-03, ACC-04, BRD-01, BRD-02, BRD-03, BRD-04, BRD-05, BRD-06, BRD-07, BRD-09, BRD-10, SHR-01, SHR-02, SHR-03, SHR-05, SHR-06, IMG-01, IMG-07, FIL-01…FIL-04 и CVS-20 (строка `media`), CMT-02, CMT-04 (`subject_id`).
