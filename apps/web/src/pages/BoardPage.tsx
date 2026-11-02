@@ -78,6 +78,7 @@ export function BoardPage() {
             target={{ kind: "owner", boardId: state.board.id }}
             checkAccess={() => ownerHasAccess(state.board.id)}
             userName={account.status === "signedIn" ? account.name : undefined}
+            userId={account.status === "signedIn" ? account.id : undefined}
             boardLink={() => shareUrl(state.board.id)}
           />
           {sharing && (

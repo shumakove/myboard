@@ -52,9 +52,13 @@ class AdminSession(BaseModel):
 
 
 class AccountSession(BaseModel):
-    """Состояние входа пользователя досок: имя и почта или `null` (ACC-01, ACC-03)."""
+    """Состояние входа пользователя досок: id, имя и почта или `null` (ACC-01, ACC-03).
+
+    `id` — чтобы отличать свои сообщения от сообщений тёзки (CMT-02, CMT-04).
+    """
 
     authenticated: bool
+    id: uuid.UUID | None
     name: str | None
     email: str | None
 

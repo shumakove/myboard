@@ -15,6 +15,7 @@ import {
   setResolved,
   setThreadColor,
   type CommentAnchor,
+  type CommentAuthor,
   type CommentThread,
 } from "./commentData";
 import { useCommentReads } from "./commentReads";
@@ -74,8 +75,8 @@ export function useBoardComments({
   /** Объекты на холсте (без скрытого содержимого фреймов). */
   scene: readonly SceneObject[];
   boardId: string;
-  /** Имя участника: автор сообщений и владелец отметок прочитанного. */
-  self: string;
+  /** Участник: автор сообщений и владелец отметок прочитанного. */
+  self: CommentAuthor;
   /** Вид — к точке доски. */
   goTo: (point: Point) => void;
 }) {
@@ -88,10 +89,14 @@ export function useBoardComments({
   const [chosen, setChosen] = useState<string[]>([]);
   const [hideResolved, setHideResolved] = useState(false);
 
-  const people = useMemo(() => participants(threads), [threads]);
+  const { id: selfId, name: selfName } = self;
+  const people = useMemo(
+    () => participants(threads, { id: selfId, name: selfName }),
+    [threads, selfId, selfName],
+  );
   // Ушедшие из обсуждений (ветки нет) из фильтра выпадают сами.
   const filterPeople = useMemo(
-    () => chosen.filter((name) => people.includes(name)),
+    () => chosen.filter((key) => people.some((p) => p.key === key)),
     [chosen, people],
   );
   const shown = useMemo(

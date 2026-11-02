@@ -113,6 +113,7 @@ export function SharedBoardPage() {
         checkAccess={() => participantHasAccess(token)}
         onClosed={recheck}
         userName={board.participant.name}
+        userId={board.participant.id}
         objectId={objectId}
         boardLink={() => Promise.resolve(sharedBoardUrl(token))}
       />

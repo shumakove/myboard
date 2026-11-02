@@ -147,7 +147,7 @@ describe("CMT-02: переписка, «решено», непрочитанны
       board.comments,
       { object: null, x: 0, y: 0 },
       "#e53935",
-      "Bob",
+      { id: null, name: "Bob" },
       "Why?",
     );
     renderScene(board);
@@ -190,7 +190,7 @@ describe("CMT-02: переписка, «решено», непрочитанны
         alice.comments,
         { object: null, x: 0, y: 0 },
         "#1e88e5",
-        "Alice",
+        { id: null, name: "Alice" },
         "Hello Bob",
       ).thread;
     });
@@ -203,7 +203,12 @@ describe("CMT-02: переписка, «решено», непрочитанны
 
     // Пока ветка открыта, новые сообщения в ней сразу прочитаны.
     act(() => {
-      addReply(alice.comments, thread, "Alice", "Are you there?");
+      addReply(
+        alice.comments,
+        thread,
+        { id: null, name: "Alice" },
+        "Are you there?",
+      );
     });
     expect(pins()[0]?.getAttribute("data-unread")).toBeNull();
 
@@ -211,7 +216,7 @@ describe("CMT-02: переписка, «решено», непрочитанны
       within(panel()).getByRole("button", { name: "Close" }),
     );
     act(() => {
-      addReply(alice.comments, thread, "Alice", "Ping");
+      addReply(alice.comments, thread, { id: null, name: "Alice" }, "Ping");
     });
     expect(pins()[0]?.getAttribute("data-unread")).toBe("true");
     await userEvent.click(button());
@@ -257,6 +262,67 @@ describe("CMT-03: цвет комментария", () => {
   });
 });
 
+describe("BUG-026: участник-тёзка владельца", () => {
+  /** Сообщение участника по ссылке с тем же именем, как его пишет другой клиент. */
+  function namesakeThread(board: BoardDocument) {
+    createThread(
+      board.comments,
+      { object: null, x: 0, y: 0 },
+      "#000000",
+      { id: "guest-1", name: "Sam" },
+      "From the namesake",
+    );
+  }
+
+  it("CMT-02: у владельца метка непрочитанная и счётчик на кнопке Comments", () => {
+    const board = createBoardDocument();
+    namesakeThread(board);
+    renderScene(board, "Sam", { userId: "user-1" });
+    expect(pins()[0]?.dataset.unread).toBe("true");
+    expect(
+      within(screen.getByRole("toolbar", { name: "Tools" })).getByRole(
+        "button",
+        { name: /^Comments.*1/ },
+      ),
+    ).toBeTruthy();
+  });
+
+  it("CMT-04: в фильтре владелец и участник — две кнопки", async () => {
+    const board = createBoardDocument();
+    namesakeThread(board);
+    createThread(
+      board.comments,
+      { object: null, x: 50, y: 0 },
+      "#000000",
+      { id: "user-1", name: "Sam" },
+      "From the owner",
+    );
+    renderScene(board, "Sam", { userId: "user-1" });
+    await userEvent.click(
+      within(screen.getByRole("toolbar", { name: "Tools" })).getByRole(
+        "button",
+        { name: /^Comments/ },
+      ),
+    );
+    const people = within(panel()).getByRole("group", {
+      name: "Filter by people",
+    });
+    expect(
+      within(people)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Sam", "Sam (you)"]);
+    await userEvent.click(
+      within(people).getByRole("button", { name: "Sam (you)" }),
+    );
+    const list = within(panel()).getByRole("list", {
+      name: "Comment threads",
+    });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(list).getByText("From the owner")).toBeTruthy();
+  });
+});
+
 describe("CMT-04: фильтр по участникам обсуждения", () => {
   it("выбранный участник оставляет ветки, где он писал, — в списке и на холсте", async () => {
     const { board } = stickyBoard();
@@ -265,7 +331,7 @@ describe("CMT-04: фильтр по участникам обсуждения", 
       board.comments,
       at(0),
       "#000000",
-      "Alice",
+      { id: null, name: "Alice" },
       "Alpha",
       new Date("2026-10-27T10:01:00Z"),
     );
@@ -273,11 +339,16 @@ describe("CMT-04: фильтр по участникам обсуждения", 
       board.comments,
       at(50),
       "#000000",
-      "Bob",
+      { id: null, name: "Bob" },
       "Beta",
       new Date("2026-10-27T10:02:00Z"),
     );
-    addReply(board.comments, first.thread, "Guest", "Reply from guest");
+    addReply(
+      board.comments,
+      first.thread,
+      { id: null, name: "Guest" },
+      "Reply from guest",
+    );
     renderScene(board, "Alice");
     await userEvent.click(
       within(screen.getByRole("toolbar", { name: "Tools" })).getByRole(
@@ -323,7 +394,7 @@ describe("CMT-04: фильтр по участникам обсуждения", 
       board.comments,
       { object: null, x: 0, y: 0 },
       "#000000",
-      "Bob",
+      { id: null, name: "Bob" },
       "Done",
     );
     renderScene(board);

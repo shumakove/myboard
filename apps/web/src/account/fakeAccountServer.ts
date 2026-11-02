@@ -2,6 +2,7 @@
 import { vi } from "vitest";
 
 export const USER = {
+  id: "4d1f6a52-3c1e-4b7a-9d55-0a1b2c3d4e5f",
   name: "Alice",
   email: "alice@example.com",
   password: "alice-pw",
@@ -74,8 +75,13 @@ export function installFakeAccountServer(
     if (route === "GET /api/session") {
       return json(
         server.signedIn
-          ? { authenticated: true, name: server.name, email: USER.email }
-          : { authenticated: false, name: null, email: null },
+          ? {
+              authenticated: true,
+              id: USER.id,
+              name: server.name,
+              email: USER.email,
+            }
+          : { authenticated: false, id: null, name: null, email: null },
       );
     }
     if (route === "POST /api/login") {

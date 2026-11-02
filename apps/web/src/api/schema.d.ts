@@ -519,11 +519,15 @@ export interface components {
     schemas: {
         /**
          * AccountSession
-         * @description Состояние входа пользователя досок: имя и почта или `null` (ACC-01, ACC-03).
+         * @description Состояние входа пользователя досок: id, имя и почта или `null` (ACC-01, ACC-03).
+         *
+         *     `id` — чтобы отличать свои сообщения от сообщений тёзки (CMT-02, CMT-04).
          */
         AccountSession: {
             /** Authenticated */
             authenticated: boolean;
+            /** Id */
+            id: string | null;
             /** Name */
             name: string | null;
             /** Email */
@@ -702,8 +706,15 @@ export interface components {
         /**
          * Participant
          * @description Участник по ссылке: отображаемое имя из сессии этой доски (SHR-03).
+         *
+         *     `id` — субъект сессии, не значение cookie: отличает участника от тёзки (CMT-02, CMT-04).
          */
         Participant: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
             /** Name */
             name: string;
         };
