@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { copyMedia, UploadError } from "../media/mediaApi";
+import type { RunFileTask } from "../media/useFileTask";
 import { moveToTrash, type BoardDocument } from "../realtime/boardDocument";
 import type { Point } from "../realtime/messages";
 import {
@@ -11,7 +13,9 @@ import {
 import {
   copyObjects,
   DUPLICATE_OFFSET,
+  foreignMedia,
   pasteObjects,
+  withMedia,
   saveClip,
   type Clip,
 } from "./clipboard";
@@ -52,6 +56,8 @@ import { placement } from "./tools";
 import { pasteTableGrid, stickiesFromGrid } from "./tables";
 import { arrangeKanbans, kanbansOf } from "./kanbans";
 import type { Grid } from "./tableExchange";
+
+const SOME_NOT_COPIED = "Some images could not be copied to this board.";
 
 /** Команды над выделенным; `null` — команда сейчас недоступна. */
 export interface SceneCommands {
@@ -98,6 +104,9 @@ export interface SceneCommands {
 
 export interface CommandContext {
   board: BoardDocument;
+  boardId: string;
+  /** Долгое действие с файлами: копирование на эту доску при вставке (CVS-20). */
+  runFileTask: RunFileTask;
   scene: readonly SceneObject[];
   selection: readonly string[];
   select: (ids: string[]) => void;
@@ -121,6 +130,8 @@ export interface CommandContext {
 export function useSceneCommands(context: CommandContext): SceneCommands {
   const {
     board,
+    boardId,
+    runFileTask,
     scene,
     selection,
     select,
@@ -156,8 +167,10 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
     };
 
     const copy = () => {
-      const clip = copyObjects(objects, readScene(objects), selection);
-      if (clip !== null) saveClip(clip);
+      const copied = copyObjects(objects, readScene(objects), selection);
+      if (copied === null) return null;
+      const clip = { ...copied, board: boardId };
+      saveClip(clip);
       return clip;
     };
 
@@ -204,14 +217,30 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
         return clip;
       }),
       paste: (clip, at) => {
-        select(
-          pasteObjects(
-            objects,
-            clip,
-            { kind: "at", point: at ?? pastePoint(), gridStep },
-            actor,
-          ),
-        );
+        const point = at ?? pastePoint();
+        const insert = (ready: Clip) => {
+          select(
+            pasteObjects(
+              objects,
+              ready,
+              { kind: "at", point, gridStep },
+              actor,
+            ),
+          );
+        };
+        const foreign = foreignMedia(clip, boardId);
+        if (foreign.length === 0) {
+          insert(clip);
+          return;
+        }
+        // CVS-20, SHR-04: объект появляется, когда его файл уже лежит на этой доске.
+        void runFileTask("Copying images…", async () => {
+          const copies = await copyMedia(boardId, foreign);
+          insert(withMedia(clip, copies));
+          if (foreign.some((id) => copies[id] === undefined)) {
+            throw new UploadError(0, SOME_NOT_COPIED);
+          }
+        });
       },
       pasteText: (text, html = "") => {
         const at = placement("text", pastePoint(), gridStep);
@@ -350,6 +379,8 @@ export function useSceneCommands(context: CommandContext): SceneCommands {
     };
   }, [
     board,
+    boardId,
+    runFileTask,
     scene,
     selection,
     select,

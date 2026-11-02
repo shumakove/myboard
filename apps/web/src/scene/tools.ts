@@ -18,7 +18,9 @@ import {
  *   оставляет временный след (DRW-05);
  * - `comment` — щелчок по объекту или пустому месту начинает ветку комментария (CMT-01);
  * - `react` — нажатие на объект ставит на него реакцию, удержание её растит (RCT-01,
- *   RCT-03).
+ *   RCT-03);
+ * - `upload` — выбор инструмента открывает выбор файла, изображение встаёт в центре вида
+ *   (IMG-01, IMG-07); активным инструмент не становится.
  *
  * `key` — горячая клавиша инструмента без модификаторов (CVS-25): код клавиши
  * `KeyboardEvent.code`, чтобы она работала при любой раскладке.
@@ -30,6 +32,7 @@ export type Tool = { label: string; hint: string; key: string } & (
   | { kind: "draw"; id: DrawToolId }
   | { kind: "comment"; id: "comment" }
   | { kind: "react"; id: "reaction" }
+  | { kind: "upload"; id: "image" }
 );
 
 /** Инструменты рисования (T6.5). */
@@ -147,6 +150,13 @@ export const TOOLS: readonly Tool[] = [
     label: "Reaction",
     key: "KeyU",
     hint: "Click an object to stamp the chosen reaction on it; hold to make it bigger.",
+  },
+  {
+    kind: "upload",
+    id: "image",
+    label: "Image",
+    key: "KeyG",
+    hint: "Upload an image (PNG, JPEG, GIF, WebP or SVG) to the center of the view. You can also paste an image with Ctrl/⌘+V.",
   },
 ];
 

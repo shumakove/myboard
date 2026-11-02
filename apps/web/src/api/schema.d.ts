@@ -449,6 +449,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/boards/{board_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Media
+         * @description IMG-01, IMG-07: изображение на доску; ответ — id и адрес файла.
+         */
+        post: operations["upload_media_api_boards__board_id__media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/boards/{board_id}/media/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Media
+         * @description CVS-20: вставка на другую доску — файл становится файлом этой доски (BUG-028).
+         *
+         *     Файл без права на его доску неотличим от несуществующего: в ответе его просто нет.
+         */
+        post: operations["copy_media_api_boards__board_id__media_copies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Media
+         * @description Файл доски — только владельцу и участнику по действующей ссылке этой доски.
+         */
+        get: operations["get_media_api_media__media_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -597,6 +659,43 @@ export interface components {
         JoinRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * MediaCopiesOut
+         * @description Исходный id → id файла на этой доске; недоступных файлов здесь нет.
+         */
+        MediaCopiesOut: {
+            /** Copies */
+            copies: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * MediaCopyIn
+         * @description Файлы других досок, которые нужны на этой доске (CVS-20).
+         */
+        MediaCopyIn: {
+            /** Media */
+            media: string[];
+        };
+        /**
+         * MediaOut
+         * @description Загруженный файл: адрес `url` открывается только с сессией этой доски.
+         */
+        MediaOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Mime */
+            mime: string;
+            /** Size */
+            size: number;
+            /** Url */
+            url: string;
         };
         /**
          * Participant
@@ -1698,6 +1797,148 @@ export interface operations {
                 };
             };
             /** @description Link is not available */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_media_api_boards__board_id__media_post: {
+        parameters: {
+            query?: {
+                name?: string;
+            };
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/gif": string;
+                "image/jpeg": string;
+                "image/png": string;
+                "image/svg+xml": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaOut"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description This file type is not supported */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_media_api_boards__board_id__media_copies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                board_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaCopyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaCopiesOut"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_media_api_media__media_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                media_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Not found */
             404: {
                 headers: {
                     [name: string]: unknown;
