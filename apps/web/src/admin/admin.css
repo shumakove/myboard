@@ -1,6 +1,8 @@
 /* Административная панель: форма новой учётки и таблица учёток на панелях. */
 .admin-page {
   display: grid;
+  /* BUG-021: колонка не шире экрана: иначе широкая таблица растягивает всю страницу. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   max-width: 960px;
 }
@@ -55,6 +57,13 @@
 
 /* Длинная почта переносится, чтобы таблица помещалась на телефоне. */
 .admin-email {
+  overflow-wrap: anywhere;
+}
+
+/* BUG-021: длинное имя переносится и не отнимает ширину у почты в соседней колонке. */
+.admin-name {
+  display: block;
+  max-width: 24ch;
   overflow-wrap: anywhere;
 }
 

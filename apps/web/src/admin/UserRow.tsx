@@ -53,7 +53,9 @@ export function UserRow({
         </td>
       ) : (
         <>
-          <td>{user.name}</td>
+          <td>
+            <span className="admin-name">{user.name}</span>
+          </td>
           <td className="admin-email">{user.email}</td>
           <td className="admin-status" data-disabled={user.disabled}>
             {status}
