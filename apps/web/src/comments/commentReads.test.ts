@@ -17,23 +17,54 @@ function thread(...messages: [id: string, author: string][]): CommentThread {
     messages: messages.map(([id, author]) => ({
       id,
       author,
+      authorId: null,
       text: id,
       at: "2026-10-27T10:00:00Z",
     })),
   };
 }
 
+describe("BUG-026: тёзки — разные люди", () => {
+  const OWNER = { id: "user-1", name: "Sam" };
+
+  function byGuest(author: string, authorId: string | null): CommentThread {
+    return {
+      ...thread(["m1", author]),
+      messages: [
+        { id: "m1", author, authorId, text: "Hi", at: "2026-10-27T10:00:00Z" },
+      ],
+    };
+  }
+
+  it("сообщение участника с таким же именем — непрочитанное", () => {
+    expect(unreadCount(byGuest("Sam", "guest-1"), new Set(), OWNER)).toBe(1);
+  });
+
+  it("своё сообщение с другого устройства — прочитанное: id тот же", () => {
+    expect(unreadCount(byGuest("Sam", "user-1"), new Set(), OWNER)).toBe(0);
+  });
+
+  it("старое сообщение без id — сравнение по имени, как раньше", () => {
+    expect(unreadCount(byGuest("Sam", null), new Set(), OWNER)).toBe(0);
+    expect(unreadCount(byGuest("Eve", null), new Set(), OWNER)).toBe(1);
+  });
+});
+
 describe("CMT-02: непрочитанные — свои у каждого участника", () => {
   it("непрочитанные — чужие сообщения, которые участник ещё не открыл", () => {
     const t = thread(["m1", "Alice"], ["m2", "Bob"], ["m3", "Bob"]);
-    expect(unreadCount(t, new Set(), "Alice")).toBe(2);
-    expect(unreadCount(t, new Set(["m2"]), "Alice")).toBe(1);
-    expect(unreadCount(t, new Set(), "Bob")).toBe(1);
+    expect(unreadCount(t, new Set(), { id: null, name: "Alice" })).toBe(2);
+    expect(unreadCount(t, new Set(["m2"]), { id: null, name: "Alice" })).toBe(
+      1,
+    );
+    expect(unreadCount(t, new Set(), { id: null, name: "Bob" })).toBe(1);
   });
 
   it("отметка прочитанного переживает перезагрузку и не касается другой доски и участника", () => {
     const t = thread(["m1", "Alice"], ["m2", "Alice"]);
-    const first = renderHook(() => useCommentReads("board-1", "Bob"));
+    const first = renderHook(() =>
+      useCommentReads("board-1", { id: null, name: "Bob" }),
+    );
     expect(first.result.current.unread(t)).toBe(2);
     act(() => {
       first.result.current.markRead(["m1"]);
@@ -41,18 +72,26 @@ describe("CMT-02: непрочитанные — свои у каждого уч
     expect(first.result.current.unread(t)).toBe(1);
     first.unmount();
 
-    const again = renderHook(() => useCommentReads("board-1", "Bob"));
+    const again = renderHook(() =>
+      useCommentReads("board-1", { id: null, name: "Bob" }),
+    );
     expect(again.result.current.unread(t)).toBe(1);
-    const otherBoard = renderHook(() => useCommentReads("board-2", "Bob"));
+    const otherBoard = renderHook(() =>
+      useCommentReads("board-2", { id: null, name: "Bob" }),
+    );
     expect(otherBoard.result.current.unread(t)).toBe(2);
-    const otherPerson = renderHook(() => useCommentReads("board-1", "Carol"));
+    const otherPerson = renderHook(() =>
+      useCommentReads("board-1", { id: null, name: "Carol" }),
+    );
     expect(otherPerson.result.current.unread(t)).toBe(2);
   });
 
   it("испорченная запись в хранилище — всё непрочитано", () => {
     localStorage.setItem("myboard.commentReads.board-1.Bob", "{oops");
     const t = thread(["m1", "Alice"]);
-    const { result } = renderHook(() => useCommentReads("board-1", "Bob"));
+    const { result } = renderHook(() =>
+      useCommentReads("board-1", { id: null, name: "Bob" }),
+    );
     expect(result.current.unread(t)).toBe(1);
   });
 });

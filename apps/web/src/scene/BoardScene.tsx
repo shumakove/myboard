@@ -220,6 +220,7 @@ export function BoardScene({
   camera,
   wheelMode,
   userName,
+  userId,
   stageStyle,
   stageAttributes,
   onMove,
@@ -239,6 +240,8 @@ export function BoardScene({
   wheelMode: WheelMode;
   /** Имя участника: автор правок (CVS-22) и удаливший в корзине. */
   userName: string;
+  /** Id участника из сессии: свои комментарии — не по имени (BUG-026). */
+  userId?: string;
   stageStyle?: CSSProperties;
   stageAttributes?: Record<`data-${string}`, string | undefined>;
   onMove: (update: CameraUpdate) => void;
@@ -259,6 +262,10 @@ export function BoardScene({
 }) {
   const { objects } = board;
   const actor = userName;
+  const commentAuthor = useMemo(
+    () => ({ id: userId ?? null, name: userName }),
+    [userId, userName],
+  );
   const scene = useSceneObjects(objects);
   // FRM-04: скрытое содержимое фреймов не показывается и не выделяется.
   const visible = useMemo(() => scene.filter((o) => !o.hidden), [scene]);
@@ -330,7 +337,7 @@ export function BoardScene({
     comments: board.comments,
     scene: visible,
     boardId,
-    self: actor,
+    self: commentAuthor,
     goTo: useCallback(
       (point: Point) => {
         onMove((current) => centerOn(current, point));

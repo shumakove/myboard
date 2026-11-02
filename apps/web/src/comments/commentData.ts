@@ -23,9 +23,27 @@ export interface CommentMessage {
   id: string;
   /** Имя автора из сессии: владелец — имя учётки, участник — введённое имя. */
   author: string;
+  /** Id автора из сессии; у сообщений, записанных раньше BUG-026, его нет. */
+  authorId: string | null;
   text: string;
   /** Момент отправки, ISO 8601. */
   at: string;
+}
+
+/** Кто пишет: имя может совпасть у разных людей (SHR-03), `id` — нет. */
+export interface CommentAuthor {
+  id: string | null;
+  name: string;
+}
+
+/** CMT-02: своё ли сообщение; без id у одной из сторон — сравнение по имени. */
+export function isOwnMessage(
+  message: CommentMessage,
+  self: CommentAuthor,
+): boolean {
+  return message.authorId !== null && self.id !== null
+    ? message.authorId === self.id
+    : message.author === self.name;
 }
 
 export interface CommentThread {
@@ -95,12 +113,18 @@ function readAnchor(value: unknown): CommentAnchor | null {
 function readMessage(value: unknown): CommentMessage | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;
-  const { id, author, text, at } = raw;
+  const { id, author, authorId, text, at } = raw;
   return typeof id === "string" &&
     typeof author === "string" &&
     typeof text === "string" &&
     typeof at === "string"
-    ? { id, author, text, at }
+    ? {
+        id,
+        author,
+        authorId: typeof authorId === "string" ? authorId : null,
+        text,
+        at,
+      }
     : null;
 }
 
@@ -116,8 +140,18 @@ function threadMap(
   return map instanceof Y.Map ? map : null;
 }
 
-function message(author: string, text: string, now: Date): CommentMessage {
-  return { id: newObjectId(), author, text, at: now.toISOString() };
+function message(
+  author: CommentAuthor,
+  text: string,
+  now: Date,
+): CommentMessage {
+  return {
+    id: newObjectId(),
+    author: author.name,
+    authorId: author.id,
+    text,
+    at: now.toISOString(),
+  };
 }
 
 /** CMT-01: новая ветка с первым сообщением. Возвращает id ветки и id сообщения. */
@@ -125,7 +159,7 @@ export function createThread(
   comments: Y.Map<unknown>,
   anchor: CommentAnchor,
   color: string,
-  author: string,
+  author: CommentAuthor,
   text: string,
   now: Date = new Date(),
 ): { thread: string; message: string } {
@@ -138,7 +172,7 @@ export function createThread(
   thread.set("color", color);
   thread.set("resolved", false);
   thread.set("createdAt", first.at);
-  thread.set("createdBy", author);
+  thread.set("createdBy", author.name);
   thread.set("messages", messages);
   comments.set(id, thread);
   return { thread: id, message: first.id };
@@ -148,7 +182,7 @@ export function createThread(
 export function addReply(
   comments: Y.Map<unknown>,
   id: string,
-  author: string,
+  author: CommentAuthor,
   text: string,
   now: Date = new Date(),
 ): string | null {
@@ -223,16 +257,47 @@ export function pinPoint(
   return { x: middle.x + offset.x, y: middle.y + offset.y };
 }
 
-/** CMT-04: участники обсуждений — авторы сообщений, по алфавиту. */
-export function participants(threads: readonly CommentThread[]): string[] {
-  const names = new Set(
-    threads.flatMap((t) => t.messages.map((m) => m.author)),
-  );
-  return [...names].sort((a, b) => a.localeCompare(b));
+/** CMT-04: участник обсуждения в фильтре. */
+export interface CommentPerson {
+  key: string;
+  label: string;
+}
+
+function personKey(message: CommentMessage): string {
+  return message.authorId ?? message.author;
 }
 
 /**
- * CMT-04: ветки, в обсуждении которых участвовал хотя бы один из `people`; пустой
+ * CMT-04: участники обсуждений — авторы сообщений, по алфавиту. Тёзки — разные люди
+ * (BUG-026): себя участник видит с пометкой «(you)», остальные тёзки различаются номером.
+ */
+export function participants(
+  threads: readonly CommentThread[],
+  self: CommentAuthor,
+): CommentPerson[] {
+  const names = new Map<string, string>();
+  for (const message of threads.flatMap((t) => t.messages)) {
+    names.set(personKey(message), message.author);
+  }
+  const sorted = [...names].sort(
+    ([keyA, a], [keyB, b]) => a.localeCompare(b) || keyA.localeCompare(keyB),
+  );
+  const repeats = new Map<string, number>();
+  for (const [, name] of sorted) {
+    repeats.set(name, (repeats.get(name) ?? 0) + 1);
+  }
+  const others = new Map<string, number>();
+  return sorted.map(([key, name]) => {
+    if (repeats.get(name) === 1) return { key, label: name };
+    if (key === self.id) return { key, label: `${name} (you)` };
+    const place = (others.get(name) ?? 0) + 1;
+    others.set(name, place);
+    return { key, label: place === 1 ? name : `${name} (${String(place)})` };
+  });
+}
+
+/**
+ * CMT-04: ветки, в обсуждении которых участвовал хотя бы один из `people` (ключи); пустой
  * список — все ветки. `hideResolved` убирает решённые.
  */
 export function filterThreads(
@@ -244,6 +309,6 @@ export function filterThreads(
     (t) =>
       !(hideResolved && t.resolved) &&
       (people.length === 0 ||
-        t.messages.some((m) => people.includes(m.author))),
+        t.messages.some((m) => people.includes(personKey(m)))),
   );
 }

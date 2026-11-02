@@ -34,6 +34,7 @@ export function BoardWorkspace({
   board,
   presence,
   userName = "",
+  userId,
   focusObject = null,
   boardLink,
   loaded = true,
@@ -43,6 +44,8 @@ export function BoardWorkspace({
   presence: BoardPresence;
   /** Имя из сессии — пока сервер не прислал присутствие (автор правок, CVS-22). */
   userName?: string;
+  /** Id из сессии: свои комментарии — не по имени (BUG-026). */
+  userId?: string;
   /** SHR-07: объект из ссылки, когда документ загружен. */
   focusObject?: string | null;
   /** SHR-07: действующая ссылка на доску — для ссылки на объект. */
@@ -123,6 +126,7 @@ export function BoardWorkspace({
           camera={camera}
           wheelMode={wheelMode}
           userName={selfName}
+          userId={userId}
           focusObject={focusObject}
           boardLink={boardLink}
           loaded={loaded}

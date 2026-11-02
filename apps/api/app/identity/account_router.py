@@ -100,6 +100,6 @@ async def get_session(
 ) -> AccountSession:
     """Вошёл ли браузер. Отвечает 200 и без сессии; живую сессию продлевает (ACC-03)."""
     if user is None or token is None:
-        return AccountSession(authenticated=False, name=None, email=None)
+        return AccountSession(authenticated=False, id=None, name=None, email=None)
     _keep_session_cookie(response, request, token)
-    return AccountSession(authenticated=True, name=user.name, email=user.email)
+    return AccountSession(authenticated=True, id=user.id, name=user.name, email=user.email)

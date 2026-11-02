@@ -3,6 +3,7 @@ import { Button, FloatingPanel, Switch } from "../ui";
 import {
   COMMENT_COLORS,
   type CommentMessage,
+  type CommentPerson,
   type CommentThread,
 } from "./commentData";
 
@@ -14,7 +15,8 @@ export type CommentView =
 
 export interface CommentFilter {
   /** CMT-04: все участники обсуждений и выбранные из них (пусто — все ветки). */
-  people: readonly string[];
+  people: readonly CommentPerson[];
+  /** Ключи выбранных участников. */
   chosen: readonly string[];
   hideResolved: boolean;
 }
@@ -145,23 +147,23 @@ function ThreadList({
           aria-label="Filter by people"
           className="comment-people"
         >
-          {people.map((name) => {
-            const on = chosen.includes(name);
+          {people.map(({ key, label }) => {
+            const on = chosen.includes(key);
             return (
               <Button
-                key={name}
+                key={key}
                 variant="ghost"
                 aria-pressed={on}
                 onClick={() => {
                   onFilter({
                     hideResolved,
                     chosen: on
-                      ? chosen.filter((n) => n !== name)
-                      : [...chosen, name],
+                      ? chosen.filter((k) => k !== key)
+                      : [...chosen, key],
                   });
                 }}
               >
-                {name}
+                {label}
               </Button>
             );
           })}
