@@ -9,8 +9,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser, Download, Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { canvas, docSeenByLateClient, dragBy, openGuest, openOwner, profileOpts, Touch, type Opts } from './camera';
-import { allObjects, boxOf, obj, onCanvas, seed, selectionBar, tool, type Obj } from './scene';
+import { canvas, docSeenByLateClient, dragBy, minimap, openGuest, openOwner, profileOpts, Touch, type Opts } from './camera';
+import { allObjects, boxOf, handle, obj, onCanvas, seed, selectionBar, tool, type Obj } from './scene';
 
 type Fx = { baseURL?: string; viewport: Opts['viewport']; hasTouch: boolean; isMobile: boolean; userAgent?: string; deviceScaleFactor?: number };
 type Raw = Record<string, Record<string, unknown>>;
@@ -1438,13 +1438,9 @@ const PHONES: [string, { width: number; height: number }][] = [
 
 const openPhone = (browser: Browser, f: Fx, size: { width: number; height: number }) => openOwner(browser, profileOpts({ ...f, viewport: size }));
 
-/** Какие сочетания пока не выполняются: BUG-031. Остальные должны быть зелёными. */
-const KNOWN_BUG_031 = new Set(['pdf 360 px', 'pdf 320 px', 'pdf landscape', 'video 360 px', 'video 320 px', 'video landscape']);
-
 for (const [title, size] of PHONES) {
   test(`FIL-02 MOB-06 UI-04 BUG-030 ${title}: a new PDF has its page buttons on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
     mobileOnly(isMobile);
-    test.fail(KNOWN_BUG_031.has(`pdf ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
     const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
     const page = owner.page;
     try {
@@ -1499,7 +1495,6 @@ for (const [title, size] of PHONES) {
 
   test(`FIL-03 MOB-06 UI-04 BUG-030 ${title}: a new video has every control on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
     mobileOnly(isMobile);
-    test.fail(KNOWN_BUG_031.has(`video ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
     const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
     const page = owner.page;
     try {
@@ -1517,7 +1512,6 @@ for (const [title, size] of PHONES) {
 
   test(`FIL-04 MOB-06 UI-04 BUG-030 ${title}: a new audio has its controls on screen, free, at least 44 px, working by tap`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
     mobileOnly(isMobile);
-    test.fail(KNOWN_BUG_031.has(`audio ${title}`), 'BUG-031 (minor): открыт, убрать пометку после исправления');
     const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
     const page = owner.page;
     try {
@@ -1676,3 +1670,395 @@ test('FIL-02 FIL-03 FIL-04 BUG-030 desktop: sizes of new objects did not change'
     await owner.close();
   }
 });
+
+// ---------- Перепроверка BUG-031: низкий и узкий телефон, панель выделения, размер и положение ----------
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+/** Прямоугольник кадра, который реально показан: у video и canvas вписанный, с полями по object-fit. */
+async function pictureBox(l: Locator) {
+  return l.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    const v = el as HTMLVideoElement & HTMLCanvasElement;
+    const nw = v.videoWidth || v.width || b.width;
+    const nh = v.videoHeight || v.height || b.height;
+    const k = Math.min(b.width / nw, b.height / nh);
+    const w = nw * k;
+    const h = nh * k;
+    return { x: b.x + (b.width - w) / 2, y: b.y + (b.height - h) / 2, width: w, height: h, boxW: b.width, boxH: b.height };
+  });
+}
+
+const intersection = (a: Rect, b: Rect) => {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+};
+
+/** Снять выделение касанием пустого места холста: левый нижний угол ниже объекта. */
+async function deselectByTap(page: Page, id: string) {
+  const c = await boxOf(canvas(page));
+  const o = await boxOf(obj(page, id));
+  const y = Math.min(c.y + c.height - 6, Math.max(o.y + o.height + 16, c.y + c.height - 30));
+  await page.touchscreen.tap(c.x + 8, y);
+  await expect(obj(page, id)).toHaveAttribute('aria-selected', 'false');
+  await expect(selectionBar(page)).toHaveCount(0);
+}
+
+/** Сетка точек по прямоугольнику: всё, что видно, принадлежит объекту (ничто не закрывает кадр). */
+async function coveredPoints(page: Page, box: Rect, id: string) {
+  return page.evaluate(({ b, oid }) => {
+    const out: string[] = [];
+    for (const fx of [0.05, 0.5, 0.95]) {
+      for (const fy of [0.03, 0.5, 0.97]) {
+        const x = b.x + b.width * fx;
+        const y = b.y + b.height * fy;
+        const top = document.elementFromPoint(x, y);
+        if (!top?.closest(`[data-object-id="${oid}"]`)) out.push(`${fx},${fy}:${top?.getAttribute('class') ?? top?.tagName}`);
+      }
+    }
+    return out;
+  }, { b: box, oid: id });
+}
+
+const log031 = (line: string) => {
+  console.log(`наблюдение BUG-031 ${line}`);
+  test.info().annotations.push({ type: 'наблюдение BUG-031', description: line });
+};
+
+for (const [title, size] of PHONES) {
+  test(`FIL-03 MOB-06 BUG-031 ${title}: selection bar over a new video; after deselecting nothing covers the frame`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const frame = obj(page, id).locator('video').first();
+      await expect.poll(() => frame.evaluate((v) => (v as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      const bar = await boxOf(selectionBar(page));
+      const pic = await pictureBox(frame);
+      const share = intersection(bar, pic) / (pic.width * pic.height);
+      log031(`${title} видео: холст ${c.width}x${c.height}, объект ${Math.round(o.width)}x${Math.round(o.height)} y=${Math.round(o.y - c.y)}, рамка кадра ${Math.round(pic.boxW)}x${Math.round(pic.boxH)}, кадр ${Math.round(pic.width)}x${Math.round(pic.height)}, панель выделения h=${Math.round(bar.height)}, закрыто ${Math.round(share * 100)} % кадра`);
+      await page.screenshot({ path: test.info().outputPath(`selected-${title}.png`) });
+
+      // Панель выделения в одну строку и в пределах экрана.
+      expect(bar.height, 'панель выделения — одна строка').toBeLessThanOrEqual(64);
+      // Запуск при выделенном объекте; выделение снимается, кадр открывается целиком.
+      await control(page, id, 'Play').tap();
+      await expect(player(page, id)).toHaveAttribute('data-playing', 'true');
+      await deselectByTap(page, id);
+      await expect(player(page, id), 'снятие выделения не останавливает ролик').toHaveAttribute('data-playing', 'true');
+      const shown = await pictureBox(frame);
+      await page.screenshot({ path: test.info().outputPath(`deselected-${title}.png`) });
+      expect(shown.y, 'верх кадра в холсте').toBeGreaterThanOrEqual(c.y - 0.5);
+      expect(shown.y + shown.height, 'низ кадра в холсте').toBeLessThanOrEqual(c.y + c.height + 0.5);
+      expect(shown.x, 'кадр в окне').toBeGreaterThanOrEqual(-0.5);
+      expect(shown.x + shown.width, 'кадр в окне').toBeLessThanOrEqual(size.width + 0.5);
+      expect(await coveredPoints(page, shown, id), 'кадр без выделения ничем не закрыт').toEqual([]);
+      expect(shown.height, 'кадр различим').toBeGreaterThanOrEqual(80);
+      expect(shown.width, 'пропорции кадра сохранены').toBeGreaterThan(shown.height);
+      // Подписи скрыты только с экрана: значение Speed читается, поля остаются доступны по имени.
+      const speedStyle = await speed(page, id).evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), w: el.getBoundingClientRect().width, text: (el as HTMLSelectElement).selectedOptions[0]?.text }));
+      log031(`${title} Speed: ${JSON.stringify(speedStyle)}`);
+      expect(speedStyle.size, 'значение Speed читается').toBeGreaterThanOrEqual(11);
+      await expect(slider(page, id, 'Volume')).toBeVisible();
+      await control(page, id, 'Pause').tap();
+      await expect(player(page, id)).toHaveAttribute('data-playing', 'false');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-02 MOB-06 BUG-031 ${title}: a new PDF page is uncovered after deselecting and Extract pages works from the one-row bar`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, pdf3(), 'pdf');
+      await expectPageColor(page, id, 'red');
+      const sheet = obj(page, id).locator('canvas').first();
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      const bar = await boxOf(selectionBar(page));
+      const pic = await pictureBox(sheet);
+      log031(`${title} PDF: холст ${c.width}x${c.height}, объект ${Math.round(o.width)}x${Math.round(o.height)} y=${Math.round(o.y - c.y)}, страница ${Math.round(pic.width)}x${Math.round(pic.height)}, закрыто панелью ${Math.round((intersection(bar, pic) / (pic.width * pic.height)) * 100)} %`);
+      await page.screenshot({ path: test.info().outputPath(`pdf-selected-${title}.png`) });
+      expect(bar.height).toBeLessThanOrEqual(64);
+      expect(Math.abs(pic.width / pic.height - 0.75), 'пропорции страницы сохранены').toBeLessThan(0.02);
+
+      // Кнопка Extract pages достижима на панели в одну строку; диалог и подтверждение на экране.
+      const extract = barBtn(page, 'Extract pages');
+      await extract.scrollIntoViewIfNeeded();
+      await expectFree(page, 'Extract pages', extract);
+      await extract.tap();
+      const dialog = page.getByRole('dialog', { name: 'Extract pages' });
+      await dialog.getByLabel('Page 2', { exact: true }).check();
+      const confirm = dialog.getByRole('button', { name: 'Extract', exact: true });
+      await confirm.scrollIntoViewIfNeeded();
+      await confirm.tap();
+      await expect(ofKind(page, 'pdf')).toHaveCount(2, { timeout: 15_000 });
+      const other = (await idsOf(ofKind(page, 'pdf'))).find((x) => x !== id)!;
+      await expectPageColor(page, other, 'green');
+
+      await page.keyboard.press('Escape').catch(() => {});
+      await deselectByTap(page, id);
+      const shown = await pictureBox(sheet);
+      expect(shown.y).toBeGreaterThanOrEqual(c.y - 0.5);
+      expect(await coveredPoints(page, shown, id), 'страница без выделения ничем не закрыта').toEqual([]);
+      expect(shown.height, 'страница различима').toBeGreaterThanOrEqual(80);
+      await page.screenshot({ path: test.info().outputPath(`pdf-deselected-${title}.png`) });
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-01 MOB-06 UI-04 BUG-031 ${title}: a new file label is on screen, can be renamed and downloaded from the bar`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('qa') }, 'file');
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      expect(o.y).toBeGreaterThanOrEqual(c.y);
+      expect(o.y + o.height).toBeLessThanOrEqual(c.y + c.height);
+      expect(o.x).toBeGreaterThanOrEqual(0);
+      expect(o.x + o.width).toBeLessThanOrEqual(size.width);
+      await page.screenshot({ path: test.info().outputPath(`file-${title}.png`) });
+      const name = fileNameField(page);
+      await name.scrollIntoViewIfNeeded();
+      await name.fill('renamed.txt');
+      await expect(obj(page, id)).toContainText('renamed.txt');
+      const link = selectionBar(page).getByRole('link', { name: 'Download', exact: true });
+      await link.scrollIntoViewIfNeeded();
+      const b = await boxOf(link);
+      expect(b.x).toBeGreaterThanOrEqual(-0.5);
+      expect(b.x + b.width).toBeLessThanOrEqual(size.width + 0.5);
+      expect(Math.min(b.width, b.height), 'Download не меньше 44 px').toBeGreaterThanOrEqual(MIN_TARGET);
+      await expect(link).toHaveAttribute('href', /download=renamed\.txt/);
+    } finally {
+      await owner.close();
+    }
+  });
+}
+
+const LOW_PHONES = PHONES.filter(([, s]) => s.height <= 568);
+
+for (const [title, size] of LOW_PHONES) {
+  test(`FIL-03 CVS-14 MOB-06 BUG-031 ${title}: a small new video grows by its corner on the phone and on the desktop client`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const desk = await openGuest(browser, { baseURL, viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false } as Opts, owner.token, 'QA Desk');
+    try {
+      const id = await uploadViaTool(owner.page, fixture('sample.mp4', 'video/mp4'), 'video');
+      await expect(obj(desk.page, id)).toBeVisible();
+      const raw = await untilRaw(owner.page, owner.boardId, (o) => expect(o[id]).toBeTruthy());
+      const frameDesk = obj(desk.page, id).locator('video').first();
+      await expect.poll(() => frameDesk.evaluate((v) => (v as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+      const before = await pictureBox(frameDesk);
+      log031(`${title} видео в документе ${raw[id].width}x${raw[id].height}; у клиента 1440×900 кадр ${Math.round(before.width)}x${Math.round(before.height)} в рамке ${Math.round(before.boxW)}x${Math.round(before.boxH)}`);
+      await desk.page.screenshot({ path: test.info().outputPath(`desktop-${title}.png`) });
+
+      // Компьютер: выделить и растянуть за правый нижний угол, кадр растёт.
+      await selectObj(desk.page, id);
+      await expect(handle(desk.page, 'se')).toBeVisible();
+      const se = await boxOf(handle(desk.page, 'se'));
+      await dragBy(desk.page, { x: se.x + se.width / 2, y: se.y + se.height / 2 }, { x: 240, y: 240 });
+      const grown = await pictureBox(frameDesk);
+      log031(`${title} после растяжения на компьютере: кадр ${Math.round(grown.width)}x${Math.round(grown.height)}`);
+      expect(grown.height, 'кадр вырос').toBeGreaterThan(before.height + 50);
+      await obj(desk.page, id).getByRole('button', { name: 'Play', exact: true }).click();
+      await expect(player(desk.page, id)).toHaveAttribute('data-playing', 'true');
+      await obj(desk.page, id).getByRole('button', { name: 'Pause', exact: true }).click();
+
+      // Телефон: тот же жест пальцем на новом объекте.
+      const second = await uploadViaTool(owner.page, fixture('sample.webm', 'video/webm'), 'video');
+      const frame = obj(owner.page, second).locator('video').first();
+      await expect.poll(() => frame.evaluate((v) => (v as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+      const small = await boxOf(obj(owner.page, second));
+      const h = await boxOf(handle(owner.page, 'se'));
+      const touch = await Touch.of(owner.page);
+      const from = { x: h.x + h.width / 2, y: h.y + h.height / 2 };
+      await touch.gesture([from], [{ x: from.x - 4, y: Math.min(from.y + 90, size.height - 4) }], 12);
+      await expect.poll(async () => (await boxOf(obj(owner.page, second))).height, { message: 'объект вырос касанием' }).toBeGreaterThan(small.height + 20);
+    } finally {
+      await desk.close();
+      await owner.close();
+    }
+  });
+}
+
+async function deleteByMouse(page: Page, id: string) {
+  await selectObj(page, id);
+  await barBtn(page, 'Delete').click();
+  await expect(obj(page, id)).toHaveCount(0);
+}
+
+const WINDOWS = [
+  ['1440x900', { width: 1440, height: 900 }],
+  ['1024x768', { width: 1024, height: 768 }],
+  ['1280x600', { width: 1280, height: 600 }],
+] as const;
+
+for (const [title, size] of WINDOWS) {
+  test(`FIL-01 FIL-02 FIL-03 FIL-04 BUG-031 desktop ${title}: new objects stay in the view centre, the page is not scrolled`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    desktopOnly(isMobile);
+    const owner = await openOwner(browser, profileOpts({ baseURL, viewport: size, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+    const page = owner.page;
+    try {
+      const files: [FilePayload, string][] = [
+        [pdf3(), 'pdf'],
+        [fixture('sample.mp4', 'video/mp4'), 'video'],
+        [fixture('tone.mp3', 'audio/mpeg'), 'audio'],
+        [{ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('a') }, 'file'],
+      ];
+      for (const [file, kind] of files) {
+        const id = await uploadViaTool(page, file, kind);
+        const c = await boxOf(canvas(page));
+        const o = await boxOf(obj(page, id));
+        const dx = o.x + o.width / 2 - (c.x + c.width / 2);
+        const dy = o.y + o.height / 2 - (c.y + c.height / 2);
+        log031(`desktop ${title} ${kind}: ${Math.round(o.width)}x${Math.round(o.height)}, от центра ${Math.round(dx)},${Math.round(dy)}, холст ${c.width}x${c.height}`);
+        // Страница на 1024×768 выше окна на 1 px: большей прокрутки быть не должно.
+        expect(await page.evaluate(() => Math.max(window.scrollX, window.scrollY)), 'страница не прокручена').toBeLessThanOrEqual(1);
+        expect(o.y, 'верх в холсте').toBeGreaterThanOrEqual(c.y);
+        expect(o.y + o.height, 'низ в холсте').toBeLessThanOrEqual(c.y + c.height);
+        expect(Math.abs(dx), `${kind} по центру`).toBeLessThanOrEqual(1);
+        // Объект, который дотянулся бы до миникарты, только поднимается над ней (BUG-031).
+        const map = await boxOf(minimap(page));
+        if (Math.abs(dy) > 1) {
+          expect(dy, `${kind} только выше центра`).toBeLessThan(0);
+          expect(o.y + o.height, `${kind} над миникартой`).toBeLessThanOrEqual(map.y + 0.5);
+        }
+        await deleteByMouse(page, id);
+      }
+    } finally {
+      await owner.close();
+    }
+  });
+}
+
+const LOW_BARS = [
+  ['low desktop window', { width: 1024, height: 450 }, false],
+  ['landscape phone', { width: 839, height: 412 }, true],
+] as const;
+
+for (const [title, size, touch] of LOW_BARS) {
+  test(`CVS-14 MOB-06 UI-04 BUG-031 ${title}: every action of the one-row selection bar can be reached`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    test.skip(touch !== isMobile, 'размер соответствует одному профилю');
+    const owner = await openOwner(browser, profileOpts({ baseURL, viewport: size, hasTouch, isMobile, userAgent, deviceScaleFactor }));
+    const page = owner.page;
+    try {
+      const shared = { y: 120, width: 120, height: 80, rotation: 0, z: 1 };
+      await seed(page, owner.boardId, {
+        s1: { ...shared, x: 90, type: 'sticky', fill: '#fde68a', text: 'a' },
+        s2: { ...shared, x: 280, z: 2, type: 'shape', shape: 'rect', text: '' },
+      });
+      for (const id of ['s1', 's2']) {
+        await expect(obj(page, id)).toBeVisible();
+        await canvas(page).scrollIntoViewIfNeeded();
+        const b = await boxOf(obj(page, id));
+        const p = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+        if (touch) await page.touchscreen.tap(p.x, p.y);
+        else await page.mouse.click(p.x, p.y);
+        await expect(obj(page, id)).toHaveAttribute('aria-selected', 'true');
+        const bar = selectionBar(page);
+        const box = await boxOf(bar);
+        await page.screenshot({ path: test.info().outputPath(`bar-${id}.png`) });
+        expect(box.height, 'панель — одна строка').toBeLessThanOrEqual(64);
+        expect(box.x, 'панель в окне').toBeGreaterThanOrEqual(-0.5);
+        expect(box.x + box.width, 'панель в окне').toBeLessThanOrEqual(size.width + 0.5);
+        const buttons = bar.getByRole('button');
+        const count = await buttons.count();
+        expect(count).toBeGreaterThan(2);
+        const unreachable: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const btn = buttons.nth(i);
+          if (!(await btn.isVisible())) continue;
+          await btn.scrollIntoViewIfNeeded();
+          const r = await btn.evaluate((el) => {
+            const q = el.getBoundingClientRect();
+            const top = document.elementFromPoint(q.x + q.width / 2, q.y + q.height / 2);
+            return { label: el.getAttribute('aria-label') ?? el.textContent, x: q.x, right: q.right, ok: !!top && (top === el || el.contains(top)) };
+          });
+          if (!r.ok || r.x < -0.5 || r.right > size.width + 0.5) unreachable.push(String(r.label));
+        }
+        expect(unreachable, `недостижимы действия ${id}`).toEqual([]);
+        // Снять выделение перед следующим объектом.
+        await deselectEmpty(page, touch);
+      }
+    } finally {
+      await owner.close();
+    }
+  });
+}
+
+async function deselectEmpty(page: Page, touch: boolean) {
+  const c = await boxOf(canvas(page));
+  const p = { x: c.x + 8, y: c.y + c.height - 8 };
+  if (touch) await page.touchscreen.tap(p.x, p.y);
+  else await page.mouse.click(p.x, p.y);
+  await expect(selectionBar(page)).toHaveCount(0);
+}
+
+test('FIL-02 FIL-03 MOB-06 BUG-031 landscape: a second object after the first and a moved view keep the controls free', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  mobileOnly(isMobile);
+  const size = { width: 839, height: 412 };
+  const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+  const page = owner.page;
+  try {
+    const first = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+    await expectVideoFree(page, first);
+    await barBtn(page, 'Delete').tap();
+    await expect(obj(page, first)).toHaveCount(0);
+    const second = await uploadViaTool(page, pdf3(), 'pdf');
+    await expectPageColor(page, second, 'red');
+    await expectPdfFree(page, second);
+    await barBtn(page, 'Delete').tap();
+    await expect(obj(page, second)).toHaveCount(0);
+    const c = await boxOf(canvas(page));
+    const touch = await Touch.of(page);
+    await touch.gesture([{ x: c.x + 60, y: c.y + c.height - 40 }], [{ x: c.x + 260, y: c.y + c.height - 120 }]);
+    const moved = await uploadViaTool(page, fixture('sample.webm', 'video/webm'), 'video');
+    await expectVideoFree(page, moved);
+  } finally {
+    await owner.close();
+  }
+});
+
+for (const [title, size] of LOW_PHONES) {
+  test(`FIL-02 CVS-02 CVS-14 MOB-06 BUG-031 ${title}: a small new PDF page can be enlarged by the corner and by zoom and stays sharp`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, pdf3(), 'pdf');
+      await expectPageColor(page, id, 'red');
+      const sheet = obj(page, id).locator('canvas').first();
+      const small = await pictureBox(sheet);
+
+      // Угол: страница растёт на самом объекте.
+      const h = await boxOf(handle(page, 'se'));
+      const touch = await Touch.of(page);
+      // На 320 px объект шире холста: маркер виден наполовину, палец ставится на видимую часть.
+      const edge = await boxOf(canvas(page));
+      const from = { x: Math.min(h.x + h.width / 2, edge.x + edge.width - 2), y: h.y + h.height / 2 };
+      await touch.gesture([from], [{ x: from.x - 2, y: Math.min(from.y + 90, size.height - 4) }], 12);
+      await expect.poll(async () => (await pictureBox(sheet)).height, { message: 'страница выросла' }).toBeGreaterThan(small.height + 40);
+
+      // Масштаб вида: страница крупнее, битовой карты хватает на резкий показ.
+      const before = await pictureBox(sheet);
+      await page.getByRole('button', { name: /zoom in/i }).first().tap();
+      await page.getByRole('button', { name: /zoom in/i }).first().tap();
+      await expect.poll(async () => (await pictureBox(sheet)).height).toBeGreaterThan(before.height * 1.1);
+      const bitmap = await sheet.evaluate((c) => (c as HTMLCanvasElement).height);
+      const shown = await pictureBox(sheet);
+      log031(`${title} PDF: страница ${Math.round(small.width)}x${Math.round(small.height)} → ${Math.round(shown.width)}x${Math.round(shown.height)}, canvas ${bitmap} px`);
+      expect(bitmap, 'битовая карта не меньше показанного').toBeGreaterThanOrEqual(shown.height);
+    } finally {
+      await owner.close();
+    }
+  });
+}
