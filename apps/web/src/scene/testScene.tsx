@@ -21,7 +21,7 @@ export function renderScene(
   userName = "Alice",
   props: Pick<
     ComponentProps<typeof BoardScene>,
-    "focusObject" | "boardLink" | "onLaser"
+    "focusObject" | "boardLink" | "onLaser" | "userId"
   > = {},
 ) {
   const cameras: CameraView[] = [];

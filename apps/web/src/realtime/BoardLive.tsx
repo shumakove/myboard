@@ -23,6 +23,7 @@ export function BoardLive({
   checkAccess,
   onClosed,
   userName,
+  userId,
   objectId = null,
   boardLink,
 }: {
@@ -33,6 +34,8 @@ export function BoardLive({
   onClosed?: () => void;
   /** Имя из сессии: владельцу — имя учётки, участнику — введённое имя (CVS-22). */
   userName?: string;
+  /** Id из сессии: свои комментарии — не по имени (BUG-026). */
+  userId?: string;
   /** SHR-07: `?object={id}` ссылки. */
   objectId?: string | null;
   /** SHR-07: действующая ссылка на доску — для ссылки на объект. */
@@ -58,6 +61,7 @@ export function BoardLive({
           board={board}
           presence={presence}
           userName={userName}
+          userId={userId}
           focusObject={loaded ? objectId : null}
           boardLink={boardLink}
           loaded={loaded}

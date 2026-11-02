@@ -84,14 +84,14 @@ describe("CMT-02, CMT-03: переписка, «решено», цвет", () =>
       comments,
       { object: null, x: 0, y: 0 },
       "#e53935",
-      "Alice",
+      { id: null, name: "Alice" },
       "Is this final?",
       new Date("2026-10-27T10:00:00Z"),
     );
     addReply(
       comments,
       thread,
-      "Bob",
+      { id: null, name: "Bob" },
       "Not yet",
       new Date("2026-10-27T10:05:00Z"),
     );
@@ -116,7 +116,9 @@ describe("CMT-02, CMT-03: переписка, «решено», цвет", () =>
 
   it("ответ в несуществующую ветку ничего не пишет", () => {
     const { comments } = createBoardDocument();
-    expect(addReply(comments, "missing", "Bob", "Hi")).toBeNull();
+    expect(
+      addReply(comments, "missing", { id: null, name: "Bob" }, "Hi"),
+    ).toBeNull();
     expect(comments.size).toBe(0);
   });
 
@@ -128,11 +130,11 @@ describe("CMT-02, CMT-03: переписка, «решено», цвет", () =>
       a.comments,
       { object: null, x: 5, y: 5 },
       "#43a047",
-      "Alice",
+      { id: null, name: "Alice" },
       "First",
     );
-    addReply(b.comments, thread, "Bob", "From Bob");
-    addReply(a.comments, thread, "Alice", "From Alice");
+    addReply(b.comments, thread, { id: null, name: "Bob" }, "From Bob");
+    addReply(a.comments, thread, { id: null, name: "Alice" }, "From Alice");
 
     const texts = (doc: Y.Map<unknown>) =>
       readThreads(doc)[0]?.messages.map((m) => m.text);
@@ -154,10 +156,31 @@ describe("CMT-04: фильтр по участникам обсуждения", 
     const at = { object: null, x: 0, y: 0 } as const;
     const time = (minute: number) =>
       new Date(`2026-10-27T10:0${String(minute)}:00Z`);
-    const one = createThread(comments, at, "#000000", "Alice", "A", time(1));
-    const two = createThread(comments, at, "#000000", "Bob", "B", time(2));
-    addReply(comments, two.thread, "Carol", "C");
-    const three = createThread(comments, at, "#000000", "Carol", "C2", time(3));
+    const one = createThread(
+      comments,
+      at,
+      "#000000",
+      { id: null, name: "Alice" },
+      "A",
+      time(1),
+    );
+    const two = createThread(
+      comments,
+      at,
+      "#000000",
+      { id: null, name: "Bob" },
+      "B",
+      time(2),
+    );
+    addReply(comments, two.thread, { id: null, name: "Carol" }, "C");
+    const three = createThread(
+      comments,
+      at,
+      "#000000",
+      { id: null, name: "Carol" },
+      "C2",
+      time(3),
+    );
     setResolved(comments, three.thread, true);
     return {
       threads: readThreads(comments),
@@ -169,7 +192,42 @@ describe("CMT-04: фильтр по участникам обсуждения", 
 
   it("участники — все авторы сообщений", () => {
     const { threads } = threeThreads();
-    expect(participants(threads)).toEqual(["Alice", "Bob", "Carol"]);
+    expect(
+      participants(threads, { id: null, name: "Alice" }).map((p) => p.label),
+    ).toEqual(["Alice", "Bob", "Carol"]);
+  });
+
+  it("BUG-026: тёзки — разные участники, фильтр их не смешивает", () => {
+    const { comments } = createBoardDocument();
+    const at = { object: null, x: 0, y: 0 } as const;
+    const owner = { id: "user-1", name: "Sam" };
+    const mine = createThread(comments, at, "#000000", owner, "Mine");
+    const guests = createThread(
+      comments,
+      at,
+      "#000000",
+      { id: "guest-1", name: "Sam" },
+      "Theirs",
+    );
+    createThread(
+      comments,
+      at,
+      "#000000",
+      { id: "guest-2", name: "Sam" },
+      "Third",
+    );
+    const threads = readThreads(comments);
+
+    const people = participants(threads, owner);
+    expect(people.map((p) => p.label).sort()).toEqual([
+      "Sam",
+      "Sam (2)",
+      "Sam (you)",
+    ]);
+    const ids = (keys: string[]) =>
+      filterThreads(threads, keys).map((t) => t.id);
+    expect(ids(["user-1"])).toEqual([mine.thread]);
+    expect(ids(["guest-1"])).toEqual([guests.thread]);
   });
 
   it("ветка проходит фильтр, если в ней писал любой из выбранных", () => {

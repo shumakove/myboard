@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
-import type { CommentThread } from "./commentData";
+import {
+  isOwnMessage,
+  type CommentAuthor,
+  type CommentThread,
+} from "./commentData";
 
 /**
  * CMT-02: непрочитанные — свои у каждого участника и в документ не попадают. Прочитанные
@@ -52,22 +56,24 @@ function saveReads(boardId: string, self: string, reads: Set<string>): void {
 export function unreadCount(
   thread: CommentThread,
   reads: ReadonlySet<string>,
-  self: string,
+  self: CommentAuthor,
 ): number {
-  return thread.messages.filter((m) => m.author !== self && !reads.has(m.id))
-    .length;
+  return thread.messages.filter(
+    (m) => !isOwnMessage(m, self) && !reads.has(m.id),
+  ).length;
 }
 
 /** Отметки прочитанного этого участника на этой доске. */
-export function useCommentReads(boardId: string, self: string) {
+export function useCommentReads(boardId: string, self: CommentAuthor) {
+  const { id, name } = self;
   const [state, setState] = useState(() => ({
-    key: storageKey(boardId, self),
-    reads: loadReads(boardId, self),
+    key: storageKey(boardId, name),
+    reads: loadReads(boardId, name),
   }));
   // Сменились доска или имя — свои отметки для них.
-  const key = storageKey(boardId, self);
+  const key = storageKey(boardId, name);
   const current =
-    state.key === key ? state : { key, reads: loadReads(boardId, self) };
+    state.key === key ? state : { key, reads: loadReads(boardId, name) };
   if (current !== state) setState(current);
   const { reads } = current;
 
@@ -77,16 +83,16 @@ export function useCommentReads(boardId: string, self: string) {
         const fresh = ids.filter((id) => !prev.reads.has(id));
         if (fresh.length === 0) return prev;
         const next = new Set([...prev.reads, ...fresh]);
-        saveReads(boardId, self, next);
+        saveReads(boardId, name, next);
         return { ...prev, reads: next };
       });
     },
-    [boardId, self],
+    [boardId, name],
   );
 
   const unread = useCallback(
-    (thread: CommentThread) => unreadCount(thread, reads, self),
-    [reads, self],
+    (thread: CommentThread) => unreadCount(thread, reads, { id, name }),
+    [reads, id, name],
   );
 
   return { unread, markRead };

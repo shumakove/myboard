@@ -173,7 +173,7 @@ def test_shr02_join_sets_board_session_cookie(
     assert response.json() == {
         "id": board["id"],
         "title": "Roadmap",
-        "participant": {"name": "Kate"},
+        "participant": {"id": response.json()["participant"]["id"], "name": "Kate"},
     }
     cookie = response.headers["set-cookie"]
     assert cookie.startswith(f"{_board_cookie(board['id'])}=")
@@ -183,7 +183,7 @@ def test_shr02_join_sets_board_session_cookie(
     # Сессионная cookie: живёт до закрытия браузера.
     assert "Max-Age" not in cookie
     assert "expires" not in cookie.lower()
-    assert guest.get(f"/api/share/{token}").json()["participant"] == {"name": "Kate"}
+    assert guest.get(f"/api/share/{token}").json()["participant"]["name"] == "Kate"
 
 
 @pytest.mark.parametrize("name", ["", "   ", "x" * 201])
@@ -203,7 +203,7 @@ def test_shr03_rejoin_replaces_name(
     _join(guest, token, "Kate")
     _join(guest, token, "Katherine")
 
-    assert guest.get(f"/api/share/{token}").json()["participant"] == {"name": "Katherine"}
+    assert guest.get(f"/api/share/{token}").json()["participant"]["name"] == "Katherine"
     assert _scalar(settings, "SELECT count(*) FROM sessions WHERE subject_type = 'guest'") == 1
 
 
@@ -318,7 +318,7 @@ def test_shr06_reset_revokes_sessions_issued_by_old_link(
     assert guest.get(f"/api/share/{new}").json()["participant"] is None
     assert _scalar(settings, "SELECT count(*) FROM sessions WHERE subject_type = 'guest'") == 0
     assert _join(guest, new, "Kate").status_code == 200
-    assert guest.get(f"/api/share/{new}").json()["participant"] == {"name": "Kate"}
+    assert guest.get(f"/api/share/{new}").json()["participant"]["name"] == "Kate"
 
 
 def test_shr06_reset_keeps_owner_session_and_other_boards(
@@ -331,7 +331,7 @@ def test_shr06_reset_keeps_owner_session_and_other_boards(
     _reset(alice, board["id"])
 
     assert alice.get("/api/boards").status_code == 200
-    assert guest.get(f"/api/share/{other_token}").json()["participant"] == {"name": "Kate"}
+    assert guest.get(f"/api/share/{other_token}").json()["participant"]["name"] == "Kate"
 
 
 def test_shr06_old_token_is_not_stored(
@@ -358,3 +358,18 @@ def test_migrations_match_models(client: TestClient, settings: Settings) -> None
         engine.dispose()
 
     assert diff == []
+
+
+def test_bug026_namesakes_get_different_stable_ids(
+    admin: TestClient, alice: TestClient, board: dict[str, Any]
+) -> None:
+    """CMT-02, CMT-04: участники с одним именем различимы; id не раскрывает cookie."""
+    token = _link(alice, board["id"])["token"]
+    with _browser(admin) as first, _browser(admin) as second:
+        joined = _join(first, token, "Sam").json()["participant"]
+        other = _join(second, token, "Sam").json()["participant"]
+
+        assert joined["name"] == other["name"] == "Sam"
+        assert joined["id"] != other["id"]
+        assert first.get(f"/api/share/{token}").json()["participant"]["id"] == joined["id"]
+        assert joined["id"] not in first.cookies.values()
