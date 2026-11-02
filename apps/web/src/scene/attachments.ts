@@ -1,4 +1,5 @@
 import type * as Y from "yjs";
+import { MINIMAP_SIZE } from "../canvas/minimapFit";
 import type { Point } from "../realtime/messages";
 import type { AttachmentType } from "./attachmentData";
 import { fitSize, type Size } from "./images";
@@ -17,9 +18,19 @@ import {
 export const PDF_BAR_HEIGHT = 56;
 /** Высота панели видеоплеера под кадром: две строки элементов управления (UI-04). */
 export const VIDEO_BAR_HEIGHT = 112;
+/** Панель плеера на узком объекте: ряд элементов переносится на третью строку. */
+export const VIDEO_BAR_WRAPPED_HEIGHT = 164;
 /** Наибольшая сторона страницы и кадра на доске; ширина кадра — не меньше панели плеера. */
 const VIEW_MAX_SIDE = 480;
 const VIDEO_MIN_WIDTH = 420;
+/** Уже этого панель плеера не помещается в две строки. */
+const VIDEO_TWO_ROWS_WIDTH = 350;
+/** Самая узкая панель плеера и аудио: уже элементы управления не помещаются. */
+const PLAYER_NARROWEST = 280;
+/** Самая узкая панель страниц PDF: две кнопки и номер страницы. */
+export const PDF_MIN_WIDTH = 300;
+/** Высота кадра и страницы не меньше этой, сколько бы места ни было в виде. */
+const PICTURE_MIN_HEIGHT = 120;
 /** Кадр по умолчанию, если браузер не прочитал размер ролика. */
 const DEFAULT_VIDEO: Size = { width: 640, height: 360 };
 /** Промежуток между извлечёнными страницами. */
@@ -37,20 +48,72 @@ export interface UploadedAttachment {
   page?: number;
 }
 
-/** Рамка объекта PDF: страница и панель страниц под ней. */
-export function pdfFrame(page: Size): Size {
-  const fitted = fitSize(page, VIEW_MAX_SIDE);
-  return { width: fitted.width, height: fitted.height + PDF_BAR_HEIGHT };
+/** Поле между новым объектом и краем вида, px. */
+const VIEW_EDGE = 8;
+/** Отступ миникарты от края вида с рамкой и зазор до объекта, px. */
+const MINIMAP_CLEARANCE = 18;
+const NO_LIMIT: Size = { width: Infinity, height: Infinity };
+
+/**
+ * BUG-030, MOB-06, UI-04: сколько единиц доски новый объект может занять в центре вида,
+ * чтобы его кнопки сразу были на экране и не лежали под миникартой. Миникарта учитывается,
+ * только если объект в центре вида может дотянуться до неё по горизонтали.
+ */
+export function roomInView(viewport: Size, zoom: number): Size {
+  if (viewport.width === 0 || viewport.height === 0) return NO_LIMIT;
+  const minimapLeft = viewport.width - MINIMAP_SIZE.width - MINIMAP_CLEARANCE;
+  const reachesMinimap =
+    viewport.width / 2 + (VIEW_MAX_SIDE * zoom) / 2 > minimapLeft;
+  const edge = reachesMinimap
+    ? MINIMAP_SIZE.height + MINIMAP_CLEARANCE
+    : VIEW_EDGE;
+  return {
+    width: (viewport.width - 2 * VIEW_EDGE) / zoom,
+    height: (viewport.height - 2 * edge) / zoom,
+  };
 }
 
-/** Рамка видео: кадр в пропорциях ролика и панель плеера под ним. */
-export function videoFrame(natural: Size | null): Size {
+/** Рамка объекта PDF: страница и панель страниц под ней, не больше `room`. */
+export function pdfFrame(page: Size, room: Size = NO_LIMIT): Size {
+  const fitted = fitSize(page, VIEW_MAX_SIDE);
+  const pageRoom = Math.max(PICTURE_MIN_HEIGHT, room.height - PDF_BAR_HEIGHT);
+  const scale = Math.min(
+    1,
+    room.width / fitted.width,
+    pageRoom / fitted.height,
+  );
+  return {
+    width: Math.max(PDF_MIN_WIDTH, fitted.width * scale),
+    height: fitted.height * scale + PDF_BAR_HEIGHT,
+  };
+}
+
+/**
+ * Рамка видео: кадр в пропорциях ролика и панель плеера под ним, не больше `room`.
+ * Панель важнее кадра: в рамке уже панели кадр вписывается с полями.
+ */
+export function videoFrame(natural: Size | null, room: Size = NO_LIMIT): Size {
   const source = natural ?? DEFAULT_VIDEO;
   const scale = VIEW_MAX_SIDE / Math.max(source.width, source.height);
-  const width = Math.max(VIDEO_MIN_WIDTH, source.width * scale);
+  const width = Math.max(
+    PLAYER_NARROWEST,
+    Math.min(room.width, Math.max(VIDEO_MIN_WIDTH, source.width * scale)),
+  );
+  const bar =
+    width < VIDEO_TWO_ROWS_WIDTH ? VIDEO_BAR_WRAPPED_HEIGHT : VIDEO_BAR_HEIGHT;
+  const picture = Math.min(
+    (width * source.height) / source.width,
+    Math.max(PICTURE_MIN_HEIGHT, room.height - bar),
+  );
+  return { width, height: picture + bar };
+}
+
+/** Рамка аудио: панель плеера не шире `room`. */
+export function audioFrame(room: Size = NO_LIMIT): Size {
+  const { width, height } = OBJECT_TYPES.audio;
   return {
-    width,
-    height: (width * source.height) / source.width + VIDEO_BAR_HEIGHT,
+    width: Math.max(PLAYER_NARROWEST, Math.min(room.width, width)),
+    height,
   };
 }
 

@@ -1638,9 +1638,10 @@
 .file-size,
 .media-time,
 .pdf-count {
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: 12px;
-  white-space: nowrap;
+  text-align: center;
 }
 
 .media-player video.media-source {
@@ -1668,6 +1669,12 @@
   gap: var(--space-2);
 }
 
+/* BUG-030: на узком объекте панель плеера занимает третью строку. */
+.media-row {
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
+}
+
 .pdf-bar {
   flex: none;
   justify-content: space-between;
@@ -1686,7 +1693,7 @@
   flex: 1;
   align-items: center;
   gap: var(--space-1);
-  min-width: 0;
+  min-width: 90px;
   font-size: 13px;
 }
 

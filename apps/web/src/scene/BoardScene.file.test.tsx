@@ -286,6 +286,36 @@ describe("FIL-02: PDF постранично", () => {
   });
 });
 
+describe("BUG-030, MOB-06: новый объект на телефоне", () => {
+  function phoneCanvas() {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(388);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(590);
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["a.mp4", "video/mp4", "video"],
+    ["a.pdf", "application/pdf", "pdf"],
+    ["a.mp3", "audio/mpeg", "audio"],
+  ])("%s встаёт в ширину вида", async (name, type, kind) => {
+    phoneCanvas();
+    const board = createBoardDocument();
+    renderScene(board);
+    upload(name, type);
+    await waitFor(() => {
+      expect(scene(board)).toHaveLength(1);
+    });
+    const [object] = scene(board);
+    expect(object?.type).toBe(kind);
+    expect(object?.width).toBeLessThanOrEqual(388);
+    // Панель объекта — выше миникарты: 590 / 2 + высота / 2 ≤ 590 − 8 − 112.
+    expect(object?.height).toBeLessThanOrEqual(590 - 2 * 120);
+  });
+});
+
 describe("FIL-03, FIL-04: видео и аудио", () => {
   it.each([
     ["a.mp4", "video/mp4"],

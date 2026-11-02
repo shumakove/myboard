@@ -7,15 +7,13 @@ import type { CameraView, Point } from "../realtime/messages";
 import { viewRect, type Rect, type Size } from "./camera";
 import {
   fitWorld,
+  MINIMAP_SIZE,
   minimapWorld,
   toBoard,
   toMinimap,
   visibleFrame,
   type MinimapFit,
 } from "./minimapFit";
-
-/** Размер миникарты, px. */
-const MINIMAP_SIZE: Size = { width: 160, height: 110 };
 
 /**
  * CVS-04: миникарта — объекты доски и рамка видимой области. Щелчок или перетаскивание

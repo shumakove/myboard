@@ -5,7 +5,11 @@ import {
   createAttachment,
   extractPdfPages,
   PDF_BAR_HEIGHT,
+  audioFrame,
+  PDF_MIN_WIDTH,
   pdfFrame,
+  roomInView,
+  VIDEO_BAR_WRAPPED_HEIGHT,
   renameAttachment,
   VIDEO_BAR_HEIGHT,
   videoFrame,
@@ -76,6 +80,93 @@ describe("рамки PDF и видео", () => {
       width: 480,
       height: 270 + VIDEO_BAR_HEIGHT,
     });
+  });
+});
+
+describe("BUG-030, MOB-06: новый объект помещается в вид телефона", () => {
+  /** Pixel 7: область холста шириной во весь экран, миникарта в правом нижнем углу. */
+  const PHONE = { width: 412, height: 590 };
+  const MINIMAP_TOP = PHONE.height - 8 - 112;
+
+  /** Верх и низ рамки, поставленной в центр вида. */
+  function verticalSpan(height: number, viewport = PHONE) {
+    return [
+      viewport.height / 2 - height / 2,
+      viewport.height / 2 + height / 2,
+    ] as const;
+  }
+
+  it("ширина и высота — без миникарты: низ рамки выше её верхнего края", () => {
+    const room = roomInView(PHONE, 1);
+    expect(room.width).toBeLessThan(PHONE.width);
+    const [top, bottom] = verticalSpan(room.height);
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+  });
+
+  it("широкий вид: объект не достаёт до миникарты, её высота не вычитается", () => {
+    const desktop = { width: 1440, height: 800 };
+    expect(roomInView(desktop, 1).height).toBeGreaterThan(
+      desktop.height - 2 * 16 - 1,
+    );
+  });
+
+  it("единицы доски: при масштабе 50 % в вид входит вдвое больше", () => {
+    const full = roomInView(PHONE, 1);
+    const half = roomInView(PHONE, 0.5);
+    expect(half.width).toBeCloseTo(full.width * 2);
+    expect(half.height).toBeCloseTo(full.height * 2);
+  });
+
+  it("размер вида ещё неизвестен — без ограничения", () => {
+    const frame = videoFrame(
+      { width: 1920, height: 1080 },
+      roomInView({ width: 0, height: 0 }, 1),
+    );
+    expect(frame.width).toBe(480);
+  });
+
+  it("FIL-02: PDF — панель страниц над миникартой, ширина вмещает панель", () => {
+    const frame = pdfFrame({ width: 600, height: 800 }, roomInView(PHONE, 1));
+    const [, bottom] = verticalSpan(frame.height);
+    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+    expect(frame.width).toBeGreaterThanOrEqual(PDF_MIN_WIDTH);
+    expect(frame.width).toBeLessThanOrEqual(PHONE.width);
+  });
+
+  it("FIL-03: широкий ролик шириной в вид, панель плеера над миникартой", () => {
+    const frame = videoFrame(
+      { width: 1920, height: 1080 },
+      roomInView(PHONE, 1),
+    );
+    expect(frame.width).toBeLessThanOrEqual(PHONE.width);
+    expect(frame.width).toBeGreaterThan(360);
+    const [, bottom] = verticalSpan(frame.height);
+    expect(bottom).toBeLessThanOrEqual(MINIMAP_TOP);
+  });
+
+  it("FIL-03: вертикальный ролик не выше вида, кадр вписан в рамку", () => {
+    const room = roomInView(PHONE, 1);
+    const frame = videoFrame({ width: 1080, height: 1920 }, room);
+    expect(frame.height).toBeLessThanOrEqual(room.height);
+    expect(frame.width).toBeLessThanOrEqual(room.width);
+  });
+
+  it("FIL-03: на узком телефоне панель плеера получает третью строку", () => {
+    const narrow = videoFrame(
+      { width: 1920, height: 1080 },
+      roomInView({ width: 320, height: 700 }, 1),
+    );
+    expect(narrow.width).toBeLessThanOrEqual(320);
+    const picture = (narrow.width * 1080) / 1920;
+    expect(narrow.height).toBeCloseTo(picture + VIDEO_BAR_WRAPPED_HEIGHT);
+  });
+
+  it("FIL-04: аудио не шире вида", () => {
+    expect(
+      audioFrame(roomInView({ width: 360, height: 590 }, 1)).width,
+    ).toBeLessThanOrEqual(360);
+    expect(audioFrame().width).toBe(400);
   });
 });
 

@@ -1,6 +1,9 @@
 import type { Point } from "../realtime/messages";
 import type { Rect, Size } from "./camera";
 
+/** Размер миникарты, px. */
+export const MINIMAP_SIZE: Size = { width: 160, height: 110 };
+
 /** Поле вокруг содержимого миникарты, доля большей стороны. */
 const MARGIN = 0.1;
 

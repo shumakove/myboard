@@ -4,9 +4,11 @@ import { probeVideo } from "../media/mediaProbe";
 import { uploadMedia, UploadError, type Media } from "../media/mediaApi";
 import { readPdf } from "../media/pdfDocument";
 import type { RunFileTask } from "../media/useFileTask";
+import type { Size } from "../canvas/camera";
 import type { Point } from "../realtime/messages";
 import { classifyFile, downloadUrl, GENERIC_TYPE } from "./attachmentData";
 import {
+  audioFrame,
   createAttachment,
   extractPdfPages,
   pdfFrame,
@@ -32,6 +34,7 @@ export function useFiles({
   boardId,
   units,
   actor,
+  room,
   select,
   run,
 }: {
@@ -40,6 +43,8 @@ export function useFiles({
   /** Выделенное (верхние объекты выделения). */
   units: readonly SceneObject[];
   actor: string;
+  /** Сколько места в виде занять новому объекту (BUG-030). */
+  room: () => Size;
   select: (ids: string[]) => void;
   run: RunFileTask;
 }): {
@@ -67,7 +72,7 @@ export function useFiles({
           at,
           { ...uploaded(media), pages: info.pages },
           actor,
-          pdfFrame(info.page),
+          pdfFrame(info.page, room()),
         );
       }
       if (type === "video") {
@@ -75,23 +80,44 @@ export function useFiles({
         const media = await uploadMedia(boardId, file, file.name, mime);
         // FIL-04: в `.webm` может не быть кадра — тогда это аудио.
         return probe !== null && probe.width === 0
-          ? createAttachment(objects, "audio", at, uploaded(media), actor)
+          ? createAttachment(
+              objects,
+              "audio",
+              at,
+              uploaded(media),
+              actor,
+              audioFrame(room()),
+            )
           : createAttachment(
               objects,
               "video",
               at,
               uploaded(media),
               actor,
-              videoFrame(probe),
+              videoFrame(probe, room()),
             );
       }
-      const media =
-        type === "audio"
-          ? await uploadMedia(boardId, file, file.name, mime)
-          : await uploadMedia(boardId, file, file.name, GENERIC_TYPE, "file");
+      if (type === "audio") {
+        const media = await uploadMedia(boardId, file, file.name, mime);
+        return createAttachment(
+          objects,
+          "audio",
+          at,
+          uploaded(media),
+          actor,
+          audioFrame(room()),
+        );
+      }
+      const media = await uploadMedia(
+        boardId,
+        file,
+        file.name,
+        GENERIC_TYPE,
+        "file",
+      );
       return createAttachment(objects, type, at, uploaded(media), actor);
     },
-    [objects, boardId, actor],
+    [objects, boardId, actor, room],
   );
 
   const insert = useCallback(

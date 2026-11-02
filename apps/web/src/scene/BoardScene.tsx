@@ -156,6 +156,7 @@ import { createDice } from "./dice";
 import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
+import { roomInView } from "./attachments";
 import { useFiles } from "./useFiles";
 import { useImages } from "./useImages";
 import { useFileTask } from "../media/useFileTask";
@@ -669,11 +670,16 @@ export function BoardScene({
   });
   const { pick: pickImage, insert: insertImages } = images;
   // T7.2: файлы — загрузка и панель выделения.
+  const fileRoom = useCallback(
+    () => roomInView(viewport.current, camera.zoom),
+    [camera.zoom],
+  );
   const files = useFiles({
     objects,
     boardId,
     units,
     actor,
+    room: fileRoom,
     select: setSelection,
     run: fileTask.run,
   });
