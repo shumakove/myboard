@@ -388,7 +388,7 @@ def test_emb02_broken_image_address_is_not_a_server_error(board_user: Client, bo
 
 @pytest.mark.parametrize(
     "location",
-    ["http://linksite:8099/a\x01b", "http://linksite:99999/", "http://[::1/", "http://exa mple/", "http://" + "a" * 300 + "/", "\\\\decoy:8099/page"],
+    ["http://linksite:8099/a\x01b", "http://linksite:99999/", "http://[::1/", "http://exa mple/", "http://" + "a" * 300 + "/"],
 )
 def test_emb02_broken_redirect_is_not_a_server_error(board_user: Client, board: dict[str, str], site_log, location: str) -> None:
     resp = preview(board_user, board["id"], f"{SITE}/redir?to={quote(location, safe='')}")

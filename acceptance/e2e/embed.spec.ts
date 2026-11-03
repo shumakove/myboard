@@ -679,12 +679,6 @@ test('EMB-04 Q-008 http: a page of the same host embeds the board; a name is ask
     const image = fr.locator('[data-type="image"] img').first();
     await expect.poll(() => image.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
 
-    // Скачивание файла из фрейма.
-    await fr.getByLabel('Upload file', { exact: true }).setInputFiles({ name: 'n.txt', mimeType: 'text/plain', buffer: Buffer.from('qa-text') });
-    const started = page.waitForEvent('download', { timeout: 15_000 });
-    await fr.getByRole('toolbar', { name: 'Selection' }).getByRole('link', { name: 'Download', exact: true }).click();
-    expect(await (await started).failure(), 'файл скачан из фрейма').toBeNull();
-
     // Присутствие: второй клиент видит участника фрейма.
     await expect(owner.page.getByText('In Frame').first()).toBeVisible();
 
@@ -697,6 +691,28 @@ test('EMB-04 Q-008 http: a page of the same host embeds the board; a name is ask
     expect(reset.status()).toBe(200);
     await expect(fr.getByText('This link is not available.')).toBeVisible({ timeout: 15_000 });
     await expect(fr.getByTestId('board-canvas')).toHaveCount(0);
+  } finally {
+    await context.close();
+    await owner.close();
+  }
+});
+
+test('EMB-04 FIL-01 Q-008 http: a file is downloaded from the frame of a page of the same host', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  test.skip(isMobile, 'мышь — профиль desktop');
+  const f = { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor };
+  const owner = await openOwner(browser, opts(f));
+  const context = await browser.newContext({ ...opts(f), acceptDownloads: true });
+  const page = await context.newPage();
+  try {
+    await framed(page, siteA(baseURL), baseURL!, owner.token);
+    const fr = page.frameLocator('#f');
+    await joinInFrame(page, 'In Frame');
+    await expect(fr.getByTestId('board-canvas')).toBeVisible({ timeout: 20_000 });
+    await fr.getByLabel('Upload file', { exact: true }).setInputFiles({ name: 'n.txt', mimeType: 'text/plain', buffer: Buffer.from('qa-text') });
+    await expect(fr.locator('[data-type="file"]').first()).toHaveAttribute('aria-selected', 'true', { timeout: 20_000 });
+    const started = page.waitForEvent('download', { timeout: 15_000 });
+    await fr.getByRole('toolbar', { name: 'Selection' }).getByRole('link', { name: 'Download', exact: true }).click();
+    expect(await (await started).failure(), 'файл скачан из фрейма').toBeNull();
   } finally {
     await context.close();
     await owner.close();
