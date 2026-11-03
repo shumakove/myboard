@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import uuid
@@ -52,7 +53,7 @@ def _media_dir_listing(board_id: str) -> list[str]:
     """Файлы MEDIA_ROOT/{board_id} в контейнере api (подготовка/наблюдение, как age_board в T2.1)."""
     uuid.UUID(board_id)
     out = subprocess.run(
-        ["docker", "exec", "myboard-qa-api-1", "sh", "-c", f'ls -1 "$MEDIA_ROOT/{board_id}" 2>/dev/null || true'],
+        ["docker", "exec", os.environ.get("QA_COMPOSE_PROJECT", "myboard-qa") + "-api-1", "sh", "-c", f'ls -1 "$MEDIA_ROOT/{board_id}" 2>/dev/null || true'],
         check=True,
         capture_output=True,
         text=True,
@@ -274,7 +275,7 @@ def test_img01_name_path_traversal_does_not_escape_board_dir(board_user: Client,
     body = uploaded(board_user, board["id"], png(), name="../../../../etc/qa-traversal.png")
     assert _media_dir_listing(board["id"]) == [body["id"]]
     probe = subprocess.run(
-        ["docker", "exec", "myboard-qa-api-1", "sh", "-c", "ls /etc/qa-traversal.png \"$MEDIA_ROOT\"/../qa-traversal.png 2>/dev/null || true"],
+        ["docker", "exec", os.environ.get("QA_COMPOSE_PROJECT", "myboard-qa") + "-api-1", "sh", "-c", "ls /etc/qa-traversal.png \"$MEDIA_ROOT\"/../qa-traversal.png 2>/dev/null || true"],
         capture_output=True,
         text=True,
         check=True,

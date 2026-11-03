@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import uuid
 from collections.abc import Iterator
@@ -33,7 +34,7 @@ def _copied(one: Client, board_id: str, media: list[str]) -> dict[str, str]:
 
 
 def _exec(script: str) -> str:
-    out = subprocess.run(["docker", "exec", "myboard-qa-api-1", "sh", "-c", script], check=True, capture_output=True, text=True)
+    out = subprocess.run(["docker", "exec", os.environ.get("QA_COMPOSE_PROJECT", "myboard-qa") + "-api-1", "sh", "-c", script], check=True, capture_output=True, text=True)
     return out.stdout
 
 
