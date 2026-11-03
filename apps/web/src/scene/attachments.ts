@@ -53,24 +53,31 @@ const VIEW_EDGE = 8;
 const MINIMAP_CLEARANCE = 12;
 /** Верх вида под панелью выделения: одна строка 44 px с полями, px. */
 const SELECTION_BAR_CLEARANCE = 68;
+/**
+ * Холст не выше этого: панель выделения видео и PDF стоит внизу (BUG-032), верх свободен.
+ * Согласовано с запросом `.selection-bar--below` в `scene.css`.
+ */
+const LOW_CANVAS_HEIGHT = 350;
 const NO_LIMIT: Size = { width: Infinity, height: Infinity };
 
 /**
  * BUG-030, BUG-031, MOB-06, UI-04: сколько единиц доски может занять новый объект, чтобы
  * его кнопки сразу были на экране и не лежали под миникартой. Если объект в центре вида
  * может дотянуться до миникарты по горизонтали, ему доступна высота между панелью
- * выделения и миникартой; встать туда помогает `centerClearOfMinimap`. На самом низком
- * холсте эта высота меньше объекта: минимум кадра важнее панели выделения.
+ * выделения и миникартой; встать туда помогает `centerClearOfMinimap`. На низком холсте
+ * панель выделения видео и PDF уходит вниз, и её место отдано объекту (BUG-032).
  */
 export function roomInView(viewport: Size, zoom: number): Size {
   if (viewport.width === 0 || viewport.height === 0) return NO_LIMIT;
   const reachesMinimap =
     viewport.width / 2 + (VIEW_MAX_SIDE * zoom) / 2 > minimapLeft(viewport);
+  const barClearance =
+    viewport.height <= LOW_CANVAS_HEIGHT ? VIEW_EDGE : SELECTION_BAR_CLEARANCE;
   return {
     width: (viewport.width - 2 * VIEW_EDGE) / zoom,
     height:
       (reachesMinimap
-        ? minimapTop(viewport) - SELECTION_BAR_CLEARANCE
+        ? minimapTop(viewport) - barClearance
         : viewport.height - 2 * VIEW_EDGE) / zoom,
   };
 }
@@ -146,7 +153,10 @@ export function audioFrame(room: Size = NO_LIMIT): Size {
   };
 }
 
-/** Новый объект файла с центром в `center`; возвращает id. */
+/**
+ * Новый объект файла; возвращает id. В документ идёт `size`, а центр в `center` считается
+ * по `shown` — размеру на экране загрузившего (BUG-032).
+ */
 export function createAttachment(
   objects: Y.Map<unknown>,
   type: AttachmentType,
@@ -154,11 +164,12 @@ export function createAttachment(
   file: UploadedAttachment,
   actor: string,
   size: Size = OBJECT_TYPES[type],
+  shown: Size = size,
 ): string {
   return placeAttachment(
     objects,
     type,
-    { x: center.x - size.width / 2, y: center.y - size.height / 2 },
+    { x: center.x - shown.width / 2, y: center.y - shown.height / 2 },
     file,
     actor,
     size,

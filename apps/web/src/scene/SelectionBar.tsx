@@ -31,6 +31,7 @@ import {
   Switch,
   TextField,
 } from "../ui";
+import { classNames } from "../ui/classNames";
 
 /** Значение, которое показывает список, если у выделенных оно разное. */
 const MIXED = "";
@@ -172,7 +173,11 @@ export function SelectionBar({
 
   return (
     <FloatingPanel
-      className="selection-bar"
+      className={classNames(
+        "selection-bar",
+        selected.some((o) => o.type === "video" || o.type === "pdf") &&
+          "selection-bar--below",
+      )}
       role="toolbar"
       aria-label="Selection"
       onPointerDown={(event) => {

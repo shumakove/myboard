@@ -157,6 +157,7 @@ import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
 import { centerClearOfMinimap, roomInView } from "./attachments";
+import { useLocalFits } from "./localFit";
 import { useFiles } from "./useFiles";
 import { useImages } from "./useImages";
 import { useFileTask } from "../media/useFileTask";
@@ -269,7 +270,7 @@ export function BoardScene({
     () => ({ id: userId ?? null, name: userName }),
     [userId, userName],
   );
-  const scene = useSceneObjects(objects);
+  const { scene, fit: fitToView } = useLocalFits(useSceneObjects(objects));
   // FRM-04: скрытое содержимое фреймов не показывается и не выделяется.
   const visible = useMemo(() => scene.filter((o) => !o.hidden), [scene]);
   const settings = useBoardSettings(board.settings);
@@ -697,6 +698,7 @@ export function BoardScene({
     room: fileRoom,
     clear: fileCenter,
     reveal: revealCanvas,
+    fit: fitToView,
     select: setSelection,
     run: fileTask.run,
   });

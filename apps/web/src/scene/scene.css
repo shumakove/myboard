@@ -392,6 +392,23 @@
   }
 }
 
+/*
+ * BUG-032: на низком холсте видео и PDF занимают всю высоту над миникартой; панель над ними
+ * закрывала кадр и попадала под палец вместо объекта. Панель — сразу под объектом, рядом с
+ * миникартой, а где места рядом нет — поверх неё. Ниже остаётся свободная полоса: касание
+ * пустого места снимает выделение. Порог согласован с LOW_CANVAS_HEIGHT в attachments.ts.
+ */
+@media (max-height: 500px), (max-width: 640px) and (max-height: 600px) {
+  .selection-bar--below {
+    top: auto;
+    bottom: 64px;
+    max-width: min(
+      calc(100% - 2 * var(--space-2)),
+      max(calc(100% - 2 * var(--space-2) - 172px), 280px)
+    );
+  }
+}
+
 .context-menu {
   position: absolute;
 }

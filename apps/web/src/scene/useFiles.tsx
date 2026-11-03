@@ -24,7 +24,7 @@ import {
 import type { FileActions } from "./FileControls";
 import { OBJECT_TYPES } from "./objectTypes";
 import { PdfExtractDialog } from "./PdfExtractDialog";
-import type { SceneObject } from "./sceneObjects";
+import { readScene, type SceneObject } from "./sceneObjects";
 
 const BAD_PDF = "This PDF could not be opened.";
 
@@ -43,6 +43,7 @@ export function useFiles({
   room,
   clear,
   reveal,
+  fit,
   select,
   run,
 }: {
@@ -57,6 +58,8 @@ export function useFiles({
   clear: (center: Point, size: Size) => Point;
   /** Показать холст целиком: страница телефона могла быть прокручена (BUG-031). */
   reveal: () => void;
+  /** Показать этому клиенту новый объект по его виду (BUG-032). */
+  fit: (id: string, stored: Size, shown: Size) => void;
   select: (ids: string[]) => void;
   run: RunFileTask;
 }): {
@@ -72,12 +75,25 @@ export function useFiles({
 
   const place = useCallback(
     async (file: File, at: Point): Promise<string> => {
+      // BUG-032: размер в документе не зависит от экрана, по виду — только показ.
       const put = (
         kind: AttachmentType,
         source: UploadedAttachment,
         size: Size = OBJECT_TYPES[kind],
-      ) =>
-        createAttachment(objects, kind, clear(at, size), source, actor, size);
+        shown: Size = size,
+      ) => {
+        const id = createAttachment(
+          objects,
+          kind,
+          clear(at, shown),
+          source,
+          actor,
+          size,
+          shown,
+        );
+        fit(id, size, shown);
+        return id;
+      };
 
       const { type, mime } = classifyFile(file);
       if (type === "pdf") {
@@ -88,6 +104,7 @@ export function useFiles({
         return put(
           "pdf",
           { ...uploaded(media), pages: info.pages },
+          pdfFrame(info.page),
           pdfFrame(info.page, room()),
         );
       }
@@ -96,12 +113,17 @@ export function useFiles({
         const media = await uploadMedia(boardId, file, file.name, mime);
         // FIL-04: в `.webm` может не быть кадра — тогда это аудио.
         return probe !== null && probe.width === 0
-          ? put("audio", uploaded(media), audioFrame(room()))
-          : put("video", uploaded(media), videoFrame(probe, room()));
+          ? put("audio", uploaded(media), audioFrame(), audioFrame(room()))
+          : put(
+              "video",
+              uploaded(media),
+              videoFrame(probe),
+              videoFrame(probe, room()),
+            );
       }
       if (type === "audio") {
         const media = await uploadMedia(boardId, file, file.name, mime);
-        return put("audio", uploaded(media), audioFrame(room()));
+        return put("audio", uploaded(media), audioFrame(), audioFrame(room()));
       }
       const media = await uploadMedia(
         boardId,
@@ -112,7 +134,7 @@ export function useFiles({
       );
       return put(type, uploaded(media));
     },
-    [objects, boardId, actor, room, clear],
+    [objects, boardId, actor, room, clear, fit],
   );
 
   const insert = useCallback(
@@ -201,7 +223,9 @@ export function useFiles({
           }}
           onExtract={(pages) => {
             setExtracting(null);
-            select(extractPdfPages(objects, source, pages, actor));
+            // BUG-032: размер страниц — из документа, а не показанный этому клиенту.
+            const stored = readScene(objects).find((o) => o.id === source.id);
+            select(extractPdfPages(objects, stored ?? source, pages, actor));
           }}
         />
       )}

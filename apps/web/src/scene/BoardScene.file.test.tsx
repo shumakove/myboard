@@ -1,10 +1,22 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
 import { probeVideo } from "../media/mediaProbe";
 import { readPdf, renderPdfPage } from "../media/pdfDocument";
 import { createBoardDocument } from "../realtime/boardDocument";
-import { createAttachment, pdfFrame } from "./attachments";
+import {
+  createAttachment,
+  PDF_BAR_HEIGHT,
+  pdfFrame,
+  VIDEO_BAR_HEIGHT,
+} from "./attachments";
 import { createImage } from "./images";
 import { MANY_OBJECTS } from "./imageData";
 import { createObject, objectMap } from "./sceneObjects";
@@ -82,6 +94,12 @@ function placed(type: "file" | "pdf" | "video" | "audio", extra = {}) {
   );
   renderScene(board);
   return { board, id };
+}
+
+/** Размер рамки объекта на экране этого клиента, единицы доски. */
+function shownSize(id: string) {
+  const { width, height } = element(id).style;
+  return { width: parseFloat(width), height: parseFloat(height) };
 }
 
 function upload(name: string, type: string) {
@@ -320,11 +338,89 @@ describe("BUG-030, BUG-031, MOB-06: новый объект на телефон�
       });
       const [placedObject] = scene(board);
       expect(placedObject?.type).toBe(kind);
-      // Камера в начале координат: центр вида — точка (0, 0) доски.
+      // Камера в начале координат: центр вида — точка (0, 0) доски. Размер — показанный.
       const top = height / 2 + (placedObject?.y ?? NaN);
-      const bottom = top + (placedObject?.height ?? NaN);
+      const bottom = top + shownSize(placedObject?.id ?? "").height;
       expect(top).toBeGreaterThanOrEqual(0);
       expect(bottom).toBeLessThanOrEqual(height - 8 - 110);
+    });
+  });
+
+  describe("BUG-032: размер в документе не зависит от экрана загрузившего", () => {
+    const LOW_WIDTH = 294;
+    const LOW_HEIGHT = 316;
+
+    async function uploaded(name: string, type: string) {
+      canvasOf(LOW_WIDTH, LOW_HEIGHT);
+      const board = createBoardDocument();
+      renderScene(board);
+      upload(name, type);
+      await waitFor(() => {
+        expect(scene(board)).toHaveLength(1);
+      });
+      const [only] = scene(board);
+      if (only === undefined) throw new Error(name);
+      return { board, id: only.id, stored: only };
+    }
+
+    it.each([
+      ["a.mp4", "video/mp4", 480, 270 + VIDEO_BAR_HEIGHT],
+      ["a.pdf", "application/pdf", 360, 480 + PDF_BAR_HEIGHT],
+      ["a.mp3", "audio/mpeg", 400, 96],
+    ])(
+      "%s: в документе размер без учёта экрана, загрузившему — по его виду",
+      async (name, type, width, height) => {
+        const { id, stored } = await uploaded(name, type);
+        expect(stored.width).toBe(width);
+        expect(stored.height).toBe(height);
+        expect(shownSize(id).width).toBeLessThan(width);
+      },
+    );
+
+    it("второй клиент получает размер из документа, а не размер телефона", async () => {
+      const { board, id } = await uploaded("a.mp4", "video/mp4");
+      const other = createBoardDocument();
+      Y.applyUpdate(other.doc, Y.encodeStateAsUpdate(board.doc));
+      expect(object(other, id).width).toBe(480);
+    });
+
+    it("после правки размера в документе показывается она, а не размер под экран", async () => {
+      const { board, id } = await uploaded("a.mp4", "video/mp4");
+      act(() => {
+        objectMap(board.objects, id)?.set("width", 500);
+        objectMap(board.objects, id)?.set("height", 400);
+      });
+      expect(shownSize(id)).toEqual({ width: 500, height: 400 });
+    });
+
+    it("FIL-02: страницы, извлечённые на телефоне, получают размер документа", async () => {
+      const user = userEvent.setup();
+      const { board, stored } = await uploaded("a.pdf", "application/pdf");
+      await user.click(
+        within(selectionBar()).getByRole("button", { name: "Extract pages" }),
+      );
+      const dialog = screen.getByRole("dialog", { name: "Extract pages" });
+      await user.click(within(dialog).getByLabelText("Page 2"));
+      await user.click(within(dialog).getByRole("button", { name: "Extract" }));
+      const extracted = scene(board).find((o) => o.attachment?.page === 2);
+      expect(extracted?.width).toBe(stored.width);
+      expect(extracted?.height).toBe(stored.height - PDF_BAR_HEIGHT);
+    });
+
+    it.each([
+      ["a.mp4", "video/mp4"],
+      ["a.pdf", "application/pdf"],
+    ])(
+      "%s: панель выделения помечена для переноса под объект",
+      async (name, type) => {
+        await uploaded(name, type);
+        expect(selectionBar()).toHaveClass("selection-bar--below");
+      },
+    );
+
+    it("у других объектов панель выделения на своём месте", async () => {
+      await uploaded("a.mp3", "audio/mpeg");
+      expect(selectionBar()).not.toHaveClass("selection-bar--below");
     });
   });
 

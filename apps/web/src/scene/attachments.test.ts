@@ -55,6 +55,36 @@ describe("createAttachment", () => {
   });
 });
 
+describe("BUG-032: размер в документе и размер на экране загрузившего", () => {
+  it("центр считается по показанному размеру, а в документ идёт полный", () => {
+    const { objects } = createBoardDocument();
+    const id = createAttachment(
+      objects,
+      "video",
+      { x: 100, y: 50 },
+      FILE,
+      "Alice",
+      { width: 480, height: 382 },
+      { width: 280, height: 192 },
+    );
+    const object = find(objects, id);
+    expect(object.width).toBe(480);
+    expect(object.height).toBe(382);
+    expect(object.x).toBe(100 - 140);
+    expect(object.y).toBe(50 - 96);
+  });
+
+  it("низкий холст: панель выделения под объектом, её место отдано объекту", () => {
+    const low = { width: 294, height: 316 };
+    expect(roomInView(low, 1).height).toBe(low.height - 110 - 12 - 8);
+  });
+
+  it("обычный холст телефона: место над объектом для панели выделения остаётся", () => {
+    const phone = { width: 334, height: 388 };
+    expect(roomInView(phone, 1).height).toBe(phone.height - 110 - 12 - 68);
+  });
+});
+
 describe("рамки PDF и видео", () => {
   it("FIL-02: страница в пропорциях и панель страниц под ней", () => {
     expect(pdfFrame({ width: 600, height: 800 })).toEqual({
