@@ -79,6 +79,7 @@ stateDiagram-v2
   BLOCKED --> IN_DEV: владелец ответил на вопрос DEV
   IN_QA --> BLOCKED: неясное требование
   BLOCKED --> IN_QA: владелец ответил в docs/questions.md
+  BLOCKED --> READY_FOR_QA: DEV передал исправление по решению владельца
   DONE --> [*]
 ```
 
