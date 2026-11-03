@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.identity import service as identity
 from app.identity.models import SubjectType
-from app.identity.sessions import USER_COOKIE, find_board_session, find_subject
+from app.identity.sessions import USER_COOKIE, find_subject
 from app.library import service as library
 from app.library.models import Board
-from app.sharing.service import board_cookie_name
+from app.sharing.service import guest_session
 
 
 async def _active_user_id(db: AsyncSession, cookies: Mapping[str, str]) -> uuid.UUID | None:
@@ -29,8 +29,7 @@ async def can_use_board(db: AsyncSession, board_id: uuid.UUID, cookies: Mapping[
     board = await db.get(Board, board_id)
     if board is None or board.deleted_at is not None:
         return False
-    guest = await find_board_session(db, cookies.get(board_cookie_name(board_id)), board_id)
-    if guest is not None:
+    if await guest_session(db, board_id, cookies) is not None:
         return True
     user_id = await _active_user_id(db, cookies)
     return user_id is not None and await library.get_board(db, user_id, board_id) is not None

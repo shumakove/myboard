@@ -36,6 +36,7 @@ class SharedBoard(BaseModel):
 
 
 class JoinRequest(BaseModel):
-    """SHR-03: отображаемое имя участника на эту сессию."""
+    """SHR-03: отображаемое имя участника на эту сессию; EMB-04: вход со встроенной доски."""
 
     name: Name
+    embed: bool = False

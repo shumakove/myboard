@@ -35,6 +35,11 @@ function guestServer(participants: Record<string, string> = {}) {
   });
 }
 
+function joinBody(server: ReturnType<typeof guestServer>) {
+  return server.library.account.calls.find((c) => c.path.endsWith("/join"))
+    ?.body;
+}
+
 describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -57,6 +62,8 @@ describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", (
     expect(location.history.at(-1)).toBe("/b/tok-1");
     const paths = server.library.account.calls.map((c) => c.path);
     expect(paths).toEqual(["/api/share/tok-1", "/api/share/tok-1/join"]);
+    // Q-008: обычная страница не просит cookie встроенной доски.
+    expect(joinBody(server)).toEqual({ name: "  Kate ", embed: false });
   });
 
   it("SHR-03: пустое имя не отправляется", async () => {
@@ -238,6 +245,8 @@ describe("/b/{token}/embed — встроенная доска (EMB-04)", () => 
     expect(location.history.at(-1)).toBe("/b/tok-1/embed");
     expect(FakeSocket.last().url).toContain("token=tok-1");
     expect(server.participants["tok-1"]).toBe("Kate");
+    // Q-008: сервер выдаёт cookie встроенной доски только на такой вход.
+    expect(joinBody(server)).toEqual({ name: "Kate", embed: true });
   });
 
   it("EMB-04: правка из фрейма уходит в общий документ", async () => {

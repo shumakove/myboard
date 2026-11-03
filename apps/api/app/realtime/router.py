@@ -27,6 +27,7 @@ from app.realtime.protocol import (
     encode_sync,
 )
 from app.realtime.room import BoardRoom, Peer
+from app.sharing.embed import trusted_cookies
 
 router = APIRouter(tags=["realtime"])
 
@@ -44,7 +45,7 @@ async def board_socket(
     websocket: WebSocket, board: str | None = None, token: str | None = None
 ) -> None:
     factory: async_sessionmaker[AsyncSession] = websocket.app.state.session_factory
-    request = AccessRequest(board=board, token=token, cookies=dict(websocket.cookies))
+    request = AccessRequest(board=board, token=token, cookies=trusted_cookies(websocket))
     access = None
     if _same_origin(websocket):
         async with factory() as db:

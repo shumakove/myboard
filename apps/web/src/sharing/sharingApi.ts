@@ -61,10 +61,11 @@ export async function openSharedBoard(token: string): Promise<SharedBoard> {
 export async function joinSharedBoard(
   token: string,
   name: string,
+  embed = false,
 ): Promise<SharedBoard> {
   const { data, response } = await api.POST("/api/share/{token}/join", {
     params: { path: { token } },
-    body: { name },
+    body: { name, embed },
   });
   if (!data) fail(response, GUEST_MESSAGES);
   return data;

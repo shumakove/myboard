@@ -119,6 +119,7 @@ export function BoardByLink({
           <h1>{board.title}</h1>
           <NameForm
             token={token}
+            embedded={embedded}
             onJoined={(joined) => {
               if (embedded) void confirmSession(token, joined, setState);
               else setState({ status: "ready", board: joined });
@@ -156,8 +157,9 @@ export function BoardByLink({
 }
 
 /**
- * EMB-04: на странице чужого сайта браузер может отбросить cookie (SameSite, сторонние
- * cookie). Без неё канал не откроется, и участник снова увидел бы форму имени без объяснений.
+ * EMB-04: на странице чужого сайта браузер может отбросить cookie: на `http://` всегда, а на
+ * HTTPS — если не принимает cookie встроенной доски. Без неё канал не откроется, и участник
+ * снова увидел бы форму имени без объяснений.
  */
 async function confirmSession(
   token: string,
@@ -194,10 +196,12 @@ function failure(err: unknown): PageState {
 /** SHR-03: отображаемое имя на эту сессию. */
 function NameForm({
   token,
+  embedded,
   onJoined,
   onUnavailable,
 }: {
   token: string;
+  embedded: boolean;
   onJoined: (board: SharedBoard) => void;
   onUnavailable: () => void;
 }) {
@@ -214,7 +218,7 @@ function NameForm({
     setPending(true);
     setError(null);
     try {
-      onJoined(await joinSharedBoard(token, name));
+      onJoined(await joinSharedBoard(token, name, embedded));
     } catch (err: unknown) {
       if (err instanceof SharingApiError && err.status === 404) {
         onUnavailable();

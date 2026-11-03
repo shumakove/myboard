@@ -441,6 +441,9 @@ export interface paths {
         /**
          * Join Shared Board
          * @description SHR-02, SHR-03: имя на сессию → cookie этой доски до закрытия браузера.
+         *
+         *     EMB-04: вход со встроенной доски при HTTPS получает отдельную cookie, которую браузер
+         *     отправит и во фрейме чужого сайта. На `http://` такой cookie нет: браузер её не примет.
          */
         post: operations["join_shared_board_api_share__token__join_post"];
         delete?: never;
@@ -682,11 +685,16 @@ export interface components {
         };
         /**
          * JoinRequest
-         * @description SHR-03: отображаемое имя участника на эту сессию.
+         * @description SHR-03: отображаемое имя участника на эту сессию; EMB-04: вход со встроенной доски.
          */
         JoinRequest: {
             /** Name */
             name: string;
+            /**
+             * Embed
+             * @default false
+             */
+            embed: boolean;
         };
         /**
          * LinkPreviewIn

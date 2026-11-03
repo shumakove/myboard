@@ -34,6 +34,7 @@ from app.media.schemas import (
     MediaCopyIn,
     MediaOut,
 )
+from app.sharing.embed import trusted_cookies
 
 router = APIRouter(tags=["media"])
 
@@ -120,7 +121,7 @@ async def upload_media(
     kind: Literal["file"] | None = None,
 ) -> MediaOut:
     """IMG-01, IMG-07, FIL-01…FIL-04: файл на доску; ответ — id и адрес файла."""
-    if not await can_use_board(db, board_id, request.cookies):
+    if not await can_use_board(db, board_id, trusted_cookies(request)):
         raise _not_found()
     try:
         mime = service.declared_type(request.headers.get("content-type"), generic=kind == "file")
@@ -158,7 +159,7 @@ async def copy_media(
 
     Файл без права на его доску неотличим от несуществующего: в ответе его просто нет.
     """
-    if not await can_use_board(db, board_id, request.cookies):
+    if not await can_use_board(db, board_id, trusted_cookies(request)):
         raise _not_found()
     settings = settings_of(request)
     readable: dict[uuid.UUID, bool] = {}
@@ -171,7 +172,9 @@ async def copy_media(
             copies[media_id] = media_id
             continue
         if source.board_id not in readable:
-            readable[source.board_id] = await can_copy_from(db, source.board_id, request.cookies)
+            readable[source.board_id] = await can_copy_from(
+                db, source.board_id, trusted_cookies(request)
+            )
         if not readable[source.board_id]:
             continue
         copy = await service.copy_to_board(
@@ -194,7 +197,7 @@ async def preview_link(
 
     Ответ не различает недоступную и внутреннюю страницу: маршрут не сканирует сеть.
     """
-    if not await can_use_board(db, board_id, request.cookies):
+    if not await can_use_board(db, board_id, trusted_cookies(request)):
         raise _not_found()
     # Соединение с базой не держится, пока идёт внешний запрос.
     await db.rollback()
@@ -237,7 +240,7 @@ async def get_media(
     FIL-01: `download` — имя ярлыка на доске; файл скачивается под ним, а не показывается.
     """
     media = await service.get(db, media_id)
-    if media is None or not await can_use_board(db, media.board_id, request.cookies):
+    if media is None or not await can_use_board(db, media.board_id, trusted_cookies(request)):
         raise _not_found()
     path = service.file_path(settings_of(request).media_root, media)
     if not await anyio.Path(path).is_file():

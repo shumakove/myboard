@@ -2,17 +2,20 @@
 
 import re
 from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
 import app.main  # noqa: F401  # регистрирует модели всех модулей в Base.metadata
 from app.core.db import Base
 from app.core.settings import Settings
+from app.main import create_app
 
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin-password"
@@ -373,3 +376,216 @@ def test_bug026_namesakes_get_different_stable_ids(
         assert joined["id"] != other["id"]
         assert first.get(f"/api/share/{token}").json()["participant"]["id"] == joined["id"]
         assert joined["id"] not in first.cookies.values()
+
+
+# EMB-04: cookie встроенной доски при HTTPS (Q-008, ARCHITECTURE.md, раздел 5).
+
+SAME_SITE: dict[str, str] = {"sec-fetch-site": "same-origin"}
+HTTPS_BASE = "https://board.example.com"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+@dataclass
+class HttpsSite:
+    """Приложение с HTTPS-адресом, доска Alice и её ссылка; у клиента нет cookie участника."""
+
+    client: TestClient
+    alice: dict[str, str]
+    board_id: str
+    token: str
+
+    def get_shared(self, cookie: str, headers: dict[str, str]) -> Any:
+        return self.client.get(f"/api/share/{self.token}", headers={"cookie": cookie, **headers})
+
+
+@pytest.fixture
+def site(settings: Settings) -> Iterator[HttpsSite]:
+    https = settings.model_copy(update={"public_base_url": HTTPS_BASE})
+    with TestClient(create_app(https), base_url="https://testserver") as client:
+        assert (
+            client.post(
+                "/api/admin/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+            ).status_code
+            == 204
+        )
+        assert client.post("/api/admin/users", json=ALICE).status_code == 201
+        login = {"email": ALICE["email"], "password": ALICE["password"]}
+        assert client.post("/api/login", json=login).status_code == 204
+        board = client.post("/api/boards", json={"title": "Roadmap"}).json()
+        token = client.get(f"/api/boards/{board['id']}/share").json()["token"]
+        alice = {"cookie": "; ".join(f"{k}={v}" for k, v in client.cookies.items())}
+        client.cookies.clear()
+        yield HttpsSite(client, alice, board["id"], token)
+
+
+def _embed_join(site: HttpsSite) -> tuple[str, str]:
+    """Вход со встроенной страницы: заголовок Set-Cookie и пара `имя=значение` для запросов."""
+    response = site.client.post(
+        f"/api/share/{site.token}/join",
+        json={"name": "Kate", "embed": True},
+        headers=SAME_SITE,
+    )
+    assert response.status_code == 200, response.text
+    site.client.cookies.clear()
+    header = response.headers["set-cookie"]
+    return header, header.split(";")[0]
+
+
+def test_emb04_embed_join_on_https_sets_partitioned_cookie(site: HttpsSite) -> None:
+    header, pair = _embed_join(site)
+    assert pair.startswith("myboard_embed_")
+    attributes = {part.strip().lower() for part in header.split(";")[1:]}
+    assert attributes == {"httponly", "path=/", "samesite=none", "secure", "partitioned"}
+
+
+def test_emb04_common_join_on_https_stays_lax(site: HttpsSite) -> None:
+    response = site.client.post(f"/api/share/{site.token}/join", json={"name": "Kate"})
+    site.client.cookies.clear()
+    header = response.headers["set-cookie"].lower()
+    assert header.startswith("myboard_board_")
+    assert "samesite=lax" in header
+    assert "samesite=none" not in header
+    assert "partitioned" not in header
+
+
+def test_emb04_embed_flag_on_http_gives_common_lax_cookie(
+    alice: TestClient, board: dict[str, Any], guest: TestClient
+) -> None:
+    """На `http://` браузер не примет `SameSite=None`: поведение прежнее."""
+    token = _link(alice, board["id"])["token"]
+    response = guest.post(
+        f"/api/share/{token}/join", json={"name": "Kate", "embed": True}, headers=SAME_SITE
+    )
+    assert response.status_code == 200
+    header = response.headers["set-cookie"].lower()
+    assert header.startswith("myboard_board_")
+    assert "samesite=lax" in header
+    assert "secure" not in header
+    assert "partitioned" not in header
+
+
+def test_emb04_embed_cookie_on_http_is_ignored(
+    alice: TestClient, board: dict[str, Any], guest: TestClient
+) -> None:
+    token = _link(alice, board["id"])["token"]
+    joined = guest.post(f"/api/share/{token}/join", json={"name": "Kate"})
+    value = joined.cookies[f"myboard_board_{board['id'].replace('-', '')}"]
+    guest.cookies.clear()
+    forged = f"myboard_embed_{board['id'].replace('-', '')}={value}"
+    response = guest.get(f"/api/share/{token}", headers={"cookie": forged, **SAME_SITE})
+    assert response.json()["participant"] is None
+
+
+@pytest.mark.parametrize(
+    ("headers", "accepted"),
+    [
+        (SAME_SITE, True),
+        ({"sec-fetch-site": "cross-site"}, False),
+        ({"sec-fetch-site": "same-site"}, False),
+        ({"sec-fetch-site": "none"}, False),
+        # Заголовок браузера важнее: чужой сайт не подставит свой Origin вместо него.
+        ({"sec-fetch-site": "cross-site", "origin": HTTPS_BASE}, False),
+        ({"origin": HTTPS_BASE}, True),
+        ({"origin": "https://evil.example"}, False),
+        ({}, False),
+    ],
+)
+def test_emb04_embed_cookie_counts_only_from_own_site(
+    site: HttpsSite, headers: dict[str, str], accepted: bool
+) -> None:
+    _, pair = _embed_join(site)
+    participant = site.get_shared(pair, headers).json()["participant"]
+    assert (participant is not None) is accepted
+
+
+def test_emb04_forged_cross_site_join_is_refused(site: HttpsSite) -> None:
+    response = site.client.post(
+        f"/api/share/{site.token}/join",
+        json={"name": "Mallory", "embed": True},
+        headers={"sec-fetch-site": "cross-site"},
+    )
+    assert response.status_code == 404
+    assert "set-cookie" not in response.headers
+
+
+def test_emb04_forged_cross_site_upload_is_refused(site: HttpsSite) -> None:
+    _, pair = _embed_join(site)
+    url = f"/api/boards/{site.board_id}/media"
+    headers = {"content-type": "image/png", "cookie": pair}
+
+    forged = site.client.post(
+        url,
+        params={"name": "a.png"},
+        content=PNG,
+        headers={**headers, "origin": "https://evil.example"},
+    )
+    assert forged.status_code == 404
+
+    own = site.client.post(
+        url, params={"name": "a.png"}, content=PNG, headers={**headers, **SAME_SITE}
+    )
+    assert own.status_code == 201, own.text
+
+    media = own.json()["url"]
+    assert site.client.get(media, headers={"cookie": pair, **SAME_SITE}).status_code == 200
+    cross = {"cookie": pair, "sec-fetch-site": "cross-site"}
+    assert site.client.get(media, headers=cross).status_code == 404
+
+
+def test_emb04_embed_cookie_opens_channel_only_from_own_site(site: HttpsSite) -> None:
+    _, pair = _embed_join(site)
+    url = f"/api/ws?token={site.token}"
+    host = {"host": "board.example.com", "origin": HTTPS_BASE, "cookie": pair}
+
+    with site.client.websocket_connect(url, headers={**host, **SAME_SITE}):
+        pass
+    for refused in ({**host, "sec-fetch-site": "cross-site"}, {"cookie": pair}):
+        with (
+            pytest.raises(WebSocketDisconnect),
+            site.client.websocket_connect(url, headers=refused),
+        ):
+            pass
+
+
+def test_emb04_embed_cookie_is_bound_to_its_board_and_gives_no_account(site: HttpsSite) -> None:
+    other = site.client.post("/api/boards", json={"title": "Other"}, headers=site.alice).json()
+    other_token = site.client.get(f"/api/boards/{other['id']}/share", headers=site.alice).json()[
+        "token"
+    ]
+    site.client.cookies.clear()
+
+    _, pair = _embed_join(site)
+    value = pair.split("=", 1)[1]
+    other_cookie = f"myboard_embed_{other['id'].replace('-', '')}={value}"
+    headers = {"cookie": other_cookie, **SAME_SITE}
+    assert (
+        site.client.get(f"/api/share/{other_token}", headers=headers).json()["participant"] is None
+    )
+    assert site.client.get("/api/boards", headers={"cookie": pair, **SAME_SITE}).status_code == 401
+
+
+def test_emb04_reset_revokes_embed_session(site: HttpsSite) -> None:
+    """SHR-06: сессия встроенной доски отзывается вместе со ссылкой."""
+    _, pair = _embed_join(site)
+    assert site.get_shared(pair, SAME_SITE).json()["participant"] is not None
+
+    reset = site.client.post(f"/api/boards/{site.board_id}/share/reset", headers=site.alice)
+    site.client.cookies.clear()
+    token = reset.json()["token"]
+
+    assert site.get_shared(pair, SAME_SITE).status_code == 404
+    response = site.client.get(f"/api/share/{token}", headers={"cookie": pair, **SAME_SITE})
+    assert response.json()["participant"] is None
+
+
+def test_emb04_owner_session_stays_lax_on_https(settings: Settings) -> None:
+    https = settings.model_copy(update={"public_base_url": HTTPS_BASE})
+    with TestClient(create_app(https), base_url="https://testserver") as client:
+        client.post("/api/admin/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
+        client.post("/api/admin/users", json=ALICE)
+        response = client.post(
+            "/api/login", json={"email": ALICE["email"], "password": ALICE["password"]}
+        )
+    header = response.headers["set-cookie"].lower()
+    assert "samesite=lax" in header
+    assert "partitioned" not in header
