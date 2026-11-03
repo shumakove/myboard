@@ -235,12 +235,20 @@ export async function putObject(page: Page, query: string, id: string, obj: Reco
   await page.evaluate(
     async ({ query, bytes }) => {
       const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`;
-      const ws = new WebSocket(url);
-      ws.binaryType = 'arraybuffer';
-      await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => resolve();
-        ws.onerror = () => reject(new Error('канал не открылся'));
-      });
+      // Сбой рукопожатия на машине прогона (net::ERR_NO_BUFFER_SPACE, docs/qa/reports/flaky-sync.md): подключиться заново.
+      const ws = await (async () => {
+        for (let attempt = 1; ; attempt++) {
+          const socket = new WebSocket(url);
+          socket.binaryType = 'arraybuffer';
+          const opened = await new Promise<boolean>((resolve) => {
+            socket.onopen = () => resolve(true);
+            socket.onerror = () => resolve(false);
+          });
+          if (opened) return socket;
+          if (attempt === 5) throw new Error('канал не открылся');
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      })();
       ws.send(new Uint8Array(bytes));
       await new Promise((r) => setTimeout(r, 500));
       ws.close();
@@ -253,16 +261,28 @@ export async function putObject(page: Page, query: string, id: string, obj: Reco
 export async function docSeenByLateClient(page: Page, query: string): Promise<Y.Doc> {
   const frames: number[][] = await page.evaluate(async (query) => {
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`;
-    const ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
     const got: number[][] = [];
-    ws.onmessage = (e) => {
-      if (e.data instanceof ArrayBuffer) got.push([...new Uint8Array(e.data)]);
+    const connect = () => {
+      const socket = new WebSocket(url);
+      socket.binaryType = 'arraybuffer';
+      socket.onmessage = (e) => {
+        if (e.data instanceof ArrayBuffer) got.push([...new Uint8Array(e.data)]);
+      };
+      return socket;
     };
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = () => reject(new Error('канал не открылся'));
-    });
+    let ws = connect();
+      // Сбой рукопожатия на машине прогона (net::ERR_NO_BUFFER_SPACE, docs/qa/reports/flaky-sync.md): клиент продукта
+      // в таком случае подключается заново, тесту делать то же самое.
+      for (let attempt = 1; ; attempt++) {
+        const opened = await new Promise<boolean>((resolve) => {
+          ws.onopen = () => resolve(true);
+          ws.onerror = () => resolve(false);
+        });
+        if (opened) break;
+        if (attempt === 5) throw new Error('канал не открылся');
+        await new Promise((r) => setTimeout(r, 300));
+        ws = connect();
+      }
     // sync step 1 с пустым вектором версии
     ws.send(new Uint8Array([0, 0, 1, 0]));
     await new Promise((r) => setTimeout(r, 1000));

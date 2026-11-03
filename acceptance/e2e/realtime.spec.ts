@@ -94,12 +94,20 @@ async function sendEditFromPage(page: Page, query: string, update: Uint8Array): 
   await page.evaluate(
     async ({ query, bytes }) => {
       const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`;
-      const ws = new WebSocket(url);
-      ws.binaryType = 'arraybuffer';
-      await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => resolve();
-        ws.onerror = () => reject(new Error('канал не открылся'));
-      });
+      // Сбой рукопожатия на машине прогона (net::ERR_NO_BUFFER_SPACE, docs/qa/reports/flaky-sync.md): подключиться заново.
+      const ws = await (async () => {
+        for (let attempt = 1; ; attempt++) {
+          const socket = new WebSocket(url);
+          socket.binaryType = 'arraybuffer';
+          const opened = await new Promise<boolean>((resolve) => {
+            socket.onopen = () => resolve(true);
+            socket.onerror = () => resolve(false);
+          });
+          if (opened) return socket;
+          if (attempt === 5) throw new Error('канал не открылся');
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      })();
       ws.send(new Uint8Array(bytes));
       // дождаться, пока сервер примет: короткая пауза и закрытие
       await new Promise((r) => setTimeout(r, 500));

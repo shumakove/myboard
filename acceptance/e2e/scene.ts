@@ -74,12 +74,24 @@ export async function writeDoc(page: Page, boardId: string, build: (doc: Y.Doc) 
   await page.evaluate(
     async ({ query, bytes }) => {
       const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${query}`;
-      const ws = new WebSocket(url);
-      ws.binaryType = 'arraybuffer';
-      await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => resolve();
-        ws.onerror = () => reject(new Error('канал не открылся'));
-      });
+      const connect = () => {
+        const socket = new WebSocket(url);
+        socket.binaryType = 'arraybuffer';
+        return socket;
+      };
+      let ws = connect();
+      // Сбой рукопожатия на машине прогона (net::ERR_NO_BUFFER_SPACE, docs/qa/reports/flaky-sync.md): клиент продукта
+      // в таком случае подключается заново, тесту делать то же самое.
+      for (let attempt = 1; ; attempt++) {
+        const opened = await new Promise<boolean>((resolve) => {
+          ws.onopen = () => resolve(true);
+          ws.onerror = () => resolve(false);
+        });
+        if (opened) break;
+        if (attempt === 5) throw new Error('канал не открылся');
+        await new Promise((r) => setTimeout(r, 300));
+        ws = connect();
+      }
       ws.send(new Uint8Array(bytes));
       await new Promise((r) => setTimeout(r, 500));
       ws.close();
