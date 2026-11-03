@@ -1639,7 +1639,10 @@ test('FIL-02 FIL-03 BUG-030 phone and desktop: an object placed on the phone is 
     await expect(obj(desk.page, pdf)).toBeVisible();
     await obj(desk.page, pdf).getByRole('button', { name: 'Next page', exact: true }).click();
     await expectPageColor(desk.page, pdf, 'green');
-    expect(Number(raw[video].width), 'в документе один размер').toBeLessThanOrEqual(412);
+    // BUG-032: прежний предел «не шире 412» шёл от исправления BUG-030, а не от требования: ни одно требование
+    // не задаёт размер в документе. Проверяется то, что следует из названия: компьютер показывает размер документа.
+    const seen = await boxOf(obj(desk.page, video));
+    expect(Math.abs(seen.width - Number(raw[video].width)), 'компьютер показывает размер из документа').toBeLessThanOrEqual(2);
   } finally {
     await desk.close();
     await owner.close();
@@ -2058,6 +2061,336 @@ for (const [title, size] of LOW_PHONES) {
       log031(`${title} PDF: страница ${Math.round(small.width)}x${Math.round(small.height)} → ${Math.round(shown.width)}x${Math.round(shown.height)}, canvas ${bitmap} px`);
       expect(bitmap, 'битовая карта не меньше показанного').toBeGreaterThanOrEqual(shown.height);
     } finally {
+      await owner.close();
+    }
+  });
+}
+
+// ---------- Перепроверка BUG-032: случайное касание, панель выделения, размер в документе ----------
+
+const log032 = (line: string) => {
+  console.log(`наблюдение BUG-032 ${line}`);
+  test.info().annotations.push({ type: 'наблюдение BUG-032', description: line });
+};
+
+type BarHit = { x: number; y: number; label: string };
+
+/** Точки сетки по видимой части объекта, где палец попадёт в панель выделения, а не в объект. */
+async function barOverObject(page: Page, id: string): Promise<{ total: number; hits: BarHit[] }> {
+  return page.evaluate((oid) => {
+    const box = document.querySelector(`[data-object-id="${oid}"]`)!.getBoundingClientRect();
+    const view = document.querySelector('[data-testid="board-canvas"]')!.getBoundingClientRect();
+    const bar = document.querySelector('[role="toolbar"][aria-label="Selection"]');
+    const left = Math.max(box.left, view.left, 0);
+    const right = Math.min(box.right, view.right, innerWidth);
+    const top = Math.max(box.top, view.top, 0);
+    const bottom = Math.min(box.bottom, view.bottom, innerHeight);
+    const hits: BarHit[] = [];
+    let total = 0;
+    for (let i = 0; i <= 16; i++) {
+      for (let j = 0; j <= 12; j++) {
+        const x = left + ((right - left) * i) / 16;
+        const y = top + ((bottom - top) * j) / 12;
+        total++;
+        const el = document.elementFromPoint(x, y);
+        if (el && bar?.contains(el)) {
+          const control = el.closest('button, a, select, input');
+          hits.push({ x, y, label: control?.getAttribute('aria-label') ?? control?.textContent ?? '(панель)' });
+        }
+      }
+    }
+    return { total, hits };
+  }, id);
+}
+
+/** Геометрия и блокировка объекта в документе: всё, что не должно меняться от случайного касания. */
+const keyOf = (o: Record<string, unknown>) => JSON.stringify([o.x, o.y, o.width, o.height, o.locked ?? false]);
+
+/** Касания по сетке всей видимой части: объект не удалён, не заблокирован, не скопирован и не сдвинут. */
+async function sweepTaps(page: Page, id: string, boardId: string, kind: string) {
+  const before = await rawObjects(page, boardId);
+  const count = Object.keys(before).length;
+  const box = await boxOf(obj(page, id));
+  const view = await boxOf(canvas(page));
+  const left = Math.max(box.x, view.x, 0);
+  const right = Math.min(box.x + box.width, view.x + view.width, page.viewportSize()!.width);
+  const top = Math.max(box.y, view.y, 0);
+  const bottom = Math.min(box.y + box.height, view.y + view.height, page.viewportSize()!.height);
+  const lost: string[] = [];
+  for (const fy of [0.02, 0.1, 0.25, 0.5, 0.75, 0.98]) {
+    for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+      if ((await obj(page, id).getAttribute('aria-selected')) !== 'true') await selectObj(page, id, true);
+      const x = left + (right - left) * fx;
+      const y = top + (bottom - top) * fy;
+      await page.touchscreen.tap(x, y);
+      await page.waitForTimeout(40);
+      // Касание могло попасть в `Full screen` плеера: это его действие, для следующего касания выйти.
+      await page.evaluate(() => (document.fullscreenElement ? document.exitFullscreen() : undefined));
+      await page.keyboard.press('Escape').catch(() => {});
+      if ((await obj(page, id).count()) === 0) {
+        lost.push(`${Math.round(x)},${Math.round(y)}: объект удалён`);
+        break;
+      }
+      if ((await obj(page, id).getAttribute('data-locked')) === 'true') {
+        lost.push(`${Math.round(x)},${Math.round(y)}: объект заблокирован`);
+        break;
+      }
+    }
+    if (lost.length) break;
+  }
+  expect(lost, `${kind}: случайное касание`).toEqual([]);
+  const after = await rawObjects(page, boardId);
+  expect(Object.keys(after).length, 'объектов столько же').toBe(count);
+  expect(keyOf(after[id]), 'положение, размер и блокировка в документе прежние').toBe(keyOf(before[id]));
+}
+
+for (const [title, size] of PHONES) {
+  test(`FIL-03 MOB-06 BUG-032 ${title}: selection bar does not cover a new video, a tap anywhere on it neither deletes nor locks it`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const frame = obj(page, id).locator('video').first();
+      await expect.poll(() => frame.evaluate((v) => (v as HTMLVideoElement).videoWidth)).toBeGreaterThan(0);
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      const bar = await boxOf(selectionBar(page));
+      const map = await boxOf(minimap(page));
+      const pic = await pictureBox(frame);
+      const share = intersection(bar, pic) / (pic.width * pic.height);
+      const over = await barOverObject(page, id);
+      log032(`${title} видео: холст ${c.width}x${c.height}, объект ${Math.round(o.width)}x${Math.round(o.height)} y=${Math.round(o.y - c.y)}, кадр ${Math.round(pic.width)}x${Math.round(pic.height)}, панель y=${Math.round(bar.y - c.y)} h=${Math.round(bar.height)} w=${Math.round(bar.width)}, миникарта y=${Math.round(map.y - c.y)}, панель над миникартой ${Math.round(intersection(bar, map))} px2, закрыто кадра ${Math.round(share * 100)} %, панель над объектом ${over.hits.length}/${over.total}: ${[...new Set(over.hits.map((h) => h.label))].join(', ')}`);
+      await page.screenshot({ path: test.info().outputPath(`video-${title}.png`) });
+      expect(share, 'панель не закрывает кадр').toBe(0);
+      expect(over.hits.map((h) => h.label), 'под пальцем на объекте нет кнопок панели').toEqual([]);
+      await sweepTaps(page, id, owner.boardId, 'видео');
+      // Те же действия доступны прямым нажатием.
+      await selectObj(page, id, true);
+      const del = barBtn(page, 'Delete');
+      await del.scrollIntoViewIfNeeded();
+      expect(Math.min((await boxOf(del)).width, (await boxOf(del)).height), 'Delete не меньше 44 px').toBeGreaterThanOrEqual(MIN_TARGET);
+      await del.tap();
+      await expect(obj(page, id)).toHaveCount(0);
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-02 MOB-06 BUG-032 ${title}: selection bar does not cover a new PDF, the page is legible, a tap anywhere neither deletes nor locks it`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, pdf3(), 'pdf');
+      await expectPageColor(page, id, 'red');
+      const sheet = obj(page, id).locator('canvas').first();
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      const bar = await boxOf(selectionBar(page));
+      const pic = await pictureBox(sheet);
+      const share = intersection(bar, pic) / (pic.width * pic.height);
+      const over = await barOverObject(page, id);
+      log032(`${title} PDF: холст ${c.width}x${c.height}, объект ${Math.round(o.width)}x${Math.round(o.height)}, страница ${Math.round(pic.width)}x${Math.round(pic.height)}, панель y=${Math.round(bar.y - c.y)}, закрыто ${Math.round(share * 100)} %, панель над объектом ${over.hits.length}/${over.total}: ${[...new Set(over.hits.map((h) => h.label))].join(', ')}`);
+      await page.screenshot({ path: test.info().outputPath(`pdf-${title}.png`) });
+      expect(share, 'панель не закрывает страницу').toBe(0);
+      expect(over.hits.map((h) => h.label), 'под пальцем на объекте нет кнопок панели').toEqual([]);
+      expect(pic.height, 'страница больше прежних 60×80').toBeGreaterThan(80);
+      await sweepTaps(page, id, owner.boardId, 'PDF');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-02 FIL-03 MOB-06 BUG-032 ${title} observation: after reload the same video is at document size; what the bar covers and which controls are reachable`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      await untilRaw(page, owner.boardId, (o) => expect(o[id]).toBeTruthy());
+      await page.reload();
+      await expect(obj(page, id)).toBeVisible({ timeout: 20_000 });
+      await selectObj(page, id, true);
+      const c = await boxOf(canvas(page));
+      const o = await boxOf(obj(page, id));
+      const over = await barOverObject(page, id);
+      const state = await page.evaluate((oid) => {
+        const box = document.querySelector(`[data-object-id="${oid}"]`)!;
+        const out: Record<string, string> = {};
+        for (const el of box.querySelectorAll('button, input, select')) {
+          const r = el.getBoundingClientRect();
+          const name = el.getAttribute('aria-label') ?? el.textContent ?? '?';
+          const cx = r.x + r.width / 2;
+          const cy = r.y + r.height / 2;
+          const top = cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight ? document.elementFromPoint(cx, cy) : null;
+          out[name] = !top ? 'за экраном' : el === top || el.contains(top) ? 'свободна' : `закрыта ${top.closest('[role=toolbar]')?.getAttribute('aria-label') ?? top.closest('[data-testid]')?.getAttribute('data-testid') ?? top.className}`;
+        }
+        return out;
+      }, id);
+      log032(`${title} после перезагрузки: холст ${c.width}x${c.height}, объект ${Math.round(o.width)}x${Math.round(o.height)} x=${Math.round(o.x)} y=${Math.round(o.y - c.y)}; панель над объектом ${over.hits.length}/${over.total}: ${[...new Set(over.hits.map((h) => h.label))].join(', ')}; кнопки ${JSON.stringify(state)}`);
+      await page.screenshot({ path: test.info().outputPath(`reloaded-${title}.png`) });
+      // Второй телефон того же размера видит то же самое, что загрузивший после перезагрузки.
+      const phone2 = await openGuest(browser, profileOpts({ baseURL, viewport: size, hasTouch, isMobile, userAgent, deviceScaleFactor }), owner.token, 'QA Phone 2');
+      try {
+        await expect(obj(phone2.page, id)).toBeVisible({ timeout: 20_000 });
+        const b2 = await boxOf(obj(phone2.page, id));
+        log032(`${title} второй телефон: объект ${Math.round(b2.width)}x${Math.round(b2.height)}`);
+      } finally {
+        await phone2.close();
+      }
+      // MOB-06: действия остаются доступны после уменьшения вида.
+      await page.keyboard.press('Escape').catch(() => {});
+      const play = control(page, id, 'Play');
+      await zoomOutUntilReachable(page, play);
+      await play.tap({ timeout: 5_000 });
+      await expect(player(page, id)).toHaveAttribute('data-playing', 'true');
+    } finally {
+      await owner.close();
+    }
+  });
+}
+
+for (const [title, size] of LOW_PHONES) {
+  test(`FIL-03 MOB-06 BUG-032 ${title}: after reload a tap anywhere on the selected video neither deletes nor locks it`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      await untilRaw(page, owner.boardId, (o) => expect(o[id]).toBeTruthy());
+      await page.reload();
+      await expect(obj(page, id)).toBeVisible({ timeout: 20_000 });
+      await sweepTaps(page, id, owner.boardId, 'видео после перезагрузки');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-03 MOB-06 BUG-032 ${title}: a new video moved down the canvas: a tap on it neither deletes nor locks it`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const o = await boxOf(obj(page, id));
+      const touch = await Touch.of(page);
+      const from = { x: o.x + o.width / 2, y: o.y + 8 };
+      await touch.gesture([from], [{ x: from.x, y: from.y + 70 }], 10);
+      await expect.poll(async () => (await boxOf(obj(page, id))).y, { message: 'объект сдвинут' }).toBeGreaterThan(o.y + 30);
+      const over = await barOverObject(page, id);
+      log032(`${title} сдвинутое видео: панель над объектом ${over.hits.length}/${over.total}: ${[...new Set(over.hits.map((h) => h.label))].join(', ')}`);
+      await page.screenshot({ path: test.info().outputPath(`moved-${title}.png`) });
+      await sweepTaps(page, id, owner.boardId, 'сдвинутое видео');
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`MOB-06 BUG-032 ${title} observation: a large sticky under the bar`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const page = owner.page;
+    try {
+      const shared = { x: 20, y: 20, width: 460, height: 340, rotation: 0, z: 1 };
+      await seed(page, owner.boardId, {
+        big1: { ...shared, type: 'sticky', fill: '#fde68a', text: 'a' },
+      });
+      await expect(obj(page, 'big1')).toBeVisible();
+      await selectObj(page, 'big1', true);
+      const over = await barOverObject(page, 'big1');
+      log032(`${title} большой стикер: панель над объектом ${over.hits.length}/${over.total}: ${[...new Set(over.hits.map((h) => h.label))].join(', ')}`);
+      await page.screenshot({ path: test.info().outputPath(`sticky-${title}.png`) });
+    } finally {
+      await owner.close();
+    }
+  });
+
+  test(`FIL-02 FIL-03 FIL-04 COL-01 BUG-032 ${title}: document size does not depend on the uploader's window; desktop sees the same size as a desktop upload`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const deskOpts = { baseURL, viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false } as Opts;
+    const desk = await openGuest(browser, deskOpts, owner.token, 'QA Desk');
+    const ownDesk = await openOwner(browser, deskOpts);
+    try {
+      for (const [file, kind] of [[fixture('sample.mp4', 'video/mp4'), 'video'], [pdf3(), 'pdf'], [fixture('tone.mp3', 'audio/mpeg'), 'audio']] as [FilePayload, string][]) {
+        const id = await uploadViaTool(owner.page, file, kind);
+        const ref = await upload(ownDesk.page, file, kind);
+        const raw = await untilRaw(owner.page, owner.boardId, (o) => expect(o[id]).toBeTruthy());
+        const rawRef = await untilRaw(ownDesk.page, ownDesk.boardId, (o) => expect(o[ref]).toBeTruthy());
+        expect([raw[id].width, raw[id].height], `${kind}: размер в документе как при загрузке с компьютера`).toEqual([rawRef[ref].width, rawRef[ref].height]);
+        await expect(obj(desk.page, id)).toBeVisible();
+        const seen = await boxOf(obj(desk.page, id));
+        const shownPhone = await boxOf(obj(owner.page, id));
+        log032(`${title} ${kind}: документ ${raw[id].width}x${raw[id].height}, у компьютера ${Math.round(seen.width)}x${Math.round(seen.height)}, у загрузившего ${Math.round(shownPhone.width)}x${Math.round(shownPhone.height)}`);
+        expect(Math.abs(seen.width - Number(raw[id].width)), 'компьютер показывает размер из документа').toBeLessThanOrEqual(2);
+        expect(Math.abs(seen.height - Number(raw[id].height)), 'высота по документу').toBeLessThanOrEqual(2);
+        await barBtn(owner.page, 'Delete').tap();
+        await expect(obj(desk.page, id)).toHaveCount(0);
+      }
+    } finally {
+      await ownDesk.close();
+      await desk.close();
+      await owner.close();
+    }
+  });
+
+  test(`FIL-03 CVS-14 CVS-16 COL-01 BUG-032 ${title}: moving, stretching, undo, copy and reload of a fitted video stay consistent for both clients`, async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+    mobileOnly(isMobile);
+    const owner = await openPhone(browser, { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }, size);
+    const desk = await openGuest(browser, { baseURL, viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false } as Opts, owner.token, 'QA Desk');
+    const page = owner.page;
+    try {
+      const id = await uploadViaTool(page, fixture('sample.mp4', 'video/mp4'), 'video');
+      const raw0 = await untilRaw(page, owner.boardId, (o) => expect(o[id]).toBeTruthy());
+      const shown = await boxOf(obj(page, id));
+      const touch = await Touch.of(page);
+
+      // Растяжение на телефоне: что видит компьютер.
+      const h = await boxOf(handle(page, 'se'));
+      const edge = await boxOf(canvas(page));
+      const start = { x: Math.min(h.x + h.width / 2, edge.x + edge.width - 2), y: h.y + h.height / 2 };
+      await touch.gesture([start], [{ x: start.x - 2, y: Math.min(start.y + 40, size.height - 4) }], 12);
+      const raw2 = await untilRaw(page, owner.boardId, (o) => expect(o[id].height).not.toBe(raw0[id].height));
+      const afterPhone = await boxOf(obj(page, id));
+      log032(`${title} растяжение на телефоне: показано было ${Math.round(shown.width)}x${Math.round(shown.height)}, стало ${Math.round(afterPhone.width)}x${Math.round(afterPhone.height)}; документ был ${raw0[id].width}x${raw0[id].height}, стал ${raw2[id].width}x${raw2[id].height}`);
+      expect(Math.abs(afterPhone.height - Number(raw2[id].height)), 'после растяжения телефон показывает размер из документа').toBeLessThanOrEqual(2);
+      expect.soft(Number(raw2[id].height), 'жест увеличения не уменьшает объект у других участников').toBeGreaterThanOrEqual(Number(raw0[id].height));
+      expect.soft(Number(raw2[id].width), 'жест увеличения не уменьшает объект у других участников').toBeGreaterThanOrEqual(Number(raw0[id].width));
+      await expect.poll(async () => Math.round((await boxOf(obj(desk.page, id))).height)).toBe(Math.round(Number(raw2[id].height)));
+      await page.screenshot({ path: test.info().outputPath(`stretched-${title}.png`) });
+
+      // Отмена возвращает прежний размер документа.
+      await page.getByRole('button', { name: 'Undo', exact: true }).tap();
+      const raw3 = await untilRaw(page, owner.boardId, (o) => expect(o[id].height).toBe(raw0[id].height));
+      expect(raw3[id].width).toBe(raw0[id].width);
+      await expect.poll(async () => Math.round((await boxOf(obj(page, id))).height), { message: 'после отмены показ по виду вернулся' }).toBe(Math.round(shown.height));
+
+
+      // Перемещение: в документе меняются только координаты.
+      const again = await boxOf(obj(page, id));
+      const from = { x: again.x + again.width / 2, y: again.y + 8 };
+      await touch.gesture([from], [{ x: from.x, y: from.y + 30 }], 10);
+      const raw1 = await untilRaw(page, owner.boardId, (o) => expect(o[id].y).not.toBe(raw0[id].y));
+      expect([raw1[id].width, raw1[id].height], 'перемещение не меняет размер в документе').toEqual([raw0[id].width, raw0[id].height]);
+      await expect.poll(async () => Math.round((await boxOf(obj(desk.page, id))).width)).toBe(Number(raw0[id].width));
+
+
+      // Копия получает размер из документа.
+      await desk.page.bringToFront();
+      await selectObj(desk.page, id);
+      await desk.page.keyboard.press('Control+d');
+      const raw4 = await untilRaw(page, owner.boardId, (o) => expect(Object.keys(o).length).toBe(2));
+      const copy = Object.keys(raw4).find((k) => k !== id)!;
+      expect([raw4[copy].width, raw4[copy].height], 'копия размером из документа').toEqual([raw0[id].width, raw0[id].height]);
+
+      // Перезагрузка: телефон показывает размер из документа, координаты те же.
+      await page.reload();
+      await expect(obj(page, id)).toBeVisible({ timeout: 20_000 });
+      const raw5 = await rawObjects(page, owner.boardId);
+      expect([raw5[id].x, raw5[id].y]).toEqual([raw1[id].x, raw1[id].y]);
+    } finally {
+      await desk.close();
       await owner.close();
     }
   });
