@@ -100,7 +100,8 @@ for (const path of ROUTES) {
     if (USER_ROUTES.includes(path)) {
       expect(new URL(page.url()).pathname).toBe("/login");
       expect(appProblems(w)).toEqual([]);
-    } else if (path.startsWith("/b/") && !path.includes("/embed")) {
+    } else if (path.startsWith("/b/")) {
+      // С T7.3 `/b/{token}/embed` — настоящая доска, а не заглушка T0.3: с выдуманным токеном там тот же отказ (SHR-05).
       await expect(page.getByText("This link is not available.")).toBeVisible();
       expect(appProblems(w)).toEqual([]);
     } else {
@@ -145,11 +146,15 @@ test("ARCH-WEB-03 разные маршруты показывают разны�
   }
   await userCtx.close();
   const objectRoute = ROUTES[ROUTES.length - 1]!;
-  const distinct = ROUTES.filter((p) => p !== objectRoute);
+  const embedRoute = `/b/${token}/embed`;
+  // С T7.3 у выдуманного токена `/b/{token}` и `/b/{token}/embed` дают один отказ: раздел 4 называет это той же
+  // доской, а SHR-05 требует не раскрывать ничего. Различие с настоящим токеном — embed.spec.ts.
+  const distinct = ROUTES.filter((p) => p !== objectRoute && p !== embedRoute);
   const unique = new Set(distinct.map((p) => texts.get(p)));
   expect(unique.size).toBe(distinct.length);
   // Ссылка на объект — та же страница участника, что и /b/{token}.
   expect(texts.get(objectRoute)).toBe(texts.get(`/b/${token}`));
+  expect(texts.get(embedRoute)).toBe(texts.get(`/b/${token}`));
   // Неизвестный путь не совпадает ни с одной страницей раздела 4.
   await open(page, "/no-such-page");
   expect(unique.has(await rootText(page))).toBe(false);
@@ -195,7 +200,8 @@ for (const path of [
     if (path.startsWith("/boards/")) {
       expect(new URL(page.url()).pathname).toBe("/login");
       expect(appProblems(w)).toEqual([]);
-    } else if (path.startsWith("/b/") && !path.includes("/embed")) {
+    } else if (path.startsWith("/b/")) {
+      // С T7.3 `/b/{token}/embed` — настоящая доска, а не заглушка T0.3: с выдуманным токеном там тот же отказ (SHR-05).
       await expect(page.getByText("This link is not available.")).toBeVisible();
       expect(appProblems(w)).toEqual([]);
     } else {
