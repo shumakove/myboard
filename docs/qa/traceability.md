@@ -156,7 +156,7 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | NTE-01 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-01 *, desktop + mobile); acceptance/api/test_notes.py::test_nte01_* | PASS (проверка 2; BUG-027 исправлен) |
 | NTE-02 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-02 *, desktop + mobile) | PASS |
 | NTE-03 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-03 *, desktop + mobile) | PASS |
-| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
+| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) (открыты BUG-038, BUG-039 major, docs/qa/reports/flaky-sync.md) |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
 | COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS (BUG-020 исправлен в T6.3 3986998, проверено) |
