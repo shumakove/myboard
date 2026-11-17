@@ -149,14 +149,14 @@ ID требования из [REQUIREMENTS.md](../../REQUIREMENTS.md) → зад
 | FIL-03 | T7.2 | acceptance/api/test_files.py (test_fil03_*); acceptance/e2e/files.spec.ts (FIL-03 *, desktop + mobile) | PASS (T7.2, проверка 3; BUG-030 и BUG-031 исправлены, проверено; открыт BUG-032, minor) |
 | FIL-04 | T7.2 | acceptance/api/test_files.py (test_fil02_fil03_fil04_*); acceptance/e2e/files.spec.ts (FIL-04 *, desktop + mobile) | PASS (T7.2, проверка 3) |
 | FIL-05 | T7.2 | acceptance/e2e/files.spec.ts (FIL-05 *, два клиента) | PASS (T7.2, проверка 3; Q-007, вариант (а): для GIF — только запуск по наведению) |
-| EMB-01 | T7.3 | — | не проверено |
-| EMB-02 | T7.3 | — | не проверено |
-| EMB-03 | T7.3 | — | не проверено |
-| EMB-04 | T7.3 | — | не проверено |
+| EMB-01 | T7.3 | acceptance/e2e/embed.spec.ts (EMB-01 *) | PASS (BUG-037 minor) |
+| EMB-02 | T7.3 | acceptance/api/test_embed.py::test_emb02_*, acceptance/e2e/embed.spec.ts (EMB-02 *) | FAIL (BUG-033, BUG-036) |
+| EMB-03 | T7.3 | acceptance/e2e/embed.spec.ts (EMB-03 *) | PASS |
+| EMB-04 | T7.3 | acceptance/api/test_embed.py::test_emb04_*, acceptance/e2e/embed.spec.ts, acceptance/e2e/embed-https.spec.ts | FAIL (BUG-034, BUG-035) |
 | NTE-01 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-01 *, desktop + mobile); acceptance/api/test_notes.py::test_nte01_* | PASS (проверка 2; BUG-027 исправлен) |
 | NTE-02 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-02 *, desktop + mobile) | PASS |
 | NTE-03 | T6.12 | acceptance/e2e/notes.spec.ts (NTE-03 *, desktop + mobile) | PASS |
-| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) |
+| COL-01 | T4.1, T6.1, T6.2 | acceptance/api/test_realtime.py::test_col01_* (в т. ч. test_col01_bug018_*), acceptance/e2e/realtime.spec.ts (COL-01), acceptance/e2e/text.spec.ts (COL-01 *, TXT-06 BUG-018 *), sticky.spec.ts (COL-01 *) | PASS (BUG-018 исправлен в T6.2 3b1eeb6, проверено) (открыты BUG-038, BUG-039 major, docs/qa/reports/flaky-sync.md) |
 | COL-02 | T4.2 | acceptance/api/test_presence.py::test_col02_*, acceptance/e2e/presence.spec.ts (COL-02, desktop + mobile) | PASS |
 | COL-03 | T4.2 | acceptance/e2e/presence.spec.ts (COL-03, desktop + mobile) | PASS |
 | COL-04 | T4.2 | acceptance/api/test_presence.py::test_col04_*, acceptance/e2e/presence.spec.ts (COL-04, desktop + mobile), acceptance/e2e/camera.spec.ts «COL-04 MOB-02 …» (жесты телефона, T5.1) | PASS (BUG-020 исправлен в T6.3 3986998, проверено) |
