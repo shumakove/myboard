@@ -1,6 +1,7 @@
 """Общие части маршрутов входа: настройки, адрес клиента, лимит попыток, скупые отказы."""
 
 from fastapi import HTTPException, Request, status
+from starlette.requests import HTTPConnection
 
 from app.core.settings import Settings
 from app.identity.rate_limit import LoginRateLimiter
@@ -11,8 +12,8 @@ LOGIN_FAILED = "Invalid email or password"
 TOO_MANY_ATTEMPTS = "Too many sign-in attempts, try again later"
 
 
-def settings_of(request: Request) -> Settings:
-    settings: Settings = request.app.state.settings
+def settings_of(connection: HTTPConnection) -> Settings:
+    settings: Settings = connection.app.state.settings
     return settings
 
 

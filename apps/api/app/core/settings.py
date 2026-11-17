@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     max_upload_bytes: Annotated[int, Field(gt=0)]
     # Как часто открытая доска с правками пишет снимок и сжимает журнал (T4.3).
     snapshot_interval_seconds: Annotated[float, Field(gt=0)] = 300.0
+    # EMB-02: хосты через запятую, чьи страницы сервер читает, хотя они во внутренней сети.
+    link_preview_allowed_hosts: str = ""
 
     @field_validator("public_base_url")
     @classmethod
@@ -42,6 +44,11 @@ class Settings(BaseSettings):
     def secure_cookies(self) -> bool:
         """Cookie получают флаг Secure только при HTTPS-адресе (ARCHITECTURE.md, раздел 5)."""
         return self.public_base_url.startswith("https://")
+
+    @property
+    def link_preview_hosts(self) -> frozenset[str]:
+        hosts = self.link_preview_allowed_hosts.split(",")
+        return frozenset(host.strip().lower() for host in hosts if host.strip())
 
 
 class SettingsError(Exception):

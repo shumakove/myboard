@@ -123,6 +123,17 @@ def set_session_cookie(
     )
 
 
+def set_embed_cookie(response: Response, name: str, token: str) -> None:
+    """EMB-04: cookie встроенной доски, только при HTTPS (ARCHITECTURE.md, раздел 5).
+
+    Заголовок собирается вручную: `set_cookie` принимает `partitioned` только на Python 3.14.
+    """
+    response.headers.append(
+        "set-cookie",
+        f"{name}={token}; HttpOnly; Path=/; SameSite=None; Secure; Partitioned",
+    )
+
+
 def clear_session_cookie(response: Response, name: str, settings: Settings) -> None:
     response.delete_cookie(
         name, httponly=True, samesite="lax", secure=settings.secure_cookies, path="/"

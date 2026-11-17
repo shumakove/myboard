@@ -47,6 +47,8 @@ export interface ShortcutActions {
   onTable: (grid: Grid) => void;
   /** IMG-01: из буфера пришли файлы изображений. */
   onImages?: (files: readonly File[]) => void;
+  /** EMB-01: текст из буфера — код iframe? Тогда объект поставлен, вернётся `true`. */
+  onEmbedCode?: (text: string) => boolean;
 }
 
 /**
@@ -63,11 +65,19 @@ export interface ShortcutActions {
  * - TXT-08: HTML внешнего документа — текстовый объект с базовым форматированием;
  * - TBL-06: копия таблицы — текст с табуляцией и HTML-таблица; внешняя таблица из буфера
  *   (TSV или HTML `<table>`) вставляется таблицей или стикерами по выбору (TBL-07);
- * - IMG-01: файл изображения из буфера загружается и встаёт изображением.
+ * - IMG-01: файл изображения из буфера загружается и встаёт изображением;
+ * - EMB-01: код iframe из буфера встаёт встроенной страницей.
  */
 export function useSceneShortcuts(
   commands: SceneCommands,
-  { onEscape, onTool, history, onTable, onImages }: ShortcutActions,
+  {
+    onEscape,
+    onTool,
+    history,
+    onTable,
+    onImages,
+    onEmbedCode,
+  }: ShortcutActions,
 ): void {
   const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -163,6 +173,7 @@ export function useSceneShortcuts(
         commands.paste(clip);
         return;
       }
+      if (onEmbedCode?.(raw) === true) return;
       const grid = tabularGrid(raw, html);
       if (grid !== null) onTable(grid);
       else commands.pasteText(text, html);
@@ -178,7 +189,7 @@ export function useSceneShortcuts(
       window.removeEventListener("cut", copyOrCut);
       window.removeEventListener("paste", paste);
     };
-  }, [commands, onEscape, onTool, history, onTable, onImages]);
+  }, [commands, onEscape, onTool, history, onTable, onImages, onEmbedCode]);
 
   useEffect(
     () => () => {

@@ -23,7 +23,7 @@ describe("CVS-25 горячие клавиши сцены", () => {
     expect(toolKey(key("KeyV", { ctrlKey: true }))).toBeNull();
     expect(toolKey(key("KeyS", { metaKey: true }))).toBeNull();
     expect(toolKey(key("KeyT", { shiftKey: true }))).toBeNull();
-    expect(toolKey(key("KeyQ"))).toBeNull();
+    expect(toolKey(key("KeyZ"))).toBeNull();
   });
 
   it("CVS-07: Ctrl/⌘+Z отменяет, Ctrl/⌘+Shift+Z и Ctrl+Y повторяют", () => {

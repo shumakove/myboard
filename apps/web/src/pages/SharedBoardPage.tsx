@@ -17,16 +17,32 @@ type PageState =
   | { status: "loading" }
   | { status: "ready"; board: SharedBoard }
   | { status: "unavailable" }
+  /** EMB-04: браузер не сохранил cookie доски внутри чужого фрейма. */
+  | { status: "no-session" }
   | { status: "failed"; message: string };
 
+/** `/b/{token}` — участник по ссылке. */
+export function SharedBoardPage() {
+  return <BoardByLink />;
+}
+
 /**
+ * Доска по ссылке для `/b/{token}` и `/b/{token}/embed` (EMB-04). Встроенной доске заголовок
+ * страницы не нужен: фрейм обычно невелик, а внешняя страница подписывает его сама.
+ *
  * `/b/{token}` — участник по ссылке без учётной записи (SHR-02): сначала имя на сессию
  * (SHR-03), затем доска. Отозванная и несуществующая ссылка — один отказ (SHR-05).
  * Документ доски синхронизируется по `/api/ws` с теми же правами, что у владельца
  * (COL-01, SHR-04). `?object={id}` — ссылка на объект: после загрузки документа вид
  * переходит к нему (SHR-07); с отозванным токеном — тот же отказ.
  */
-export function SharedBoardPage() {
+export function BoardByLink({
+  embedded = false,
+  loadingTitle = "Shared board",
+}: {
+  embedded?: boolean;
+  loadingTitle?: string;
+}) {
   const { token } = useParams<{ token: string }>();
   const objectId = linkedObjectId(useSearch());
   const [state, setState] = useState<PageState>({ status: "loading" });
@@ -62,8 +78,23 @@ export function SharedBoardPage() {
     return (
       <main className="auth-page">
         <FloatingPanel className="auth-card">
-          <h1>Shared board</h1>
+          <h1>{loadingTitle}</h1>
           <p>Loading…</p>
+        </FloatingPanel>
+      </main>
+    );
+  }
+  if (state.status === "no-session") {
+    return (
+      <main className="auth-page">
+        <FloatingPanel className="auth-card">
+          <h1>Board unavailable here</h1>
+          <p role="alert">
+            This browser does not keep your session in an embedded board.
+          </p>
+          <a href={sharedBoardUrl(token)} target="_blank" rel="noopener">
+            Open the board in a new tab
+          </a>
         </FloatingPanel>
       </main>
     );
@@ -88,8 +119,10 @@ export function SharedBoardPage() {
           <h1>{board.title}</h1>
           <NameForm
             token={token}
+            embedded={embedded}
             onJoined={(joined) => {
-              setState({ status: "ready", board: joined });
+              if (embedded) void confirmSession(token, joined, setState);
+              else setState({ status: "ready", board: joined });
             }}
             onUnavailable={() => {
               setState({ status: "unavailable" });
@@ -100,13 +133,15 @@ export function SharedBoardPage() {
     );
   }
   return (
-    <main className="board-page">
-      <FloatingPanel className="board-header">
-        <h1>{board.title}</h1>
-        <p className="board-header-note">
-          You joined as {board.participant.name}.
-        </p>
-      </FloatingPanel>
+    <main className={embedded ? "board-page board-page-embed" : "board-page"}>
+      {!embedded && (
+        <FloatingPanel className="board-header">
+          <h1>{board.title}</h1>
+          <p className="board-header-note">
+            You joined as {board.participant.name}.
+          </p>
+        </FloatingPanel>
+      )}
       <BoardLive
         boardId={board.id}
         target={{ kind: "participant", token }}
@@ -119,6 +154,28 @@ export function SharedBoardPage() {
       />
     </main>
   );
+}
+
+/**
+ * EMB-04: на странице чужого сайта браузер может отбросить cookie: на `http://` всегда, а на
+ * HTTPS — если не принимает cookie встроенной доски. Без неё канал не откроется, и участник
+ * снова увидел бы форму имени без объяснений.
+ */
+async function confirmSession(
+  token: string,
+  joined: SharedBoard,
+  setState: (state: PageState) => void,
+): Promise<void> {
+  try {
+    const { participant } = await openSharedBoard(token);
+    setState(
+      participant === null
+        ? { status: "no-session" }
+        : { status: "ready", board: joined },
+    );
+  } catch (err: unknown) {
+    setState(failure(err));
+  }
 }
 
 /** После разрыва канала: ссылка действует и сессия участника жива? */
@@ -139,10 +196,12 @@ function failure(err: unknown): PageState {
 /** SHR-03: отображаемое имя на эту сессию. */
 function NameForm({
   token,
+  embedded,
   onJoined,
   onUnavailable,
 }: {
   token: string;
+  embedded: boolean;
   onJoined: (board: SharedBoard) => void;
   onUnavailable: () => void;
 }) {
@@ -159,7 +218,7 @@ function NameForm({
     setPending(true);
     setError(null);
     try {
-      onJoined(await joinSharedBoard(token, name));
+      onJoined(await joinSharedBoard(token, name, embedded));
     } catch (err: unknown) {
       if (err instanceof SharingApiError && err.status === 404) {
         onUnavailable();

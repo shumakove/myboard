@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.identity import service as identity
 from app.identity.models import SubjectType
-from app.identity.sessions import USER_COOKIE, find_board_session, find_subject
+from app.identity.sessions import USER_COOKIE, find_subject
 from app.library import service as library
 from app.sharing import service as sharing
 
@@ -62,8 +62,7 @@ async def _participant(
     board = await sharing.board_by_token(db, token)
     if board is None:
         return None
-    cookie = cookies.get(sharing.board_cookie_name(board.id))
-    session = await find_board_session(db, cookie, board.id)
+    session = await sharing.guest_session(db, board.id, cookies)
     if session is None:
         return None
     return BoardAccess(board.id, guest=True, name=session.display_name or "")

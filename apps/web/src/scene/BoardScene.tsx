@@ -157,6 +157,7 @@ import { createFlipCard, sideText } from "./flipCards";
 import { shownSide } from "./flipData";
 import { useFlipAndDice } from "./useFlipAndDice";
 import { centerClearOfMinimap, roomInView } from "./attachments";
+import { useEmbeds } from "./useEmbeds";
 import { useFiles } from "./useFiles";
 import { useImages } from "./useImages";
 import { useFileTask } from "../media/useFileTask";
@@ -215,7 +216,8 @@ const MENU_LABELS: Record<Menu["kind"], string> = {
  * (инструмент Reaction, наборы и недавние), FLP-01…FLP-03 флип-карточки и DICE-01…DICE-03
  * кубики (`useFlipAndDice`); T7.1 — IMG-01…IMG-07 изображения: инструмент Image и вставка
  * из буфера, маска, отражение, обрезка, замена, удаление фона, GIF (`useImages`);
- * T7.2 — FIL-01…FIL-05 файлы: инструмент File, ярлык, PDF, видео и аудио (`useFiles`).
+ * T7.2 — FIL-01…FIL-05 файлы: инструмент File, ярлык, PDF, видео и аудио (`useFiles`);
+ * T7.3 — EMB-01…EMB-03 встраивание, карточка ссылки и ссылка у объекта (`useEmbeds`).
  */
 export function BoardScene({
   board,
@@ -701,14 +703,33 @@ export function BoardScene({
     run: fileTask.run,
   });
   const { pick: pickFile } = files;
-  /** IMG-01, FIL-01: Image и File не становятся активными — открывают выбор файла. */
+  // T7.3: встраивание и ссылки.
+  const pickLinkObject = useCallback((done: (id: string | null) => void) => {
+    setPicker({ done });
+  }, []);
+  const embeds = useEmbeds({
+    objects,
+    boardId,
+    units,
+    actor,
+    clear: fileCenter,
+    select: setSelection,
+    pickObject: pickLinkObject,
+  });
+  const { open: openEmbedDialog, pasteCode } = embeds;
+  /**
+   * IMG-01, FIL-01: Image и File не становятся активными — открывают выбор файла; EMB-01,
+   * EMB-02: Embed и Link card — свой диалог.
+   */
   const chooseTool = useCallback(
     (id: ToolId) => {
       if (id === "image") pickImage({ x: camera.x, y: camera.y });
       else if (id === "file") pickFile({ x: camera.x, y: camera.y });
-      else setTool(id);
+      else if (id === "iframe" || id === "linkcard") {
+        openEmbedDialog(id, { x: camera.x, y: camera.y });
+      } else setTool(id);
     },
-    [pickImage, pickFile, camera.x, camera.y],
+    [pickImage, pickFile, openEmbedDialog, camera.x, camera.y],
   );
   // IMG-06: при многих объектах на экране GIF играют только по наведению.
   const stillGifs = manyOnScreen(visible, viewRect(camera, viewport.current));
@@ -809,6 +830,10 @@ export function BoardScene({
         insertImages(files, pastePoint());
       },
       [insertImages, pastePoint],
+    ),
+    onEmbedCode: useCallback(
+      (text: string) => pasteCode(text, pastePoint()),
+      [pasteCode, pastePoint],
     ),
   });
 
@@ -1128,6 +1153,10 @@ export function BoardScene({
       goTo(id);
     },
     objectLabel: label,
+    // EMB-03: объекта уже нет — вид остаётся, как у ссылки SHR-07.
+    onFollowLink: (id) => {
+      setLinkMissing(!goTo(id));
+    },
   };
 
   /** Своя правка текста: отметка «изменил» и высота блока под содержимое. */
@@ -1529,6 +1558,7 @@ export function BoardScene({
           dice={flipAndDice.dice}
           image={images.actions}
           file={files.actions}
+          link={embeds.actions}
           frame={
             commands.lockFrames || commands.frameContent || commands.keepRatio
               ? {
@@ -1604,6 +1634,7 @@ export function BoardScene({
         )}
         {images.ui}
         {files.ui}
+        {embeds.ui}
         {fileTask.notice}
         {linkMissing && (
           <FloatingPanel role="status" className="board-notice">

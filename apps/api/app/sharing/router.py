@@ -11,12 +11,13 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from app.core.db import SessionDep
 from app.identity.account_router import UserDep
 from app.identity.http import settings_of
-from app.identity.sessions import set_session_cookie
+from app.identity.sessions import set_embed_cookie, set_session_cookie
 from app.library import service as library
 from app.library.errors import BOARD_NOT_FOUND, not_found
 from app.library.models import Board
 from app.realtime.hub import hub_of
 from app.sharing import service
+from app.sharing.embed import from_own_site, trusted_cookies
 from app.sharing.schemas import JoinRequest, Participant, SharedBoard, ShareLink
 
 router = APIRouter(tags=["sharing"])
@@ -70,9 +71,7 @@ async def reset_share_link(
 async def open_shared_board(token: str, request: Request, db: SessionDep) -> SharedBoard:
     """SHR-02, SHR-05: доска по ссылке; `participant` — `null`, пока имя не введено."""
     board = await _shared_board(db, token)
-    session = await service.participant(
-        db, board, request.cookies.get(service.board_cookie_name(board.id))
-    )
+    session = await service.guest_session(db, board.id, trusted_cookies(request))
     name = session.display_name if session is not None else None
     return SharedBoard(
         id=board.id,
@@ -89,13 +88,27 @@ async def open_shared_board(token: str, request: Request, db: SessionDep) -> Sha
 async def join_shared_board(
     token: str, data: JoinRequest, request: Request, response: Response, db: SessionDep
 ) -> SharedBoard:
-    """SHR-02, SHR-03: имя на сессию → cookie этой доски до закрытия браузера."""
+    """SHR-02, SHR-03: имя на сессию → cookie этой доски до закрытия браузера.
+
+    EMB-04: вход со встроенной доски при HTTPS получает отдельную cookie, которую браузер
+    отправит и во фрейме чужого сайта. На `http://` такой cookie нет: браузер её не примет.
+    """
     board = await _shared_board(db, token)
-    cookie_name = service.board_cookie_name(board.id)
-    session_token, guest_id = await service.join(
-        db, board, data.name, request.cookies.get(cookie_name)
+    settings = settings_of(request)
+    embed = data.embed and settings.secure_cookies
+    # Защита от подделки: чужой сайт не войдёт от имени браузера посетителя.
+    if embed and not from_own_site(request):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, LINK_UNAVAILABLE)
+    cookie_name = (
+        service.embed_cookie_name(board.id) if embed else service.board_cookie_name(board.id)
     )
-    set_session_cookie(response, cookie_name, session_token, settings_of(request))
+    session_token, guest_id = await service.join(
+        db, board, data.name, trusted_cookies(request).get(cookie_name)
+    )
+    if embed:
+        set_embed_cookie(response, cookie_name, session_token)
+    else:
+        set_session_cookie(response, cookie_name, session_token, settings)
     return SharedBoard(
         id=board.id,
         title=board.title,

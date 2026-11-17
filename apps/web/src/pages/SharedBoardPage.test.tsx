@@ -1,4 +1,10 @@
-import { act, waitFor, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  waitFor,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
@@ -29,6 +35,11 @@ function guestServer(participants: Record<string, string> = {}) {
   });
 }
 
+function joinBody(server: ReturnType<typeof guestServer>) {
+  return server.library.account.calls.find((c) => c.path.endsWith("/join"))
+    ?.body;
+}
+
 describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -51,6 +62,8 @@ describe("/b/{token} — вход по ссылке (SHR-02, SHR-03, SHR-05)", (
     expect(location.history.at(-1)).toBe("/b/tok-1");
     const paths = server.library.account.calls.map((c) => c.path);
     expect(paths).toEqual(["/api/share/tok-1", "/api/share/tok-1/join"]);
+    // Q-008: обычная страница не просит cookie встроенной доски.
+    expect(joinBody(server)).toEqual({ name: "  Kate ", embed: false });
   });
 
   it("SHR-03: пустое имя не отправляется", async () => {
@@ -209,5 +222,93 @@ describe("/b/{token}?object={id} — ссылка на объект (SHR-07)", (
     expect(
       FakeSocket.instances.filter((s) => s.url.includes("tok-old")),
     ).toEqual([]);
+  });
+});
+
+describe("/b/{token}/embed — встроенная доска (EMB-04)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it("EMB-04: имя на сессию, затем рабочий холст без заголовка страницы", async () => {
+    const server = guestServer();
+    const location = openAt("/b/tok-1/embed");
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Your name"), "Kate");
+    await user.click(screen.getByRole("button", { name: "Join board" }));
+
+    expect(await screen.findByTestId("board-canvas")).toBeInTheDocument();
+    expect(screen.queryByText(/You joined as/)).toBeNull();
+    expect(screen.getByRole("toolbar", { name: "Tools" })).toBeInTheDocument();
+    expect(location.history.at(-1)).toBe("/b/tok-1/embed");
+    expect(FakeSocket.last().url).toContain("token=tok-1");
+    expect(server.participants["tok-1"]).toBe("Kate");
+    // Q-008: сервер выдаёт cookie встроенной доски только на такой вход.
+    expect(joinBody(server)).toEqual({ name: "Kate", embed: true });
+  });
+
+  it("EMB-04: правка из фрейма уходит в общий документ", async () => {
+    guestServer({ "tok-1": "Kate" });
+    const boardServer = new FakeBoardServer();
+    openAt("/b/tok-1/embed");
+    const socket = await waitFor(() => FakeSocket.last());
+    act(() => {
+      boardServer.accept(socket);
+    });
+    const user = userEvent.setup();
+
+    await user.keyboard("n");
+    fireEvent.pointerDown(screen.getByTestId("board-canvas"), {
+      pointerId: 1,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(screen.getByTestId("board-canvas"), {
+      pointerId: 1,
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    });
+
+    await waitFor(() => {
+      expect(boardServer.doc.getMap("objects").size).toBe(1);
+    });
+  });
+
+  it("SHR-05: отозванная ссылка отказывает и во фрейме", async () => {
+    guestServer();
+    openAt("/b/tok-old/embed");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This link is not available.",
+    );
+  });
+
+  it("EMB-04: браузер отбросил cookie — объяснение и адрес доски, а не снова форма", async () => {
+    const server = guestServer();
+    const real = vi.mocked(fetch).getMockImplementation();
+    expect(real).toBeDefined();
+    // Сервер принял имя, но cookie браузер не сохранил: следующий запрос — без сессии.
+    vi.mocked(fetch).mockImplementation(async (...args) => {
+      const response = await (real as typeof fetch)(...args);
+      Reflect.deleteProperty(server.participants, "tok-1");
+      return response;
+    });
+    openAt("/b/tok-1/embed");
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("Your name"), "Kate");
+    await user.click(screen.getByRole("button", { name: "Join board" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This browser does not keep your session in an embedded board.",
+    );
+    expect(
+      screen.getByRole("link", { name: "Open the board in a new tab" }),
+    ).toHaveAttribute("href", `${window.location.origin}/b/tok-1`);
+    expect(screen.queryByLabelText("Your name")).toBeNull();
   });
 });

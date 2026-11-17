@@ -21,7 +21,9 @@ import {
  *   RCT-03);
  * - `upload` — выбор инструмента открывает выбор файла, изображение встаёт в центре вида
  *   (IMG-01, IMG-07), файл — объектом своего вида (FIL-01…FIL-04); активным инструмент не
- *   становится.
+ *   становится;
+ * - `dialog` — выбор инструмента открывает его диалог, объект встаёт в центре вида (EMB-01,
+ *   EMB-02); активным инструмент не становится.
  *
  * `key` — горячая клавиша инструмента без модификаторов (CVS-25): код клавиши
  * `KeyboardEvent.code`, чтобы она работала при любой раскладке.
@@ -34,6 +36,7 @@ export type Tool = { label: string; hint: string; key: string } & (
   | { kind: "comment"; id: "comment" }
   | { kind: "react"; id: "reaction" }
   | { kind: "upload"; id: "image" | "file" }
+  | { kind: "dialog"; id: "iframe" | "linkcard" }
 );
 
 /** Инструменты рисования (T6.5). */
@@ -165,6 +168,20 @@ export const TOOLS: readonly Tool[] = [
     label: "File",
     key: "KeyY",
     hint: "Upload a file to the center of the view. PDF opens page by page, video (MP4, M4V, MOV, WebM) and audio (MP3, M4A, WAV, WebM) play on the board, anything else becomes a file icon you can rename and download.",
+  },
+  {
+    kind: "dialog",
+    id: "iframe",
+    label: "Embed",
+    key: "KeyQ",
+    hint: "Embed an external page by its iframe code. You can also paste the code with Ctrl/⌘+V.",
+  },
+  {
+    kind: "dialog",
+    id: "linkcard",
+    label: "Link card",
+    key: "KeyW",
+    hint: "Add a card with the title and image of a web page. The card opens the page.",
   },
 ];
 

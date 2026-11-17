@@ -42,6 +42,8 @@ describe("CVS-24 закреплённые инструменты", () => {
       "reaction",
       "image",
       "file",
+      "iframe",
+      "linkcard",
     ]);
   });
 
@@ -110,6 +112,8 @@ describe("CVS-24 закреплённые инструменты", () => {
       "reaction",
       "image",
       "file",
+      "iframe",
+      "linkcard",
     ]);
   });
 });

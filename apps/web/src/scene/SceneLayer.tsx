@@ -26,6 +26,7 @@ import { DiceView } from "./DiceView";
 import { diceTitle } from "./diceData";
 import { ImageView } from "./ImageView";
 import { AttachmentView } from "./AttachmentView";
+import { EmbedView, LinkCardView, ObjectLinkBadge } from "./EmbedViews";
 
 /** Таблицы на холсте (T6.7): выделенные ячейки и таблица с маркерами границ. */
 export interface TableLayerState {
@@ -53,6 +54,8 @@ export interface RichTextHandlers {
   onCheck: (id: string, end: number, checked: boolean) => void;
   onOpenObject: RichTextActions["onOpenObject"];
   objectLabel: RichTextActions["objectLabel"];
+  /** EMB-03: перейти к объекту по ссылке другого объекта. */
+  onFollowLink: (id: string) => void;
 }
 
 /**
@@ -69,6 +72,7 @@ export interface RichTextHandlers {
  * наведению, флип-карточка — две стороны с переворотом, кубик — грани и значение (T6.11).
  * Изображение — видимая часть файла с маской, обводкой и отражением (T7.1, IMG-01…IMG-07).
  * Ярлык файла, PDF, видео и аудио — свой вид файла с плеером у каждого участника (T7.2).
+ * Встроенная страница, карточка ссылки и значок ссылки у объекта — T7.3 (EMB-01…EMB-03).
  * Группа — невидимая рамка своих объектов; заблокированный объект помечен замком (CVS-19).
  */
 export function SceneLayer({
@@ -211,6 +215,10 @@ function SceneObjectView({
           type={object.type}
           file={object.attachment}
         />
+      ) : object.embed ? (
+        <EmbedView key={object.embed.src} embed={object.embed} />
+      ) : object.linkCard ? (
+        <LinkCardView card={object.linkCard} title={object.text} />
       ) : object.dice ? (
         <DiceView object={object} />
       ) : object.frameOptions ? (
@@ -224,6 +232,9 @@ function SceneObjectView({
         <StickyFooter object={object} />
       )}
       {!group && object.locked && <LockBadge />}
+      {object.link && (
+        <ObjectLinkBadge link={object.link} onOpenObject={rich.onFollowLink} />
+      )}
     </div>
   );
 }

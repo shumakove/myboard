@@ -6,6 +6,7 @@
 
 import secrets
 import uuid
+from collections.abc import Mapping
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ from app.library.models import Board
 TOKEN_BYTES = 32
 # Длина token_urlsafe(32) — 43 символа; длиннее столбца токен заведомо не найдётся.
 TOKEN_MAX_LENGTH = 64
+EMBED_COOKIE_PREFIX = "myboard_embed_"
 
 
 def new_token() -> str:
@@ -31,6 +33,11 @@ def new_token() -> str:
 def board_cookie_name(board_id: uuid.UUID) -> str:
     """Своя сессионная cookie у каждой доски: участник может быть на нескольких досках."""
     return f"myboard_board_{board_id.hex}"
+
+
+def embed_cookie_name(board_id: uuid.UUID) -> str:
+    """EMB-04: отдельная cookie встроенной доски; см. `sharing/embed.py`."""
+    return f"{EMBED_COOKIE_PREFIX}{board_id.hex}"
 
 
 async def current_token(db: AsyncSession, board: Board) -> str:
@@ -68,6 +75,20 @@ async def board_by_token(db: AsyncSession, token: str) -> Board | None:
     return await db.scalar(
         select(Board).where(Board.share_token == token, Board.deleted_at.is_(None))
     )
+
+
+async def guest_session(
+    db: AsyncSession, board_id: uuid.UUID, cookies: Mapping[str, str]
+) -> Session | None:
+    """Сессия участника на этой доске по обычной cookie или cookie встроенной доски (SHR-06).
+
+    `cookies` — из `embed.trusted_cookies`: чужой сайт cookie встроенной доски не предъявит.
+    """
+    for name in (board_cookie_name(board_id), embed_cookie_name(board_id)):
+        session = await find_board_session(db, cookies.get(name), board_id)
+        if session is not None:
+            return session
+    return None
 
 
 async def participant(db: AsyncSession, board: Board, cookie: str | None) -> Session | None:
