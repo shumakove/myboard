@@ -1,0 +1,24 @@
+# Приёмочный стенд QA с TLS для EMB-04 (Q-008, вариант б), вне deploy/: сертификат внутренний,
+# браузер запускается с ignoreHTTPSErrors. Настоящий домен и доверенный сертификат — T11.2.
+{
+	auto_https disable_redirects
+	skip_install_trust
+	default_sni 192.168.0.26
+}
+
+# Адрес доски: перед обычным стеком с PUBLIC_BASE_URL=https://192.168.0.26:8443.
+https://192.168.0.26:8443 {
+	tls internal
+	reverse_proxy host.docker.internal:8081
+}
+
+# Страница другого сайта: другой хост, другой протокол сайта и другой верхний уровень.
+https://172.29.144.1:9443 {
+	tls internal
+	reverse_proxy host.docker.internal:18099
+}
+
+https://192.168.0.26:9444 {
+	tls internal
+	reverse_proxy host.docker.internal:18099
+}
