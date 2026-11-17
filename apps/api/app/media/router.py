@@ -208,16 +208,23 @@ async def preview_link(
     )
     image = None
     if preview.image is not None:
-        image = _media_out(
-            await service.save_bytes(
-                db,
-                media_root=settings.media_root,
-                board_id=board_id,
-                name=PREVIEW_IMAGE_NAME,
-                mime=preview.image.mime,
-                body=preview.image.body,
-            )
+        found = preview.image
+        media = await service.find_same(
+            db,
+            media_root=settings.media_root,
+            board_id=board_id,
+            name=PREVIEW_IMAGE_NAME,
+            mime=found.mime,
+            body=found.body,
+        ) or await service.save_bytes(
+            db,
+            media_root=settings.media_root,
+            board_id=board_id,
+            name=PREVIEW_IMAGE_NAME,
+            mime=found.mime,
+            body=found.body,
         )
+        image = _media_out(media)
     return LinkPreviewOut(url=url, title=preview.title, image=image)
 
 

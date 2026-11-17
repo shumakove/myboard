@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, TextField, buttonClass } from "../ui";
 import { NAME_MAX_LENGTH } from "./attachmentData";
+import { downloadThroughFetch, isFramed } from "./frameDownload";
 
 /** Действия с одним выделенным файлом (T7.2). */
 export interface FileActions {
@@ -23,6 +24,12 @@ export function FileControls({ file }: { file: FileActions }) {
           className={buttonClass("ghost")}
           href={file.download}
           download={file.name}
+          onClick={(event) => {
+            if (file.download === null || !isFramed()) return;
+            // BUG-035: во фрейме чужого сайта — через fetch, переход идёт без cookie.
+            event.preventDefault();
+            void downloadThroughFetch(file.download, file.name);
+          }}
         >
           Download
         </a>

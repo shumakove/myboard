@@ -14,6 +14,20 @@ from starlette.requests import HTTPConnection
 from app.identity.http import settings_of
 from app.sharing.service import EMBED_COOKIE_PREFIX
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _origin(url: str) -> tuple[str, str, int | None] | None:
+    """Источник адреса: схема, хост, порт (порт по умолчанию подставлен); негодный — `None`."""
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port or _DEFAULT_PORTS.get(parts.scheme.lower())
+    except ValueError:
+        return None
+    if not parts.hostname:
+        return None
+    return parts.scheme.lower(), parts.hostname, port
+
 
 def from_own_site(connection: HTTPConnection) -> bool:
     """Запрос пришёл со страницы этого сайта? Без признаков этого — нет.
@@ -27,7 +41,9 @@ def from_own_site(connection: HTTPConnection) -> bool:
     origin = connection.headers.get("origin")
     if origin is None:
         return False
-    return urlsplit(origin).netloc == urlsplit(settings_of(connection).public_base_url).netloc
+    # BUG-034: источник — схема, хост и порт; `http://` той же записи хоста — чужой сайт.
+    own = _origin(settings_of(connection).public_base_url)
+    return own is not None and _origin(origin) == own
 
 
 def trusted_cookies(connection: HTTPConnection) -> dict[str, str]:

@@ -5,12 +5,14 @@
 
 import socket
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import anyio
 import pytest
 from fastapi.testclient import TestClient
 
@@ -1024,3 +1026,74 @@ def test_emb02_allowed_hosts_setting_is_parsed(settings: Settings) -> None:
     changed = settings.model_copy(update={"link_preview_allowed_hosts": " A.test, ,b.test "})
     assert changed.link_preview_hosts == {"a.test", "b.test"}
     assert settings.link_preview_hosts == frozenset()
+
+
+# BUG-033: негодный адрес изображения на странице — карточка с названием, а не 500.
+BROKEN_IMAGE_ADDRESSES = [
+    "http://127.0.0.1/a\x01b.png",
+    "http://127.0.0.1/" + "a" * 70_000 + ".png",
+    "http://[::1/a.png",
+]
+
+
+def _page_with_image(address: str) -> bytes:
+    return f'<title>Broken</title><meta property="og:image" content="{address}">'.encode()
+
+
+@pytest.mark.parametrize("address", BROKEN_IMAGE_ADDRESSES, ids=["control", "long", "badhost"])
+def test_bug033_broken_image_address_leaves_title_only(site: _Site, address: str) -> None:
+    site.page("/p", _page_with_image(address))
+    preview = anyio.run(link_preview.read_preview, site.url("/p"), {"127.0.0.1"}, 1024)
+    assert preview == link_preview.LinkPreview("Broken", None)
+
+
+@pytest.mark.usefixtures("allow_local")
+@pytest.mark.parametrize("address", BROKEN_IMAGE_ADDRESSES, ids=["control", "long", "badhost"])
+def test_bug033_broken_image_address_is_not_a_server_error(
+    alice: TestClient, board: str, site: _Site, address: str
+) -> None:
+    site.page("/p", _page_with_image(address))
+    assert _preview(alice, board, site.url("/p")) == {
+        "url": site.url("/p"),
+        "title": "Broken",
+        "image": None,
+    }
+
+
+# BUG-036: разбор чужой страницы не останавливает процесс; повтор не множит файлы.
+
+
+def test_bug036_parsing_hostile_pages_does_not_block_the_process(site: _Site) -> None:
+    site.page("/hostile", b"<" * link_preview.PAGE_MAX_BYTES)
+    worst_delay = 0.0
+
+    async def main() -> None:
+        nonlocal worst_delay
+        # Страница целиком в памяти до замера: ждём только разбора, а не сети.
+        async with anyio.create_task_group() as group:
+            for _ in range(3):
+                group.start_soon(link_preview.read_preview, site.url("/hostile"), {"127.0.0.1"}, 1)
+            for _ in range(100):
+                started = time.perf_counter()
+                await anyio.sleep(0.01)
+                worst_delay = max(worst_delay, time.perf_counter() - started - 0.01)
+
+    anyio.run(main)
+    # Без отдельного потока одна такая страница держит процесс около секунды.
+    assert worst_delay < 0.3
+
+
+@pytest.mark.usefixtures("allow_local")
+def test_bug036_same_preview_image_is_stored_once(
+    alice: TestClient, board: str, site: _Site, settings: Settings
+) -> None:
+    site.page("/article", PAGE)
+    site.page("/cover.png", PNG, "image/png")
+    first = _preview(alice, board, site.url("/article"))
+    again = [_preview(alice, board, site.url("/article")) for _ in range(4)]
+    assert {result["image"]["id"] for result in again} == {first["image"]["id"]}
+    assert len(_stored_files(settings)) == 1
+    # Другое изображение — свой файл.
+    site.page("/cover.png", PNG + b"\x01", "image/png")
+    assert _preview(alice, board, site.url("/article"))["image"]["id"] != first["image"]["id"]
+    assert len(_stored_files(settings)) == 2

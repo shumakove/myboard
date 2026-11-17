@@ -137,3 +137,29 @@ export function resolveLink(
     ? { kind: "object", id }
     : { kind: "url", url };
 }
+
+/**
+ * Встроенная страница получает свой скрипт и своё происхождение, но не может увести вкладку
+ * доски (нет `allow-top-navigation`).
+ */
+const FRAME_SANDBOX =
+  "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
+
+/**
+ * BUG-037: страница своего сайта со скриптами и своим происхождением достала бы доску
+ * зрителя через `window.parent`, поэтому у неё происхождение не сохраняется.
+ */
+export function frameSandbox(
+  src: string,
+  pageOrigin: string = window.location.origin,
+): string {
+  let origin: string;
+  try {
+    origin = new URL(src, pageOrigin).origin;
+  } catch {
+    return FRAME_SANDBOX;
+  }
+  return origin === pageOrigin
+    ? FRAME_SANDBOX.replace(" allow-same-origin", "")
+    : FRAME_SANDBOX;
+}

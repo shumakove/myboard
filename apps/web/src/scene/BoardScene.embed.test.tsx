@@ -133,6 +133,32 @@ describe("EMB-01: встроенная страница", () => {
     expect(frame(id)).toHaveAttribute("referrerpolicy", "no-referrer");
   });
 
+  it("BUG-037: страница своего сайта не получает доступа к доске зрителя", () => {
+    const board = createBoardDocument();
+    const own = createEmbed(
+      board.objects,
+      { x: 0, y: 0 },
+      {
+        src: `${window.location.origin}/b/token/embed`,
+        width: null,
+        height: null,
+      },
+      "Alice",
+    );
+    const other = createEmbed(
+      board.objects,
+      { x: 500, y: 0 },
+      { src: "https://a.test/", width: null, height: null },
+      "Alice",
+    );
+    renderScene(board);
+
+    const ownSandbox = frame(own).getAttribute("sandbox") ?? "";
+    expect(ownSandbox).toContain("allow-scripts");
+    expect(ownSandbox).not.toContain("allow-same-origin");
+    expect(frame(other).getAttribute("sandbox")).toContain("allow-same-origin");
+  });
+
   it("адрес, записанный в документ мимо интерфейса, в фрейм не попадает", () => {
     const board = createBoardDocument();
     const id = createEmbed(

@@ -498,6 +498,36 @@ def test_emb04_embed_cookie_counts_only_from_own_site(
     assert (participant is not None) is accepted
 
 
+@pytest.mark.parametrize(
+    ("origin", "accepted"),
+    [
+        ("http://board.example.com", False),
+        ("http://board.example.com:443", False),
+        ("https://board.example.com:8443", False),
+        ("https://board.example.com.evil.example", False),
+        ("https://BOARD.example.com:443", True),
+        ("null", False),
+    ],
+)
+def test_bug034_embed_cookie_needs_same_scheme_host_and_port(
+    site: HttpsSite, origin: str, accepted: bool
+) -> None:
+    """BUG-034: источник — схема, хост и порт; `http://` той же записи хоста — чужой сайт."""
+    _, pair = _embed_join(site)
+    participant = site.get_shared(pair, {"origin": origin}).json()["participant"]
+    assert (participant is not None) is accepted
+
+
+def test_bug034_forged_join_from_other_scheme_is_refused(site: HttpsSite) -> None:
+    response = site.client.post(
+        f"/api/share/{site.token}/join",
+        json={"name": "Mallory", "embed": True},
+        headers={"origin": "http://board.example.com"},
+    )
+    assert response.status_code == 404
+    assert "set-cookie" not in response.headers
+
+
 def test_emb04_forged_cross_site_join_is_refused(site: HttpsSite) -> None:
     response = site.client.post(
         f"/api/share/{site.token}/join",

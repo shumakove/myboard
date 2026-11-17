@@ -1,19 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, buttonClass } from "../ui";
 import {
+  frameSandbox,
   hostOf,
   type EmbedShape,
   type LinkCardShape,
   type ObjectLink,
 } from "./embedData";
 import { mediaUrl } from "./imageData";
-
-/**
- * Встроенная страница получает свой скрипт и своё происхождение, но не может увести вкладку
- * доски (нет `allow-top-navigation`).
- */
-const FRAME_SANDBOX =
-  "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
 
 /** Чужая страница не узнаёт адрес доски (в нём токен ссылки). */
 const NO_REFERRER = "no-referrer";
@@ -78,7 +72,7 @@ export function EmbedView({ embed }: { embed: EmbedShape }) {
         className="embed-frame"
         title={`Embedded page from ${host}`}
         src={src}
-        sandbox={FRAME_SANDBOX}
+        sandbox={frameSandbox(src)}
         allow="fullscreen"
         referrerPolicy={NO_REFERRER}
         loading="lazy"

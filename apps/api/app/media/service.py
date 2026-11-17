@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import anyio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.media.models import NAME_MAX_LENGTH, Media
@@ -129,6 +130,28 @@ async def save_bytes(
         mime=mime,
         chunks=chunks(),
     )
+
+
+async def find_same(
+    db: AsyncSession, *, media_root: str, board_id: uuid.UUID, name: str, mime: str, body: bytes
+) -> Media | None:
+    """BUG-036: файл доски с тем же именем, типом и содержимым, если он уже есть.
+
+    Повторная карточка той же страницы не кладёт на диск ещё одну копию изображения.
+    """
+    candidates = await db.scalars(
+        select(Media).where(
+            Media.board_id == board_id,
+            Media.original_name == name,
+            Media.mime == mime,
+            Media.byte_size == len(body),
+        )
+    )
+    for media in candidates:
+        path = anyio.Path(file_path(media_root, media))
+        if await path.is_file() and await path.read_bytes() == body:
+            return media
+    return None
 
 
 async def get(db: AsyncSession, media_id: uuid.UUID) -> Media | None:

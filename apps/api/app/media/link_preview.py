@@ -5,6 +5,9 @@
 разрешается один раз, проверяются все адреса, соединение идёт на проверенный адрес
 (подмена DNS между проверкой и запросом не сработает), каждый переход по редиректу
 проверяется заново. Исключения — только хосты из `LINK_PREVIEW_ALLOWED_HOSTS`.
+
+Разбор страницы идёт в отдельном потоке и по одной странице за раз (BUG-036): на чистом
+Python он занимает до секунды и иначе остановил бы единственный процесс для всех досок.
 """
 
 import contextlib
@@ -26,6 +29,8 @@ _CONNECT_TIMEOUT_SECONDS = 5
 MAX_REDIRECTS = 3
 _REDIRECTS = {301, 302, 303, 307, 308}
 _USER_AGENT = "myboard-link-preview"
+# BUG-036: страницы разбираются по одной, чтобы потоки разбора не вытеснили сам процесс.
+_PARSE_LIMITER = anyio.CapacityLimiter(1)
 # SVG не берётся: у карточки нужна обычная картинка страницы.
 IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 
@@ -95,8 +100,13 @@ def parse_page(html: str, base_url: str) -> tuple[str | None, str | None]:
     image = next((page.tags[key] for key in _IMAGE_TAGS if key in page.tags), None)
     if image is None:
         return title, None
-    absolute = urljoin(base_url, image)
-    return title, absolute if urlsplit(absolute).scheme in ("http", "https") else None
+    try:
+        absolute = urljoin(base_url, image)
+        scheme = urlsplit(absolute).scheme
+    except ValueError:
+        # BUG-033: негодный адрес изображения — карточка без изображения, а не ошибка.
+        return title, None
+    return title, absolute if scheme in ("http", "https") else None
 
 
 def _is_public(address: str) -> bool:
@@ -182,7 +192,8 @@ async def _fetch_within_time(
     try:
         with anyio.fail_after(REQUEST_TIMEOUT_SECONDS):
             return await _fetch(client, url, allowed, limit)
-    except (_UnavailableError, httpx2.HTTPError, TimeoutError, ValueError):
+    # BUG-033: `InvalidURL` (управляющий символ, длинный адрес) не наследует `HTTPError`.
+    except (_UnavailableError, httpx2.HTTPError, httpx2.InvalidURL, TimeoutError, ValueError):
         return None
 
 
@@ -194,7 +205,10 @@ async def read_preview(url: str, allowed: Collection[str], image_limit: int) -> 
         page = await _fetch_within_time(client, url, allowed, PAGE_MAX_BYTES)
         if page is None or page.mime not in ("text/html", "application/xhtml+xml"):
             return LinkPreview(None, None)
-        title, image_url = parse_page(page.body.decode(page.encoding, errors="replace"), page.url)
+        html = page.body.decode(page.encoding, errors="replace")
+        title, image_url = await anyio.to_thread.run_sync(
+            parse_page, html, page.url, limiter=_PARSE_LIMITER
+        )
         if image_url is None:
             return LinkPreview(title, None)
         limit = min(image_limit, IMAGE_MAX_BYTES)
