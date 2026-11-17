@@ -378,7 +378,9 @@ def test_emb02_sec_html_declared_as_png_cannot_run_in_board_origin(board_user: C
     assert "frame-ancestors" in fetched.headers.get("content-security-policy", "") or fetched.headers.get("x-frame-options")
 
 
-@pytest.mark.parametrize("path", ["/control-img", "/long-img", "/badport-img", "/badhost-img"])
+@pytest.mark.parametrize(
+    "path", ["/control-img", "/long-img", "/badport-img", "/badhost-img", "/js-img", "/ftp-img", "/empty-img", "/space-img", "/nul-img"]
+)
 def test_emb02_broken_image_address_is_not_a_server_error(board_user: Client, board: dict[str, str], site_log, path: str) -> None:
     resp = preview(board_user, board["id"], SITE + path)
     assert resp.status_code == 200, (resp.status_code, resp.text[:200])
@@ -466,6 +468,49 @@ def test_emb02_dos_parallel_hostile_pages_do_not_stop_the_server(board_user: Cli
         time.sleep(0.05)
     print(f"наблюдение: 10 параллельных страниц, /api/health до {worst:.2f} с")
     assert worst < 2.0, f"сервер не отвечал {worst:.1f} с"
+
+
+def test_emb02_bug036_thirty_hostile_pages_keep_server_responsive(
+    board_user: Client, board: dict[str, str], link_participant: Client, site_log
+) -> None:
+    """BUG-036: 30 разборов враждебной страницы — сервер отвечает быстро."""
+    cookies = dict(board_user.http.cookies)
+
+    def run() -> None:
+        with httpx.Client(base_url=board_user.base_url, cookies=cookies, timeout=300.0) as c:
+            c.post(f"/api/boards/{board['id']}/link-preview", json={"url": f"{SITE}/parser?kind=lt"})
+
+    threads = [threading.Thread(target=run) for _ in range(30)]
+    started = time.monotonic()
+    for thread in threads:
+        thread.start()
+    worst = 0.0
+    other = None
+    while any(t.is_alive() for t in threads):
+        start = time.monotonic()
+        board_user.http.get("/api/health", timeout=120.0)
+        worst = max(worst, time.monotonic() - start)
+        if other is None and time.monotonic() - started > 1.0:
+            # Наблюдение: карточка другого участника, пока идут враждебные страницы.
+            start = time.monotonic()
+            link_participant.http.post(
+                f"/api/boards/{link_participant.board['id']}/link-preview",  # type: ignore[attr-defined]
+                json={"url": f"{SITE}/page"},
+                timeout=300.0,
+            )
+            other = time.monotonic() - start
+        time.sleep(0.05)
+    print(f"наблюдение: 30 страниц за {time.monotonic() - started:.1f} с, /api/health до {worst:.2f} с, карточка другого участника {other}")
+    assert worst < 0.5, f"сервер не отвечал {worst:.2f} с"
+
+
+def test_emb02_bug036_same_preview_image_is_one_file(board_user: Client, board: dict[str, str], site_log) -> None:
+    """BUG-036: повтор одной страницы не копит файлов; другая доска свой файл получает."""
+    ids = {preview(board_user, board["id"], f"{SITE}/page").json()["image"]["id"] for _ in range(5)}
+    assert len(ids) == 1, ids
+    other = create_board(board_user, unique_title("bug036"))
+    other_id = preview(board_user, other["id"], f"{SITE}/page").json()["image"]["id"]
+    assert other_id not in ids
 
 
 # --- ARCH-FRAME: обходы --------------------------------------------------------------------------
@@ -633,6 +678,7 @@ CROSS = [
     pytest.param({"Origin": "https://evil.example"}, id="чужой Origin"),
     pytest.param({"Origin": "null"}, id="Origin null"),
     pytest.param({"Origin": "SCHEME_HTTP"}, id="Origin http той же записи"),
+    pytest.param({"Origin": "SCHEME_UPPER_HTTP"}, id="Origin HTTP той же записи"),
     pytest.param({"Origin": "OTHER_PORT"}, id="Origin другой порт"),
     pytest.param({"Origin": "SUFFIX"}, id="Origin с хвостом"),
     pytest.param({"Referer": ORIGIN_OWN + "/"}, id="только Referer"),
@@ -644,6 +690,7 @@ def _headers(tls: Tls, headers: dict[str, str]) -> dict[str, str]:
     host = urlsplit(tls.base).hostname
     subst = {
         ORIGIN_OWN: tls.base,
+        "SCHEME_UPPER_HTTP": tls.base.replace("https://", "HTTP://"),
         "SCHEME_HTTP": tls.base.replace("https://", "http://"),
         "OTHER_PORT": f"https://{host}:9443",
         "SUFFIX": f"{tls.base}.evil.example",

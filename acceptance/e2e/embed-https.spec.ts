@@ -105,6 +105,42 @@ test('EMB-04 FIL-01 FIL-02 FIL-03 IMG-01 Q-008 https: inside a frame of another 
     await download.click();
     const file = await started;
     expect(await file.failure(), 'файл скачан из фрейма').toBeNull();
+    // BUG-035: имя ярлыка и то же содержимое.
+    expect(file.suggestedFilename()).toBe('n.txt');
+    expect(readFileSync(await file.path()).toString('utf8')).toBe('qa-text');
+  } finally {
+    await context.close();
+    await owner.close();
+  }
+});
+
+test('EMB-04 FIL-01 https: download works in a frame of the same site and on the board page itself', async ({ browser, baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor }) => {
+  test.skip(isMobile, 'мышь — профиль desktop');
+  const f = { baseURL, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor };
+  const owner = await openOwner(browser, opts(f));
+  const context = await browser.newContext(opts(f));
+  const page = await context.newPage();
+  try {
+    const fr = await openFramed(page, SAME_SITE, baseURL!, owner.token);
+    await enter(fr, 'Same Site Frame');
+    await fr.getByLabel('Upload file', { exact: true }).setInputFiles({ name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('same-site') });
+    await expect(fr.locator('[data-type="file"]').first()).toBeVisible({ timeout: 20_000 });
+    const inFrame = page.waitForEvent('download', { timeout: 15_000 });
+    await fr.getByRole('toolbar', { name: 'Selection' }).getByRole('link', { name: 'Download', exact: true }).click();
+    const one = await inFrame;
+    expect(await one.failure()).toBeNull();
+    expect(readFileSync(await one.path()).toString('utf8')).toBe('same-site');
+
+    // Страница самой доски, не фрейм: файл, загруженный из фрейма, скачивает владелец.
+    const label = owner.page.locator('[data-type="file"]').first();
+    await expect(label).toBeVisible({ timeout: 20_000 });
+    await label.click();
+    const top = owner.page.waitForEvent('download', { timeout: 15_000 });
+    await owner.page.getByRole('toolbar', { name: 'Selection' }).getByRole('link', { name: 'Download', exact: true }).click();
+    const two = await top;
+    expect(await two.failure()).toBeNull();
+    expect(two.suggestedFilename()).toBe('same.txt');
+    expect(readFileSync(await two.path()).toString('utf8')).toBe('same-site');
   } finally {
     await context.close();
     await owner.close();

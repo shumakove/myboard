@@ -179,6 +179,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(b'<title>port</title><meta property="og:image" content="http://linksite:99999/a.png">')
         elif path == "/badhost-img":
             self._send(b'<title>host</title><meta property="og:image" content="http://[::1/a.png">')
+        elif path == "/js-img":
+            self._send(b'<title>js</title><meta property="og:image" content="javascript:alert(1)">')
+        elif path == "/ftp-img":
+            self._send(b'<title>ftp</title><meta property="og:image" content="ftp://linksite/a.png">')
+        elif path == "/empty-img":
+            self._send(b'<title>empty</title><meta property="og:image" content="">')
+        elif path == "/space-img":
+            self._send(b'<title>space</title><meta property="og:image" content="   ">')
+        elif path == "/nul-img":
+            self._send(b'<title>nul</title><meta property="og:image" content="http://linksite:8099/a%00b\x00c.png">')
         elif path == "/parser":
             kind = arg or (q.get("kind") or ["lt"])[0]
             size = 1024 * 1024 - 64
