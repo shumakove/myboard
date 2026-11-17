@@ -58,11 +58,11 @@ describe("downloadThroughFetch", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { create } = stubObjectUrls();
     const saved: { href: string; download: string }[] = [];
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
-      function (this: HTMLAnchorElement) {
-        saved.push({ href: this.href, download: this.download });
-      },
-    );
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push({ href: this.href, download: this.download });
+    });
 
     const url = "/api/media/1?download=report.bin";
     expect(await downloadThroughFetch(url, "report.bin")).toBe(true);
